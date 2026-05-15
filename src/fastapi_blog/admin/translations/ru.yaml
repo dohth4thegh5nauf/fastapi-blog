@@ -1,0 +1,56 @@
+# Russian translations for admin panel
+
+# Locale metadata
+locale:
+  code: ru
+  name: Русский
+
+# Navigation and menu items
+nav:
+  home: Главная
+  users: Пользователи
+  posts: Посты
+  settings: Настройки
+
+# User management
+user:
+  singular: Пользователь
+  plural: Пользователи
+  create: Создать пользователя
+  edit: Редактировать пользователя
+  delete: Удалить пользователя
+
+# Post management
+post:
+  singular: Пост
+  plural: Посты
+  create: Создать пост
+  edit: Редактировать пост
+  delete: Удалить пост
+
+# Role management
+role:
+  singular: Роль
+  plural: Роли
+  admin: Администратор
+  editor: Редактор
+  viewer: Наблюдатель
+
+# Common actions
+action:
+  save: Сохранить
+  cancel: Отменить
+  delete: Удалить
+  edit: Редактировать
+  create: Создать
+  back: Назад
+  search: Поиск
+  filter: Фильтр
+  export: Экспорт
+
+# Messages
+message:
+  saved: Успешно сохранено
+  deleted: Успешно удалено
+  error: Произошла ошибка
+  no_data: Нет данных

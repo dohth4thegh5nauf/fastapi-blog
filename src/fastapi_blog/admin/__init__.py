@@ -19,6 +19,8 @@ from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
 from .models import Post, User
+from .models_role import Role, UserWithRoles
+from .views_role import RoleModelView, UserWithRolesModelView
 
 
 try:
@@ -29,16 +31,11 @@ except ImportError:
         return message
 
 
-# Locale display names for language switcher
-LOCALE_NAMES = {
-    "en": "English",
-    "ru": "Русский",
-}
-
+# Import i18n utilities
+from .i18n import get_all_locale_names, load_translations
 
 # NOTE: Custom translation loading removed - now we create separate admin instances
 # for each locale instead of dynamically switching translations
-
 # Import views after translations are loaded and locale is set
 from .views import HomeView, PostModelView, UserModelView  # noqa: E402
 
@@ -49,10 +46,14 @@ __all__ = [
     "add_admin_to_app",
     "User",
     "Post",
+    "Role",
+    "UserWithRoles",
     "SimpleAuthProvider",
     "UserModelView",
     "PostModelView",
     "HomeView",
+    "RoleModelView",
+    "UserWithRolesModelView",
     "MarkdownField",
     "TagsField",
     "SlugField",
@@ -108,17 +109,12 @@ def _create_admin_for_locale(
         language_switcher=None,  # Disabled - we use custom switcher
     )
 
-    # Labels are hardcoded per locale (not using gettext to avoid global state)
-    if locale == "ru":
-        home_label = "Главная"
-        user_label = "Пользователи"
-        user_name_for_button = "пользователя"  # Genitive case
-        posts_label = "Посты"
-    else:  # English
-        home_label = "Home"
-        user_label = "Users"
-        user_name_for_button = "User"
-        posts_label = "Posts"
+    # Load translations from YAML files
+    translations = load_translations(locale)
+    home_label = translations["nav"]["home"]
+    user_label = translations["nav"]["users"]
+    user_name_for_button = translations["user"]["singular"]
+    posts_label = translations["nav"]["posts"]
 
     # Create admin instance
     admin = Admin(
@@ -133,8 +129,9 @@ def _create_admin_for_locale(
     )
 
     # Add locale data to template context
+    locale_names = get_all_locale_names()
     admin.templates.env.globals["available_locales"] = available_locales
-    admin.templates.env.globals["locale_names"] = LOCALE_NAMES
+    admin.templates.env.globals["locale_names"] = locale_names
     admin.templates.env.globals["current_locale"] = locale
 
     # Add User view with translated labels
@@ -170,8 +167,8 @@ def add_admin_to_app(
     *,
     title: str = "Admin Panel",
     database_url: str | None = None,
-    admin_username: str = "admin",
-    admin_password: str = "Admin123!",
+    admin_username: str | None = None,
+    admin_password: str | None = None,
     secret_key: str | None = None,
     add_session_middleware: bool = True,
     init_database: bool = True,
@@ -193,8 +190,8 @@ def add_admin_to_app(
       app: FastAPI application instance
       title: Admin panel title
       database_url: Database URL (default: from DATABASE_URL env or SQLite)
-      admin_username: Admin username for login (default: 'admin')
-      admin_password: Admin password for login (default: 'Admin123!')
+      admin_username: Admin username (default: from FASTAPI_BLOG_ADMIN_LOGIN env or 'admin')
+      admin_password: Admin password (default: from FASTAPI_BLOG_ADMIN_PASSWORD env or 'Admin123!')
       secret_key: Secret key for sessions (default: from SECRET_KEY env)
       add_session_middleware: Whether to add SessionMiddleware (default: True)
       init_database: Whether to initialize database on startup (default: True)
@@ -247,6 +244,12 @@ def add_admin_to_app(
       ```
 
     """
+    # Handle environment variables for admin credentials
+    if admin_username is None:
+        admin_username = os.getenv("FASTAPI_BLOG_ADMIN_LOGIN", "admin")
+    if admin_password is None:
+        admin_password = os.getenv("FASTAPI_BLOG_ADMIN_PASSWORD", "Admin123!")
+
     # Handle backward compatibility with old parameters
     if locales is None:
         if i18n_locales is not None:

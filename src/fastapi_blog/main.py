@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import jinja2
@@ -23,7 +24,7 @@ def add_blog_to_fastapi(
     sanitize_html: bool = True,
     posts_dirname: str = "posts",
     pages_dirname: str = "pages",
-    include_api: bool = False,
+    include_api: bool | None = None,
     api_prefix: str = "/api/posts",
     api_require_auth: bool = True,
 ) -> FastAPI:
@@ -40,7 +41,8 @@ def add_blog_to_fastapi(
         sanitize_html: Sanitize HTML in markdown content
         posts_dirname: Directory containing blog posts
         pages_dirname: Directory containing pages
-        include_api: Include REST API for post management (default: False).
+        include_api: Include REST API for post management.
+                     Default: from FASTAPI_BLOG_INCLUDE_API env var, or False.
                      When True, adds REST endpoints visible in /docs.
                      Note: Admin panel (/admin) is separate - it's a web UI, not REST API.
         api_prefix: URL prefix for REST API (default: '/api/posts')
@@ -73,6 +75,11 @@ def add_blog_to_fastapi(
         ```
 
     """
+    # Handle environment variable for include_api
+    if include_api is None:
+        env_value = os.getenv("FASTAPI_BLOG_INCLUDE_API", "false").lower()
+        include_api = env_value in ("true", "1", "yes")
+
     # Prep the templates
     env = jinja2.Environment(
         loader=jinja2_loader,

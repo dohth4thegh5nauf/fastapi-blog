@@ -1,0 +1,56 @@
+# English translations for admin panel
+
+# Locale metadata
+locale:
+  code: en
+  name: English
+
+# Navigation and menu items
+nav:
+  home: Home
+  users: Users
+  posts: Posts
+  settings: Settings
+
+# User management
+user:
+  singular: User
+  plural: Users
+  create: Create User
+  edit: Edit User
+  delete: Delete User
+
+# Post management
+post:
+  singular: Post
+  plural: Posts
+  create: Create Post
+  edit: Edit Post
+  delete: Delete Post
+
+# Role management
+role:
+  singular: Role
+  plural: Roles
+  admin: Administrator
+  editor: Editor
+  viewer: Viewer
+
+# Common actions
+action:
+  save: Save
+  cancel: Cancel
+  delete: Delete
+  edit: Edit
+  create: Create
+  back: Back
+  search: Search
+  filter: Filter
+  export: Export
+
+# Messages
+message:
+  saved: Successfully saved
+  deleted: Successfully deleted
+  error: An error occurred
+  no_data: No data available
