@@ -155,24 +155,24 @@ def test_blog_accept_language_with_region():
 
 
 def test_blog_url_with_locale_en():
-    """Test blog works with /blog/en/ URL prefix."""
+    """Test blog works with /en/blog/ URL prefix."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    response = client.get("/blog/en/posts")
+    response = client.get("/en/blog/posts")
     assert response.status_code == 200
     assert "Articles" in response.text
     assert "Статьи" not in response.text
 
 
 def test_blog_url_with_locale_ru():
-    """Test blog works with /blog/ru/ URL prefix."""
+    """Test blog works with /ru/blog/ URL prefix."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    response = client.get("/blog/ru/posts")
+    response = client.get("/ru/blog/posts")
     assert response.status_code == 200
     assert "Статьи" in response.text
     assert "Articles" not in response.text
@@ -185,7 +185,7 @@ def test_blog_url_locale_overrides_accept_language():
     client = TestClient(app)
 
     # URL says 'en', header says 'ru' - URL should win
-    response = client.get("/blog/en/posts", headers={"Accept-Language": "ru"})
+    response = client.get("/en/blog/posts", headers={"Accept-Language": "ru"})
     assert response.status_code == 200
     assert "Articles" in response.text
     assert "Статьи" not in response.text
@@ -197,7 +197,7 @@ def test_language_switcher_present_in_header():
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    response = client.get("/blog/en/")
+    response = client.get("/en/blog/")
     assert response.status_code == 200
     assert "language-switcher" in response.text
     assert "switchLanguage" in response.text
@@ -224,17 +224,17 @@ def test_blog_locale_routes_for_all_pages():
     client = TestClient(app)
 
     # Test main page
-    response = client.get("/blog/ru/")
+    response = client.get("/ru/blog/")
     assert response.status_code == 200
     assert "Последние записи" in response.text
 
     # Test posts page
-    response = client.get("/blog/ru/posts")
+    response = client.get("/ru/blog/posts")
     assert response.status_code == 200
     assert "Статьи" in response.text
 
     # Test tags page
-    response = client.get("/blog/ru/tags")
+    response = client.get("/ru/blog/tags")
     assert response.status_code == 200
     assert "Теги" in response.text
 
@@ -246,11 +246,11 @@ def test_language_switcher_javascript_logic():
     client = TestClient(app)
 
     # Test that switcher script is present with correct logic
-    response = client.get("/blog/en/")
+    response = client.get("/en/blog/")
     assert response.status_code == 200
     assert "function switchLanguage" in response.text
-    assert "parts.findIndex" in response.text
-    assert "parts.splice(1, 0, targetLocale)" in response.text
+    # New logic: locale is first segment
+    assert "parts.unshift(targetLocale)" in response.text
 
 
 def test_legacy_routes_show_language_switcher():

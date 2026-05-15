@@ -13,15 +13,15 @@ window.languageSwitcher = {
   // Switch to a different locale
   switchTo: function(targetLocale) {
     const currentPath = window.location.pathname;
-    const pathMatch = currentPath.match(/^\/admin\/([a-z]{2})(\/.*)?$/);
+    const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
     
     if (pathMatch) {
       const restOfPath = pathMatch[2] || '';
-      const newPath = `/admin/${targetLocale}${restOfPath}`;
+      const newPath = `/${targetLocale}/admin${restOfPath}`;
       const queryString = window.location.search;
       window.location.href = newPath + queryString;
     } else {
-      window.location.href = `/admin/${targetLocale}`;
+      window.location.href = `/${targetLocale}/admin`;
     }
   },
   

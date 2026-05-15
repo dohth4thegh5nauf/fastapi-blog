@@ -70,7 +70,7 @@ h4 {
 </head>
 <body>
     <header>
-        <a href="{% if locale %}{{ url_for('blog_index_locale', locale=locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">
+        <a href="{% if locale %}{{ url_for('blog_index_' + locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">
     <image
         priority
         src="/static/images/profile.webp'"
@@ -79,17 +79,17 @@ h4 {
         alt="Daniel Roy Greenfeld"
         class="borderCircle"
         /></a>
-    <h1><a href="{% if locale %}{{ url_for('blog_index_locale', locale=locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">Daniel Roy Greenfeld</a></h1>
+    <h1><a href="{% if locale %}{{ url_for('blog_index_' + locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">Daniel Roy Greenfeld</a></h1>
     <p>
-      <a href="{% if locale %}{{ url_for('blog_page_locale', locale=locale, page_id='about') }}{% else %}{{ url_for('blog_page', page_id='about') }}{% endif %}">
+      <a href="{% if locale %}{{ url_for('blog_page_' + locale, page_id='about') }}{% else %}{{ url_for('blog_page', page_id='about') }}{% endif %}">
         {{ t.blog.about }}
       </a>    
       |           
-      <a href="{% if locale %}{{ url_for('blog_posts_locale', locale=locale) }}{% else %}{{ url_for('blog_posts') }}{% endif %}">
+      <a href="{% if locale %}{{ url_for('blog_posts_' + locale) }}{% else %}{{ url_for('blog_posts') }}{% endif %}">
         {{ t.blog.articles }}
       </a>
       |
-      <a href="{% if locale %}{{ url_for('blog_tags_locale', locale=locale) }}{% else %}{{ url_for('blog_tags') }}{% endif %}">
+      <a href="{% if locale %}{{ url_for('blog_tags_' + locale) }}{% else %}{{ url_for('blog_tags') }}{% endif %}">
         {{ t.blog.tags }}
       </a>
       {% if available_locales and available_locales|length > 1 %}
@@ -110,24 +110,20 @@ h4 {
       const currentPath = window.location.pathname;
       const locales = {{ available_locales|tojson }};
       
-      // Split path into parts, preserving blog prefix
+      // New URL structure: /{locale}/blog/posts
+      // Locale is the first segment
       const parts = currentPath.split('/').filter(p => p);
-      const localeIndex = parts.findIndex(p => locales.includes(p));
       
       let newPath;
-      if (localeIndex !== -1) {
-        // Replace existing locale
-        parts[localeIndex] = targetLocale;
+      if (parts.length > 0 && locales.includes(parts[0])) {
+        // Replace existing locale (first segment)
+        parts[0] = targetLocale;
         newPath = '/' + parts.join('/');
       } else {
-        // Insert locale after first segment (blog prefix)
-        // Structure: /blog/posts → /blog/{locale}/posts
-        if (parts.length > 0) {
-          parts.splice(1, 0, targetLocale);
-          newPath = '/' + parts.join('/');
-        } else {
-          newPath = '/' + targetLocale + '/';
-        }
+        // Insert locale as first segment
+        // Structure: /blog/posts → /{locale}/blog/posts
+        parts.unshift(targetLocale);
+        newPath = '/' + parts.join('/');
       }
       
       window.location.href = newPath;

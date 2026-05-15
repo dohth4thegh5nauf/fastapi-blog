@@ -376,11 +376,11 @@ def add_admin_to_app(
 
     for locale in locales:
         # Create auth provider for this locale
-        # redirect_after_login will be set to /admin/{locale}/user/list
+        # redirect_after_login will be set to /{locale}/admin/user/list
         auth_provider = SimpleAuthProvider(
             username=admin_username,
             password=admin_password,
-            redirect_after_login=f"/admin/{locale}/user/list",
+            redirect_after_login=f"/{locale}/admin/user/list",
         )
 
         # Create admin instance for this locale
@@ -388,7 +388,7 @@ def add_admin_to_app(
             locale=locale,
             engine=engine,
             title=title,
-            base_url=f"/admin/{locale}",
+            base_url=f"/{locale}/admin",
             auth_provider=auth_provider,
             templates_dir=templates_dir,
             available_locales=locales,
@@ -400,17 +400,17 @@ def add_admin_to_app(
         admin.mount_to(app)
         admins[locale] = admin
 
-        logger.info("Admin panel (%s) mounted at /admin/%s", locale, locale)
+        logger.info("Admin panel (%s) mounted at /%s/admin", locale, locale)
 
-    # Add redirect from /admin to /admin/{default_locale}
+    # Add redirect from /admin to /{default_locale}/admin
     from starlette.responses import RedirectResponse
 
     @app.get("/admin")
     @app.get("/admin/")
     async def admin_redirect():
-        return RedirectResponse(url=f"/admin/{default_locale}", status_code=307)
+        return RedirectResponse(url=f"/{default_locale}/admin", status_code=307)
 
-    logger.info("/admin redirects to /admin/%s", default_locale)
+    logger.info("/admin redirects to /%s/admin", default_locale)
     logger.info("Markdown CRUD API available at /api/posts (authenticated)")
 
     if init_database:
@@ -422,6 +422,6 @@ def add_admin_to_app(
 
     logger.debug("Admin credentials: username=%s", admin_username)
     logger.info("Available locales: %s", ", ".join(locales))
-    logger.info("Access at: http://localhost:8000/admin/%s", default_locale)
+    logger.info("Access at: http://localhost:8000/%s/admin", default_locale)
 
     return admins
