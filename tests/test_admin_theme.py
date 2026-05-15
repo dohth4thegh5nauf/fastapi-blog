@@ -15,32 +15,43 @@ def _read(name: str) -> str:
 
 
 def test_list_template_extends_base():
-    """Verify list.html extends base template."""
+    """Verify list.html extends custom_base.html."""
     content = _read("list.html")
-    assert "{% extends" in content
-    # Note: extends custom_base.html, not base.html directly
-    assert "custom_base.html" in content or "base.html" in content
+    assert '{% extends "layouts/custom_base.html" %}' in content, (
+        "list.html must extend layouts/custom_base.html"
+    )
 
 
 def test_detail_template_extends_base():
-    """Verify detail.html extends base template."""
+    """Verify detail.html extends custom_base.html."""
     content = _read("detail.html")
-    assert "{% extends" in content
-    assert "custom_base.html" in content or "base.html" in content
+    assert '{% extends "layouts/custom_base.html" %}' in content, (
+        "detail.html must extend layouts/custom_base.html"
+    )
 
 
 def test_create_template_extends_base():
-    """Verify create.html extends base template."""
+    """Verify create.html extends custom_base.html."""
     content = _read("create.html")
-    assert "{% extends" in content
-    assert "custom_base.html" in content or "base.html" in content
+    assert '{% extends "layouts/custom_base.html" %}' in content, (
+        "create.html must extend layouts/custom_base.html"
+    )
 
 
 def test_edit_template_extends_base():
-    """Verify edit.html extends base template."""
+    """Verify edit.html extends custom_base.html."""
     content = _read("edit.html")
-    assert "{% extends" in content
-    assert "custom_base.html" in content or "base.html" in content
+    assert '{% extends "layouts/custom_base.html" %}' in content, (
+        "edit.html must extend layouts/custom_base.html"
+    )
+
+
+def test_custom_base_extends_base():
+    """Verify custom_base.html extends base.html."""
+    content = _read("layouts/custom_base.html")
+    assert '{% extends "layouts/base.html" %}' in content, (
+        "custom_base.html must extend layouts/base.html"
+    )
 
 
 def test_base_html_exists_in_layouts():
