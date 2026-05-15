@@ -1,6 +1,5 @@
-from typing import Any
-
 import os
+from typing import Any
 
 import jinja2
 from fastapi import FastAPI

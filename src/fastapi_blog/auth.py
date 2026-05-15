@@ -6,7 +6,6 @@ Provides a single dependency that supports both:
 """
 
 import base64
-from typing import Optional
 
 from fastapi import HTTPException, Request, status
 
