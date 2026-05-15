@@ -1,6 +1,7 @@
 import pathlib
 import warnings
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import jinja2
 import yaml
