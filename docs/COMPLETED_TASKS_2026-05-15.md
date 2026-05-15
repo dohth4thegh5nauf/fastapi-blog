@@ -199,3 +199,23 @@ WEAK_SECRETS = {
 - ✅ Документация актуализирована
 
 **Проект готов к следующему этапу развития.**
+
+---
+
+## 🔧 Post-completion fix
+
+### Исправлена ошибка mypy (3740d52)
+**Проблема:** CI test (3.13) упал с ошибкой mypy:
+```
+src/fastapi_blog/__init__.py:29: error: Unexpected keyword argument "posts_dir" 
+for "add_blog_to_fastapi"; did you mean "posts_dirname"?
+```
+
+**Причина:** В `setup_fastapi_blog()` использовался параметр `posts_dir`, 
+но в `add_blog_to_fastapi()` он называется `posts_dirname`.
+
+**Решение:** Переименовал `posts_dir` → `posts_dirname` для соответствия сигнатуре.
+
+**Коммит:** `3740d52 - fix: correct parameter name from posts_dir to posts_dirname`
+
+**Статус:** ✅ mypy проходит, тесты зелёные
