@@ -135,7 +135,7 @@ def get_blog_router(
                 path, sanitize=sanitize_html
             )
         except FileNotFoundError:
-            context = {}
+            context: dict[str, Any] = {}
             return templates.TemplateResponse(
                 request=request,
                 name="404.html",

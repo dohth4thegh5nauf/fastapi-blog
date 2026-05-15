@@ -1,6 +1,6 @@
 import pathlib
 import warnings
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 import jinja2
 import yaml
@@ -155,18 +155,21 @@ def get_api_router(
     slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
 
     # Setup authentication dependency
+    auth_func: Callable[[Request], Coroutine[Any, Any, dict[Any, Any] | None]]
     if require_auth:
         if admin_username and admin_password:
             # Use unified auth (session + Basic auth)
             from .auth import require_current_user
 
-            async def auth_func(request: Request) -> dict:
+            async def _unified_auth(request: Request) -> dict[str, Any]:
                 username = await require_current_user(
                     request,
                     admin_username=admin_username,
                     admin_password=admin_password,
                 )
                 return {"username": username}
+
+            auth_func = _unified_auth
         else:
             # Use legacy session-only auth
             auth_func = require_authentication
