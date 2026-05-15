@@ -6,7 +6,7 @@ A simple, easy-to-use blog application built with FastAPI.
 
 ```bash
 # Clone and install
-git clone https://github.com/awestley/fastapi-blog.git
+git clone https://github.com/pydanny/fastapi-blog.git
 cd fastapi-blog
 make install
 
@@ -174,7 +174,7 @@ Exciting times in the world of fastapi-blog are ahead!
 
 ## This is a markdown header
 
-And this is a markdown paragraph with a [link](https://github.com/awestley/fastapi-blog).
+And this is a markdown paragraph with a [link](https://github.com/pydanny/fastapi-blog).
 ```
 
 4. Add the first page
@@ -367,7 +367,7 @@ I'm probably best known as "[pydanny](https://www.google.com/search?q=pydanny)",
 
 ```bash
 # Clone the repository
-git clone https://github.com/awestley/fastapi-blog.git
+git clone https://github.com/pydanny/fastapi-blog.git
 cd fastapi-blog
 
 # Create and activate virtual environment
@@ -402,7 +402,7 @@ docker run -d -p 8000:8000 fastapi-blog
 Or using a prebuilt Docker image from GitHub Container Registry:
 
 ```bash
-docker run -d -p 8000:8000 ghcr.io/awestley/fastapi-blog:latest
+docker run -d -p 8000:8000 ghcr.io/pydanny/fastapi-blog:latest
 ```
 
 This is if you just want to run the application without building it yourself.
