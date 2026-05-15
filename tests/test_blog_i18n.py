@@ -269,16 +269,16 @@ def test_legacy_routes_show_language_switcher():
 
 def test_all_legacy_routes_have_language_switcher():
     """Test that all legacy routes (without locale) show language switcher."""
-    import pytest
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
-    
+
     paths = ["/blog/", "/blog/posts", "/blog/tags"]
     for path in paths:
         response = client.get(path)
         assert response.status_code == 200, f"Failed to load {path}"
-        assert '<select id="language-select"' in response.text, \
+        assert '<select id="language-select"' in response.text, (
             f"Language switcher missing on {path}"
+        )
         assert "English" in response.text, f"English option missing on {path}"
         assert "Русский" in response.text, f"Русский option missing on {path}"
