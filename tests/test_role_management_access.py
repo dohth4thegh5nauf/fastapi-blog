@@ -318,8 +318,8 @@ def test_is_accessible_does_not_use_app_state(app_with_roles):
     # Create mock request WITHOUT app.state
     request = Mock(spec=Request)
     # Intentionally delete 'app' attribute to ensure view doesn't access it
-    if hasattr(request, 'app'):
-        delattr(request, 'app')
+    if hasattr(request, "app"):
+        delattr(request, "app")
 
     # View should work without accessing app.state
     request.session = {"user": "admin"}
