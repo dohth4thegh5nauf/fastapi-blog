@@ -35,6 +35,9 @@ role:
   admin: Administrator
   editor: Editor
   viewer: Viewer
+  section_label: Access Control
+  role_label: Roles
+  user_roles_label: User Roles
 
 # Common actions
 action:

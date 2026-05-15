@@ -147,10 +147,12 @@ def _create_admin_for_locale(
         from .models_role import Role, UserWithRoles
         from .views_role import RoleModelView, UserWithRolesModelView
 
-        role_view = RoleModelView(Role, icon="fa fa-shield")
+        role_view = RoleModelView(Role, locale=locale, icon="fa fa-shield")
         admin.add_view(role_view)
 
-        user_roles_view = UserWithRolesModelView(UserWithRoles, icon="fa fa-users-cog")
+        user_roles_view = UserWithRolesModelView(
+            UserWithRoles, locale=locale, icon="fa fa-users-cog"
+        )
         admin.add_view(user_roles_view)
 
     # Add markdown CRUD views
@@ -361,6 +363,9 @@ def add_admin_to_app(
 
         # Replace app's lifespan
         app.router.lifespan_context = admin_lifespan
+
+    # Store admin username in app state for access control
+    app.state.admin_username = admin_username
 
     # Get templates directory for custom templates
     from pathlib import Path

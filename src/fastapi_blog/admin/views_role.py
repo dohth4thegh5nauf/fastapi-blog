@@ -4,11 +4,14 @@ from starlette.requests import Request
 from starlette_admin import action
 from starlette_admin.contrib.sqla import ModelView
 
+from .i18n import Translator
+
 
 class RoleModelView(ModelView):
     """Admin view for Role management.
 
     Provides CRUD interface for managing roles.
+    Only accessible by root admin user.
     """
 
     # Basic configuration
@@ -16,6 +19,13 @@ class RoleModelView(ModelView):
     name = "Role"
     label = "Roles"
     icon = "fa fa-shield"
+
+    def __init__(self, model, locale: str = "en", *args, **kwargs):
+        """Initialize with translations."""
+        super().__init__(model, *args, **kwargs)
+        self.locale = locale
+        self.translator = Translator(locale)
+        self.label = self.translator.role.role_label
 
     # Fields to display (using Any to avoid mypy errors with starlette-admin)
     fields: list = [
@@ -36,24 +46,35 @@ class RoleModelView(ModelView):
     # Export configuration
     export_fields = ["id", "name", "description", "is_active"]
 
-    # Permissions (can be overridden)
+    # Access control - only for root admin user
+    def is_accessible(self, request: Request) -> bool:
+        """Check if role management is accessible.
+
+        Only the root admin user (matching admin_username) can access.
+        """
+        current_user = request.session.get("user")
+        admin_username = getattr(request.app.state, "admin_username", None)
+        return current_user == admin_username
+
+    def is_action_accessible(self, request: Request, name: str) -> bool:
+        """Check if action is accessible."""
+        return self.is_accessible(request)
+
+    def can_view_details(self, request: Request) -> bool:
+        """Check if user can view role details."""
+        return self.is_accessible(request)
+
     def can_create(self, request: Request) -> bool:
         """Check if user can create roles."""
-        # Only admins can create roles
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        return self.is_accessible(request)
 
     def can_edit(self, request: Request) -> bool:
         """Check if user can edit roles."""
-        # Only admins can edit roles
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        return self.is_accessible(request)
 
     def can_delete(self, request: Request) -> bool:
         """Check if user can delete roles."""
-        # Only admins can delete roles
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        return self.is_accessible(request)
 
     @action(
         name="activate",
@@ -84,6 +105,7 @@ class UserWithRolesModelView(ModelView):
     """Admin view for User management with roles.
 
     Provides CRUD interface for managing users with role assignments.
+    Only accessible by root admin user.
     """
 
     # Basic configuration
@@ -91,6 +113,13 @@ class UserWithRolesModelView(ModelView):
     name = "User"
     label = "Users with Roles"
     icon = "fa fa-users"
+
+    def __init__(self, model, locale: str = "en", *args, **kwargs):
+        """Initialize with translations."""
+        super().__init__(model, *args, **kwargs)
+        self.locale = locale
+        self.translator = Translator(locale)
+        self.label = self.translator.role.user_roles_label
 
     # Fields to display (using Any to avoid mypy errors with starlette-admin)
     fields: list = [
@@ -119,21 +148,32 @@ class UserWithRolesModelView(ModelView):
     # Export configuration
     export_fields = ["id", "email", "is_active"]
 
-    # Permissions (can be overridden)
+    # Access control - only for root admin user
+    def is_accessible(self, request: Request) -> bool:
+        """Check if user role management is accessible.
+
+        Only the root admin user (matching admin_username) can access.
+        """
+        current_user = request.session.get("user")
+        admin_username = getattr(request.app.state, "admin_username", None)
+        return current_user == admin_username
+
+    def is_action_accessible(self, request: Request, name: str) -> bool:
+        """Check if action is accessible."""
+        return self.is_accessible(request)
+
+    def can_view_details(self, request: Request) -> bool:
+        """Check if user can view user role details."""
+        return self.is_accessible(request)
+
     def can_create(self, request: Request) -> bool:
-        """Check if user can create users."""
-        # Only admins can create users
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        """Check if user can create users with roles."""
+        return self.is_accessible(request)
 
     def can_edit(self, request: Request) -> bool:
-        """Check if user can edit users."""
-        # Only admins can edit users
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        """Check if user can edit users with roles."""
+        return self.is_accessible(request)
 
     def can_delete(self, request: Request) -> bool:
-        """Check if user can delete users."""
-        # Only admins can delete users
-        user = request.session.get("user", {})
-        return user.get("is_admin", False)
+        """Check if user can delete users with roles."""
+        return self.is_accessible(request)

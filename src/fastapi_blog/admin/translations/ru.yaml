@@ -35,6 +35,9 @@ role:
   admin: Администратор
   editor: Редактор
   viewer: Наблюдатель
+  section_label: Управление доступом
+  role_label: Роли
+  user_roles_label: Роли пользователей
 
 # Common actions
 action:
