@@ -6,6 +6,7 @@ Provides starlette-admin based administration interface with:
 - Simple authentication provider
 """
 
+import logging
 import os
 import pathlib
 import warnings
@@ -39,6 +40,9 @@ from .i18n import get_all_locale_names, load_translations
 # Import views after translations are loaded and locale is set
 from .views import HomeView, PostModelView, UserModelView  # noqa: E402
 
+
+# Set up logger
+logger = logging.getLogger("fastapi_blog.admin")
 
 # File-based views removed - using CustomView instead
 
@@ -325,7 +329,7 @@ def add_admin_to_app(
         async def admin_lifespan(app):
             # Startup: initialize database
             await init_db(engine)
-            print("✓ Admin database initialized")
+            logger.info("Admin database initialized")
 
             # Call original lifespan if exists
             if original_lifespan:
@@ -379,7 +383,7 @@ def add_admin_to_app(
         admin.mount_to(app)
         admins[locale] = admin
 
-        print(f"✓ Admin panel ({locale}) mounted at /admin/{locale}")
+        logger.info("Admin panel (%s) mounted at /admin/%s", locale, locale)
 
     # Add redirect from /admin to /admin/{default_locale}
     from starlette.responses import RedirectResponse
@@ -389,16 +393,18 @@ def add_admin_to_app(
     async def admin_redirect():
         return RedirectResponse(url=f"/admin/{default_locale}", status_code=307)
 
-    print(f"✓ /admin redirects to /admin/{default_locale}")
-    print("✓ Markdown CRUD API available at /api/posts (authenticated)")
+    logger.info("/admin redirects to /admin/%s", default_locale)
+    logger.info("Markdown CRUD API available at /api/posts (authenticated)")
 
     if init_database:
-        print("✓ Database initialized")
+        logger.info("Database initialized")
     else:
-        print("⚠ Database initialization disabled. Call init_db(engine) manually.")
+        logger.warning(
+            "Database initialization disabled. Call init_db(engine) manually."
+        )
 
-    print(f"✓ Login: username='{admin_username}' password='{admin_password}'")
-    print(f"✓ Available locales: {', '.join(locales)}")
-    print(f"✓ Access at: http://localhost:8000/admin/{default_locale}")
+    logger.debug("Admin credentials: username=%s", admin_username)
+    logger.info("Available locales: %s", ", ".join(locales))
+    logger.info("Access at: http://localhost:8000/admin/%s", default_locale)
 
     return admins
