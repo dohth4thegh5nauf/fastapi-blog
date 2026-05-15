@@ -644,3 +644,161 @@ migration guide охватывает изменения API.
 - Unified entry point (2.2) - breaking change, для v1.0
 - Blog i18n (2.3) - nice to have
 - CONTRIBUTING.md (4.3) - полезно, но не блокер
+
+---
+
+ВЫПОЛНИТЬ НЕМЕДЛЕННО:
+
+# ТЗ: устранение CI-ошибок (bandit security + ruff)
+
+**CI-запуски:** `security` (bandit), `build (3.13)` / `test (3.12)` (ruff)  
+**Затронутые файлы:** `src/fastapi_blog/admin/fields.py`, `src/fastapi_blog/admin/i18n.py`,
+`src/fastapi_blog/admin/rbac_auth_provider.py`
+
+---
+
+## Задача 1 — B704: аннотировать Markup как намеренно безопасный
+
+**Файл:** `src/fastapi_blog/admin/fields.py:71`
+
+**Что сообщает bandit:**
+```
+Issue: [B704] Potential XSS with markupsafe.Markup detected.
+Severity: Medium   Confidence: High
+```
+
+**Почему это ложное срабатывание (проверено):**
+```python
+>>> import markdown
+>>> from markupsafe import Markup
+>>> value = '<script>alert(1)</script>'
+>>> print(markdown.markdown(Markup.escape(value)))
+<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>
+```
+`Markup.escape(value)` экранирует HTML до передачи в `markdown.markdown`,
+поэтому произвольный HTML из `value` никогда не попадает в вывод сырым.
+Паттерн безопасен. `bleach` не нужен.
+
+**Что сделать:**
+
+Добавить `# nosec B704` с объяснением на строку 71:
+
+```python
+# до
+return Markup(markdown.markdown(Markup.escape(value)))
+
+# после
+return Markup(markdown.markdown(Markup.escape(value)))  # nosec B704 — safe: input is HTML-escaped before markdown processing
+```
+
+**Критерий готовности:** `bandit -r src/ -f json` не выдаёт B704; смысл строки не изменён.
+
+---
+
+## Задача 2 — B112: сузить голый `except Exception` в i18n.py
+
+**Файл:** `src/fastapi_blog/admin/i18n.py:86`
+
+**Что сообщает bandit:**
+```
+Issue: [B112] Try, Except, Continue detected.
+Severity: Low   Confidence: High
+```
+
+**Текущий код:**
+```python
+try:
+    locales[locale] = get_locale_name(locale)
+except Exception:
+    # Skip invalid translation files
+    continue
+```
+
+**Проблема:** голый `except Exception` подавляет любую ошибку молча — включая
+`KeyboardInterrupt`-подобные (через `BaseException`-цепочки), программные ошибки
+в самом `get_locale_name`, и реальные проблемы окружения, которые стоит видеть.
+
+**Что сделать:**
+
+1. Выяснить, какие исключения реально поднимает `get_locale_name` при невалидном
+   файле локали (скорее всего `ValueError`, `KeyError`, `FileNotFoundError`).
+2. Заменить на конкретные типы и добавить debug-лог:
+
+```python
+import logging
+logger = logging.getLogger("fastapi_blog.admin.i18n")
+
+# ...
+
+try:
+    locales[locale] = get_locale_name(locale)
+except (ValueError, KeyError, FileNotFoundError) as e:
+    logger.debug("Skipping locale %s: %s", locale, e)
+    continue
+```
+
+3. Если `get_locale_name` может поднимать другие типы — добавить их явно.
+   Не использовать `Exception` как catch-all.
+
+**Критерий готовности:** `bandit -r src/` не выдаёт B112; при невалидном файле
+локали в debug-логе появляется сообщение; валидные локали загружаются без изменений.
+
+---
+
+## Задача 3 — B105: аннотировать строку валидации пароля как не-credential
+
+**Файл:** `src/fastapi_blog/admin/rbac_auth_provider.py:134`
+
+**Что сообщает bandit:**
+```
+Issue: [B105] Possible hardcoded password: 'Password must be at least 8 characters'
+Severity: Low   Confidence: Medium
+```
+
+**Почему это ложное срабатывание:**
+Bandit эвристически реагирует на слово `password` в строковом литерале.
+Это сообщение валидации для пользователя, не учётные данные.
+
+**Что сделать:**
+
+Добавить `# nosec B105` с объяснением:
+
+```python
+# до
+raise FormValidationError(
+    {"password": "Password must be at least 8 characters"}
+)
+
+# после
+raise FormValidationError(
+    {"password": "Password must be at least 8 characters"}  # nosec B105 — validation message, not a credential
+)
+```
+
+**Критерий готовности:** `bandit -r src/` не выдаёт B105; поведение валидации не изменено.
+
+---
+
+## Порядок выполнения и проверка
+
+Все три задачи независимы, выполнять в любом порядке.
+
+После каждой задачи — локальная проверка:
+```bash
+bandit -r src/ -f text         # должно быть 0 issues
+```
+
+После всех трёх — финальная проверка CI:
+```bash
+bandit -r src/ -f json -o bandit-report.json
+# Total issues: 0 (или только те, что помечены nosec с обоснованием)
+```
+
+Коммит одним PR — все три изменения логически связаны (CI security check):
+```
+fix: suppress bandit false positives with nosec annotations
+
+- B704 in fields.py: Markup is safe, input is HTML-escaped before markdown
+- B105 in rbac_auth_provider.py: validation message, not a credential
+- B112 in i18n.py: narrow except clause, add debug logging
+```
