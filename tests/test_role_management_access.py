@@ -291,7 +291,7 @@ def test_role_dropdown_has_correct_label(app_with_roles):
 
 def test_is_accessible_does_not_use_app_state(app_with_roles):
     """Test that is_accessible does NOT rely on request.app.state.
-    
+
     This is a regression test for the bug where views were trying to read
     admin_username from app.state, which caused issues with uvicorn --reload
     (different app instances in parent/child processes).
@@ -320,13 +320,13 @@ def test_is_accessible_does_not_use_app_state(app_with_roles):
     # Intentionally delete 'app' attribute to ensure view doesn't access it
     if hasattr(request, 'app'):
         delattr(request, 'app')
-    
+
     # View should work without accessing app.state
     request.session = {"user": "admin"}
     assert role_view.is_accessible(request) is True, (
         "is_accessible should work without request.app (reads from self.admin_username)"
     )
-    
+
     request.session = {"user": "other_user"}
     assert role_view.is_accessible(request) is False
 
