@@ -85,6 +85,7 @@ def _create_admin_for_locale(
     auth_provider,
     templates_dir: str,
     available_locales: list[str],
+    enable_role_management: bool = False,
 ) -> Admin:
     """Create an Admin instance for a specific locale.
 
@@ -96,6 +97,7 @@ def _create_admin_for_locale(
         auth_provider: Authentication provider instance
         templates_dir: Path to custom templates directory
         available_locales: List of all available locales for language switcher
+        enable_role_management: Whether to automatically add role management views
 
     Returns:
         Configured Admin instance
@@ -140,6 +142,17 @@ def _create_admin_for_locale(
     user_view.name = user_name_for_button
     admin.add_view(user_view)
 
+    # Add role management views if enabled
+    if enable_role_management:
+        from .models_role import Role, UserWithRoles
+        from .views_role import RoleModelView, UserWithRolesModelView
+
+        role_view = RoleModelView(Role, icon="fa fa-shield")
+        admin.add_view(role_view)
+
+        user_roles_view = UserWithRolesModelView(UserWithRoles, icon="fa fa-users-cog")
+        admin.add_view(user_roles_view)
+
     # Add markdown CRUD views
     from .markdown_crud import (
         MarkdownCreateView,
@@ -175,6 +188,8 @@ def add_admin_to_app(
     # New API (preferred)
     locales: list[str] | None = None,
     default_locale: str | None = None,
+    # Role management
+    enable_role_management: bool = False,
     # Old API (deprecated, for backward compatibility)
     base_url: str | None = None,
     i18n_enabled: bool | None = None,
@@ -197,6 +212,7 @@ def add_admin_to_app(
       init_database: Whether to initialize database on startup (default: True)
       locales: List of available locales (default: ['en', 'ru'])
       default_locale: Default locale for /admin redirect (default: 'en')
+      enable_role_management: Enable role management views (default: False)
 
       # Deprecated parameters (for backward compatibility):
       base_url: Deprecated. Ignored in new multi-locale architecture.
@@ -375,6 +391,7 @@ def add_admin_to_app(
             auth_provider=auth_provider,
             templates_dir=templates_dir,
             available_locales=locales,
+            enable_role_management=enable_role_management,
         )
 
         # Mount to app
