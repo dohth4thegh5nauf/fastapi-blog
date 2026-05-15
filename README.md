@@ -34,7 +34,7 @@ Then open http://localhost:8000/admin (login: `admin` / `Admin123!`)
 - 🏷️ Tags and categories
 - 📚 [Live examples](tests/examples/)
 
-### Admin Panel Features (NEW in v0.8.0)
+### Admin Panel Features
 - ✨ Modern, beautiful admin UI (powered by starlette-admin)
 - 👥 User management with role-based access control
 - 📝 Visual post editor with Markdown support

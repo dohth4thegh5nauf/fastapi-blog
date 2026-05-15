@@ -177,3 +177,5 @@ changelog.json
 
 *.baktests/examples/data/
 tests/examples/data/
+
+*.bak

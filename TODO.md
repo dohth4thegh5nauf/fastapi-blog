@@ -90,12 +90,6 @@ return Markup(markdown.markdown(Markup.escape(value)))  # nosec B704
 
 ---
 
-### 3.2 — Убрать пометку "NEW in v0.8.0" из README
-**Приоритет:** низкий  
-**Описание:** Секция "Admin Panel Features (NEW in v0.8.0)" устарела. Убрать "(NEW in v0.8.0)" из заголовка.
-
----
-
 ### 3.3 — Добавить setup_fastapi_blog() в README Basic Usage
 **Приоритет:** низкий  
 **Описание:** README показывает только `add_blog_to_fastapi()` + `add_admin_to_app()` раздельно. Unified facade `setup_fastapi_blog()` задокументирован только в "Recommended" секции, но не в "Basic Usage".
@@ -114,46 +108,3 @@ fastapi_blog.setup_fastapi_blog(
     enable_role_management=True,
 )
 ```
-
----
-
-## Этап 4 — Технический долг (долгосрочный)
-
-### 4.1 — Удалить get-pip.py из корня репозитория
-**Приоритет:** низкий  
-**Описание:** `get-pip.py` (27918 строк) — стандартный PyPA installer, попавший в репозиторий случайно. Не является частью проекта.
-
-```bash
-git rm get-pip.py
-echo "get-pip.py" >> .gitignore
-```
-
----
-
-### 4.2 — Очистить .git.bak из репозитория
-**Приоритет:** низкий  
-**Описание:** Директория `.git.bak` в корне — артефакт ручных операций с git. Не должна быть в публичном репозитории.
-
-```bash
-git rm -r .git.bak
-echo ".git.bak" >> .gitignore
-```
-
----
-
-## Справка: что уже выполнено (не трогать)
-
-Для контекста — все задачи ниже закрыты в коммитах `8fc8f10`–`9df68c0`:
-
-- ✅ app.state identity bug в RoleModelView.is_accessible
-- ✅ Тема на list/detail/create/edit страницах admin
-- ✅ Deprecated параметры add_admin_to_app() удалены
-- ✅ setup_fastapi_blog() unified facade создан
-- ✅ Lifespan композиция исправлена
-- ✅ print() с паролем заменены на logging
-- ✅ Валидация weak secret_key
-- ✅ .env.example создан
-- ✅ Тесты на RBAC, template isolation, theme, password logging (88 total)
-- ✅ README, QUICKSTART, CONTRIBUTING обновлены
-- ✅ changelog.md структурирован
-- ✅ Firebase secrets проверены — чисто
