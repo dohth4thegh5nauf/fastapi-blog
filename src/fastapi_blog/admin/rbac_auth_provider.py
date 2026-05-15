@@ -27,6 +27,8 @@ class Role:
             "posts": ["create", "read", "update", "delete", "publish"],
             "users": ["create", "read", "update", "delete"],
             "settings": ["read", "update"],
+            "role": ["create", "read", "update", "delete"],
+            "user_with_roles": ["create", "read", "update", "delete"],
         },
         EDITOR: {
             "posts": ["create", "read", "update", "publish"],
