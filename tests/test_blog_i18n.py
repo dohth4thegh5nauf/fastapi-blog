@@ -152,3 +152,88 @@ def test_blog_accept_language_with_region():
     # ru-RU should match 'ru'
     response = client.get("/blog/posts", headers={"Accept-Language": "ru-RU"})
     assert "Статьи" in response.text
+
+
+def test_blog_url_with_locale_en():
+    """Test blog works with /blog/en/ URL prefix."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    response = client.get("/blog/en/posts")
+    assert response.status_code == 200
+    assert "Articles" in response.text
+    assert "Статьи" not in response.text
+
+
+def test_blog_url_with_locale_ru():
+    """Test blog works with /blog/ru/ URL prefix."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    response = client.get("/blog/ru/posts")
+    assert response.status_code == 200
+    assert "Статьи" in response.text
+    assert "Articles" not in response.text
+
+
+def test_blog_url_locale_overrides_accept_language():
+    """Test that URL locale parameter takes priority over Accept-Language."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # URL says 'en', header says 'ru' - URL should win
+    response = client.get("/blog/en/posts", headers={"Accept-Language": "ru"})
+    assert response.status_code == 200
+    assert "Articles" in response.text
+    assert "Статьи" not in response.text
+
+
+def test_language_switcher_present_in_header():
+    """Test that language switcher is present in page header."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    response = client.get("/blog/en/")
+    assert response.status_code == 200
+    assert "language-switcher" in response.text
+    assert "switchLanguage" in response.text
+    assert "English" in response.text
+    assert "Русский" in response.text
+
+
+def test_language_switcher_not_shown_for_single_locale():
+    """Test that language switcher is hidden when only one locale available."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en"], default_locale="en")
+    client = TestClient(app)
+
+    response = client.get("/blog/")
+    assert response.status_code == 200
+    # Check that the select element is not present
+    assert '<select id="language-select"' not in response.text
+
+
+def test_blog_locale_routes_for_all_pages():
+    """Test that locale routes work for all blog pages."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # Test main page
+    response = client.get("/blog/ru/")
+    assert response.status_code == 200
+    assert "Последние записи" in response.text
+
+    # Test posts page
+    response = client.get("/blog/ru/posts")
+    assert response.status_code == 200
+    assert "Статьи" in response.text
+
+    # Test tags page
+    response = client.get("/blog/ru/tags")
+    assert response.status_code == 200
+    assert "Теги" in response.text

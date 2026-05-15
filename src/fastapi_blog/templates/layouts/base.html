@@ -51,12 +51,26 @@ h4 {
     margin-bottom: 0rem;
     text-decoration: none;
 }
+
+.language-switcher {
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.language-switcher select {
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.9em;
+}
     
     </style>
 </head>
 <body>
     <header>
-        <a href="{{ url_for('blog_index') }}">
+        <a href="{% if locale %}{{ url_for('blog_index_locale', locale=locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">
     <image
         priority
         src="/static/images/profile.webp'"
@@ -65,20 +79,54 @@ h4 {
         alt="Daniel Roy Greenfeld"
         class="borderCircle"
         /></a>
-    <h1><a href="{{ url_for('blog_index') }}">Daniel Roy Greenfeld</a></h1>
+    <h1><a href="{% if locale %}{{ url_for('blog_index_locale', locale=locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">Daniel Roy Greenfeld</a></h1>
     <p>
-      <a href="{{ url_for('blog_page', page_id='about') }}">
+      <a href="{% if locale %}{{ url_for('blog_page_locale', locale=locale, page_id='about') }}{% else %}{{ url_for('blog_page', page_id='about') }}{% endif %}">
         {{ t.blog.about }}
       </a>    
       |           
-      <a href="{{ url_for('blog_posts') }}">
+      <a href="{% if locale %}{{ url_for('blog_posts_locale', locale=locale) }}{% else %}{{ url_for('blog_posts') }}{% endif %}">
         {{ t.blog.articles }}
       </a>
       |
-      <a href="{{ url_for('blog_tags') }}">
+      <a href="{% if locale %}{{ url_for('blog_tags_locale', locale=locale) }}{% else %}{{ url_for('blog_tags') }}{% endif %}">
         {{ t.blog.tags }}
       </a>
+      {% if available_locales and available_locales|length > 1 %}
+      |
+      <span class="language-switcher">
+        <select id="language-select" onchange="switchLanguage(this.value)">
+          {% for lang in available_locales %}
+          <option value="{{ lang }}" {% if lang == locale %}selected{% endif %}>
+            {% if lang == 'en' %}English{% elif lang == 'ru' %}Русский{% else %}{{ lang }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </span>
+      {% endif %}
     </p>
+    <script>
+    function switchLanguage(targetLocale) {
+      const currentPath = window.location.pathname;
+      const locales = {{ available_locales|tojson }};
+      let newPath;
+      
+      // Check if current path has a locale prefix
+      const pathParts = currentPath.split('/').filter(p => p);
+      const currentLocale = '{{ locale }}';
+      
+      if (pathParts.length > 0 && locales.includes(pathParts[0])) {
+        // Replace existing locale
+        pathParts[0] = targetLocale;
+        newPath = '/' + pathParts.join('/');
+      } else {
+        // Add locale prefix
+        newPath = '/' + targetLocale + currentPath;
+      }
+      
+      window.location.href = newPath;
+    }
+    </script>
     </header>
     <main>
         {% block content required %}{% endblock content %}
