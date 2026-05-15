@@ -207,16 +207,9 @@ def add_admin_to_app(
     secret_key: str | None = None,
     add_session_middleware: bool = True,
     init_database: bool = True,
-    # New API (preferred)
     locales: list[str] | None = None,
     default_locale: str | None = None,
-    # Role management
     enable_role_management: bool = False,
-    # Old API (deprecated, for backward compatibility)
-    base_url: str | None = None,
-    i18n_enabled: bool | None = None,
-    i18n_default_locale: str | None = None,
-    i18n_locales: list[str] | None = None,
 ) -> dict[str, Admin]:
     """Add starlette-admin panel to FastAPI application.
 
@@ -235,16 +228,6 @@ def add_admin_to_app(
       locales: List of available locales (default: ['en', 'ru'])
       default_locale: Default locale for /admin redirect (default: 'en')
       enable_role_management: Enable role management views (default: False)
-      
-      base_url: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
-        Ignored in new multi-locale architecture.
-      i18n_enabled: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
-        Multi-locale is always enabled.
-      i18n_default_locale: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
-        Use default_locale instead.
-      i18n_locales: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
-        Use locales instead.
-
 
     Returns:
       Dictionary mapping locale codes to Admin instances
@@ -292,44 +275,12 @@ def add_admin_to_app(
     if admin_password is None:
         admin_password = os.getenv("FASTAPI_BLOG_ADMIN_PASSWORD", "Admin123!")
 
-    # Handle backward compatibility with old parameters
+    # Set default locales if not provided
     if locales is None:
-        if i18n_locales is not None:
-            warnings.warn(
-                "i18n_locales is deprecated. Use 'locales' parameter instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            locales = i18n_locales
-        else:
-            locales = ["en", "ru"]
+        locales = ["en", "ru"]
 
     if default_locale is None:
-        if i18n_default_locale is not None:
-            warnings.warn(
-                "i18n_default_locale is deprecated. Use 'default_locale' parameter instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            default_locale = i18n_default_locale
-        else:
-            default_locale = "en"  # Default to English
-
-    if base_url is not None:
-        warnings.warn(
-            "base_url parameter is deprecated and ignored. "
-            "Admin panels are now mounted at /admin/{locale}.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    if i18n_enabled is not None:
-        warnings.warn(
-            "i18n_enabled parameter is deprecated and ignored. "
-            "Multi-locale support is always enabled.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        default_locale = "en"  # Default to English
 
     # Validate default_locale is in locales
     if default_locale not in locales:

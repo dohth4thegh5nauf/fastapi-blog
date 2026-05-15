@@ -83,7 +83,7 @@ def get_all_locale_names() -> dict[str, str]:
         locale = yaml_file.stem
         try:
             locales[locale] = get_locale_name(locale)
-        except Exception:
+        except (FileNotFoundError, yaml.YAMLError):
             # Skip invalid translation files
             continue
 

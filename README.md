@@ -102,13 +102,8 @@ app = FastAPI()
 # Add blog functionality
 fastapi_blog.add_blog_to_fastapi(app, prefix="blog")
 
-# Add admin panel (NEW in v0.8.0)
-fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="change-me-in-production",
-    secret_key="your-secret-key",
-)
+# Add admin panel
+fastapi_blog.add_admin_to_app(app)
 
 @app.get("/")
 async def index() -> dict:
@@ -142,12 +137,7 @@ fastapi_blog.add_blog_to_fastapi(
 )
 
 # Add admin panel for authentication
-fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="change-me-in-production",
-    secret_key="your-secret-key",
-)
+fastapi_blog.add_admin_to_app(app)
 ```
 
 Now you have:

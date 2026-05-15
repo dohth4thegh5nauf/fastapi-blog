@@ -15,6 +15,9 @@ from .models import User
 from .views import get_pwd_context
 
 
+MIN_PASSWORD_LENGTH = 8
+
+
 class Role:
     """Role definitions with permissions."""
 
@@ -129,9 +132,11 @@ class RBACAuthProvider(AuthProvider):
                 {"username": "Email must be at least 3 characters"}
             )
 
-        if len(password) < 8:
+        if len(password) < MIN_PASSWORD_LENGTH:
             raise FormValidationError(
-                {"password": "Password must be at least 8 characters"}
+                {
+                    "password": f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+                }
             )
 
         # Get user from database

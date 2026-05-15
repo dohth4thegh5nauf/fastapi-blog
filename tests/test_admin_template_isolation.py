@@ -24,11 +24,6 @@ def app_with_admin():
     return app, admins
 
 
-def test_deprecated_i18n_locales_warns():
-    app = FastAPI()
-    with pytest.warns(DeprecationWarning, match="i18n_locales is deprecated"):
-        fastapi_blog.add_admin_to_app(app, i18n_locales=["en"])
-
 def test_admin_template_loader_isolation(app_with_admin):
     """Verify admin template loader only includes admin/templates directory."""
     app, admins = app_with_admin

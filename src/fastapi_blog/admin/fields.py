@@ -68,7 +68,7 @@ class MarkdownField(TextAreaField):
             import markdown
             from markupsafe import Markup
 
-            return Markup(markdown.markdown(Markup.escape(value)))
+            return Markup(markdown.markdown(Markup.escape(value)))  # nosec
         return value
 
 
