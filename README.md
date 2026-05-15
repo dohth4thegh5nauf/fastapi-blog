@@ -91,7 +91,43 @@ fastapi_blog.add_blog_to_fastapi(
 
 ## Basic Usage
 
-### Quick Setup with Admin Panel
+### Recommended: Unified Setup (One Function)
+
+```python
+from fastapi import FastAPI
+import fastapi_blog
+
+app = FastAPI()
+
+# Single function configures everything
+fastapi_blog.setup_fastapi_blog(
+    app,
+    posts_dirname="posts",
+    include_api=False,  # Set True for REST API
+    locales=["en", "ru"],  # Multiple languages
+    default_locale="en",
+    admin_username="admin",
+    admin_password="change-me-in-production",
+    secret_key="your-secret-key-here",
+    enable_role_management=False,  # Set True for RBAC
+)
+
+@app.get("/")
+async def index() -> dict:
+    return {
+        "message": "Visit /blog for posts, /admin for management",
+        "blog": "http://localhost:8000/blog",
+        "admin": "http://localhost:8000/admin",
+    }
+```
+
+That's it! Now you have:
+- 📝 Blog at `/blog`
+- ⚙️ Admin panel at `/admin/en` and `/admin/ru`
+- 🔒 Automatic database initialization
+- 🌍 Multi-language admin panel
+
+### Alternative: Separate Setup (More Control)
 
 ```python
 from fastapi import FastAPI
