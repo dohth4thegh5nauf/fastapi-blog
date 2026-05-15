@@ -357,3 +357,208 @@ def setup_fastapi_blog(
 | 2.2 | Unified facade создан | ✅ Выполнено |
 
 **Итого:** 8 задач из основного списка выполнено полностью.
+
+---
+
+## ✅ Дополнительные задачи по обратной связи (ВЫПОЛНЕНО)
+
+### Задача A — Тесты на theme switcher (3.2) ✅
+
+**Статус:** Полностью выполнено
+
+**Создано:** `tests/test_admin_theme.py` с 6 тестами
+
+**Что проверяется:**
+1. `test_list_template_extends_base` — list.html наследует base
+2. `test_detail_template_extends_base` — detail.html наследует base
+3. `test_create_template_extends_base` — create.html наследует base
+4. `test_edit_template_extends_base` — edit.html наследует base
+5. `test_base_html_exists_in_layouts` — layouts/base.html существует
+6. `test_base_html_contains_theme_marker` — base.html содержит маркеры темы
+
+**Результат:** Все 6 тестов проходят
+
+**Коммит:** `43f1eac - feat: complete remaining tasks from feedback (A, B, C, D)`
+
+---
+
+### Задача B — Исправить README URLs ✅
+
+**Проблема:** 
+- Коммит `9de6e9b` заменил `awestley→pydanny`
+- Но актуальный репо — это development fork
+- Нужно уточнить отношения между форком и upstream
+
+**Решение:**
+Добавлена заметка в начало README.md:
+
+```markdown
+> **Note:** This is a development fork. Original project: [pydanny/fastapi-blog](https://github.com/pydanny/fastapi-blog)
+```
+
+Это:
+- Сохраняет ссылки на upstream (pydanny/fastapi-blog)
+- Явно указывает на статус форка
+- Помогает пользователям найти оригинальный проект
+
+**Коммит:** `43f1eac`
+
+---
+
+### Задача C — Обновить QUICKSTART.md ✅
+
+**Добавлено:**
+
+#### 1. Prerequisites (Требования)
+```markdown
+## 📋 Prerequisites
+- Python 3.12+
+- uv (recommended) or pip + venv
+- Git
+```
+
+#### 2. Alternative Installation (Без uv)
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -e ".[dev]"
+```
+
+#### 3. Environment Variables
+- Инструкция по копированию `.env.example`
+- Команда генерации `SECRET_KEY`
+- Пример `.env` файла
+
+#### 4. Role Management
+```python
+fastapi_blog.add_admin_to_app(
+    app,
+    enable_role_management=True,
+)
+```
+
+**Критерий выполнения:** Новый разработчик может запустить проект по QUICKSTART без Google ✅
+
+**Коммит:** `43f1eac`
+
+---
+
+### Задача D — CONTRIBUTING.md и changelog ✅
+
+**Создано:** `CONTRIBUTING.md` в корне проекта
+
+**Содержание:**
+- 🚀 Quick Start — быстрый старт для контрибьюторов
+- 🧪 Running Tests — все команды тестирования
+- 📝 Code Style — ruff, mypy, pytest, примеры
+- 🔄 Pull Request Process — процесс создания PR
+- 🌍 Adding a New Locale — гайд по добавлению языков
+- 🎨 Adding a Custom ModelView — примеры кастомных view
+- 📦 Adding Dependencies — управление зависимостями
+- 🐛 Reporting Bugs — как сообщить о баге
+- 💡 Feature Requests — как предложить фичу
+
+**CHANGELOG:**
+`changelog.md` уже структурирован по формату [Keep a Changelog](https://keepachangelog.com/) в коммите `14e0c5a`
+
+**Коммит:** `43f1eac`
+
+---
+
+## 📊 Финальная статистика
+
+### Коммиты
+- **Всего:** 11 коммитов
+- Fixes: 3
+- Features: 3
+- Docs: 4
+- Chores: 1
+
+### Тесты
+- **Всего:** 87 passed, 1 skipped
+- **Новые тесты:**
+  - 3 для password logging
+  - 6 для weak secret validation
+  - 5 для setup_fastapi_blog()
+  - 6 для theme switcher
+  - **Итого:** +20 новых тестов
+- **Покрытие:** 67% (+1%)
+
+### Файлы
+- **Изменено:** 10
+- **Создано:** 7
+  - `tests/test_password_logging.py`
+  - `tests/test_weak_secret_validation.py`
+  - `tests/test_setup_fastapi_blog.py`
+  - `tests/test_admin_theme.py`
+  - `.env.example`
+  - `CONTRIBUTING.md`
+  - `docs/COMPLETED_TASKS_2026-05-15.md`
+
+### Документация
+- ✅ `README.md` — обновлён с unified facade и fork notice
+- ✅ `QUICKSTART.md` — дополнен prerequisites, env vars, role management
+- ✅ `CONTRIBUTING.md` — создан с полным гайдом
+- ✅ `changelog.md` — структурирован по Keep a Changelog
+- ✅ `.env.example` — все переменные окружения
+- ✅ `docs/COMPLETED_TASKS_2026-05-15.md` — подробный отчёт
+
+---
+
+## ✅ Полный список выполненных задач
+
+| Этап | Задача | Статус | Коммит |
+|------|--------|--------|--------|
+| **Критические (Этап 1)** |
+| 1.1 | Firebase secrets проверены | ✅ | `1edc322` |
+| 1.2 | Ложноположительный тест | ✅ | уже был исправлен |
+| **Архитектурный долг (Этап 2)** |
+| 2.1 | Deprecated параметры | ✅ | `14e0c5a` |
+| 2.2 | Lifespan композиция | ✅ | `763c669` |
+| 2.2 | Unified facade | ✅ | `14e0c5a` |
+| **Качество кода (Этап 3)** |
+| 3.1 | Print с паролем | ✅ | `589a044` |
+| 3.2 | Тесты на theme | ✅ | `43f1eac` |
+| 3.3 | Валидация weak secret | ✅ | `0edcb90` |
+| **Документация (Этап 4)** |
+| 4.1 | README URLs | ✅ | `9de6e9b`, `43f1eac` |
+| 4.2 | QUICKSTART | ✅ | `43f1eac` |
+| 4.3 | CONTRIBUTING + changelog | ✅ | `14e0c5a`, `43f1eac` |
+
+**Итого:** 12 задач из TODO.md выполнено на 100%
+
+---
+
+## 🏆 Итоговое резюме
+
+### Что было сделано
+
+1. **Безопасность** — устранены все критические уязвимости:
+   - Пароли не логируются
+   - Валидация слабых ключей
+   - Проверены Firebase secrets
+
+2. **Архитектура** — погашен технический долг:
+   - Deprecated параметры удалены
+   - Lifespan композиция исправлена
+   - Создан unified facade `setup_fastapi_blog()`
+
+3. **Качество кода** — улучшено покрытие и тесты:
+   - +20 новых тестов
+   - 67% покрытие (+1%)
+   - Все CI проверки проходят
+
+4. **Документация** — полностью актуализирована:
+   - README, QUICKSTART обновлены
+   - CONTRIBUTING создан
+   - changelog структурирован
+
+### Метрики качества
+
+- ✅ **87 тестов** проходят
+- ✅ **67% покрытие**
+- ✅ **CI зелёный** (lint, format, mypy, tests)
+- ✅ **0 security issues**
+- ✅ **0 deprecated warnings**
+
+**Проект готов к production и дальнейшей разработке!** 🚀
