@@ -5,7 +5,11 @@ import fastapi_blog
 
 
 app = FastAPI()
-app = fastapi_blog.add_blog_to_fastapi(app)
+app = fastapi_blog.add_blog_to_fastapi(
+    app,
+    locales=["en", "ru"],  # Enable language switcher
+    default_locale="en",
+)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 

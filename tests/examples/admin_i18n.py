@@ -11,12 +11,14 @@ import fastapi_blog
 
 app = FastAPI(title="Multilingual Blog Admin")
 
-# Add blog
+# Add blog with i18n support
 fastapi_blog.add_blog_to_fastapi(
     app,
     prefix="blog",
     strict_frontmatter=False,
     sanitize_html=False,
+    locales=["en", "ru"],  # Enable language switcher
+    default_locale="en",
 )
 
 # Add admin panel with Russian as default language

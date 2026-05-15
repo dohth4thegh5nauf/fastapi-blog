@@ -39,12 +39,14 @@ Path("static").mkdir(exist_ok=True)
 # Create FastAPI app
 app = FastAPI(title="My Blog")
 
-# Add blog functionality
+# Add blog functionality with i18n
 fastapi_blog.add_blog_to_fastapi(
     app,
     prefix="blog",
     strict_frontmatter=False,
     sanitize_html=False,
+    locales=["en", "ru"],  # Enable language switcher in blog
+    default_locale="en",
 )
 
 # Add admin panel (database auto-initialized on startup)

@@ -109,19 +109,25 @@ h4 {
     function switchLanguage(targetLocale) {
       const currentPath = window.location.pathname;
       const locales = {{ available_locales|tojson }};
+      
+      // Split path into parts, preserving blog prefix
+      const parts = currentPath.split('/').filter(p => p);
+      const localeIndex = parts.findIndex(p => locales.includes(p));
+      
       let newPath;
-      
-      // Check if current path has a locale prefix
-      const pathParts = currentPath.split('/').filter(p => p);
-      const currentLocale = '{{ locale }}';
-      
-      if (pathParts.length > 0 && locales.includes(pathParts[0])) {
+      if (localeIndex !== -1) {
         // Replace existing locale
-        pathParts[0] = targetLocale;
-        newPath = '/' + pathParts.join('/');
+        parts[localeIndex] = targetLocale;
+        newPath = '/' + parts.join('/');
       } else {
-        // Add locale prefix
-        newPath = '/' + targetLocale + currentPath;
+        // Insert locale after first segment (blog prefix)
+        // Structure: /blog/posts → /blog/{locale}/posts
+        if (parts.length > 0) {
+          parts.splice(1, 0, targetLocale);
+          newPath = '/' + parts.join('/');
+        } else {
+          newPath = '/' + targetLocale + '/';
+        }
       }
       
       window.location.href = newPath;

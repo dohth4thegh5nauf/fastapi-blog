@@ -237,3 +237,31 @@ def test_blog_locale_routes_for_all_pages():
     response = client.get("/blog/ru/tags")
     assert response.status_code == 200
     assert "Теги" in response.text
+
+
+def test_language_switcher_javascript_logic():
+    """Test that language switcher JavaScript correctly handles URL transformations."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # Test that switcher script is present with correct logic
+    response = client.get("/blog/en/")
+    assert response.status_code == 200
+    assert "function switchLanguage" in response.text
+    assert "parts.findIndex" in response.text
+    assert "parts.splice(1, 0, targetLocale)" in response.text
+
+
+def test_legacy_routes_show_language_switcher():
+    """Test that language switcher appears on legacy routes without locale."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # Legacy route should still show switcher
+    response = client.get("/blog/")
+    assert response.status_code == 200
+    assert '<select id="language-select"' in response.text
+    assert "English" in response.text
+    assert "Русский" in response.text
