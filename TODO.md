@@ -18,17 +18,19 @@
 
 ---
 
-### 1.2 — Унификация аутентификации (REST API + admin-сессия)
-**Приоритет:** средний  
-**Описание:** Admin использует cookie-сессию, `/api/posts` — отдельный механизм. Нет общего FastAPI dependency.
-
-**Что нужно:**
-- Создать dependency `get_current_user(request)` → `str | None` (проверяет сначала сессию, затем Authorization header)
-- Переключить `api_require_auth=True` на этот dependency
-- Тест: одни credentials работают через сессию и через `Authorization: Basic`
-
-**Критерий готовности:** единый dependency, покрытый тестами.
+### 1.2 — Унификация аутентификации (REST API + admin-сессия) ✅
+**Статус:** Выполнено в коммитах 24484b0, 5ecd08b  
+**Реализовано:**
+- ✅ Создан модуль `auth.py` с `get_current_user()` и `require_current_user()`
+- ✅ Dependency проверяет session cookie, затем Authorization: Basic
+- ✅ REST API использует unified auth при наличии credentials
+- ✅ 9 новых тестов для unified auth (107 passed total)
+- ✅ Одинаковые credentials работают через оба механизма
 
 ---
+
+## Завершено
+
+Все задачи Этапа 1 (Архитектура) выполнены.
 
 

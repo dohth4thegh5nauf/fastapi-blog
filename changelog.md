@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **i18n for blog routes**: Blog public interface now supports internationalization
+  - Added `blog` namespace to translation files (en.yaml, ru.yaml)
+  - New parameters: `locales` and `default_locale` in `add_blog_to_fastapi()`
+  - Blog responds to `Accept-Language` header for UI localization
+  - 10 new i18n tests
+- **Unified authentication**: Single auth mechanism for both admin panel and REST API
+  - New `auth.py` module with `get_current_user()` and `require_current_user()`
+  - Supports both session cookie (admin panel) and HTTP Basic auth (REST API)
+  - Same credentials work for both authentication methods
+  - 9 new unified auth tests (6 unit + 3 integration)
+- Parameters `admin_username` and `admin_password` in `add_blog_to_fastapi()` for API auth
+
+### Fixed
+- `require_authentication()` now handles missing SessionMiddleware gracefully
+- `.git.bak` directory removed from repository (technical debt cleanup)
+
+### Changed
+- REST API can now use unified auth when credentials are provided
+- Blog templates updated to use translation keys via `{{ t.blog.* }}`
+
 ---
 
 ## [0.8.1] - 2026-05-15
