@@ -1,5 +1,11 @@
 # Quick Start Guide - FastAPI Blog
 
+## 📋 Prerequisites
+
+- **Python 3.12+** (tested with Python 3.13.7)
+- **[uv](https://docs.astral.sh/uv/)** (recommended) or pip + venv
+- **Git**
+
 ## 🚀 Try the Demo
 
 The fastest way to see FastAPI Blog in action:
@@ -128,6 +134,50 @@ make format
 
 ---
 
+## 🔧 Alternative Installation (Without uv)
+
+If you prefer pip + venv:
+
+```bash
+# Clone the repository  
+git clone https://github.com/pydanny/fastapi-blog.git
+cd fastapi-blog
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install in development mode
+pip install -e ".[dev]"
+```
+
+---
+
+## 🔑 Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+```
+
+### Generate SECRET_KEY
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Example .env
+
+```env
+FASTAPI_BLOG_ADMIN_LOGIN=admin
+FASTAPI_BLOG_ADMIN_PASSWORD=your_secure_password
+SECRET_KEY=your_generated_64_char_key_here
+DATABASE_URL=sqlite+aiosqlite:///./data/app.db
+```
+
+---
+
 ## 📝 Basic Usage in Your Project
 
 ### Installation
@@ -250,6 +300,28 @@ fastapi_blog.add_admin_to_app(
     database_url="sqlite:///./blog.db",  # or PostgreSQL
 )
 ```
+
+---
+
+## 🛡️ Role Management
+
+Enable role-based access control (RBAC):
+
+```python
+fastapi_blog.add_admin_to_app(
+    app,
+    admin_username="admin",
+    admin_password="secure_password",
+    secret_key="your-secret-key",
+    enable_role_management=True,  # ← Enable RBAC
+)
+```
+
+This adds:
+- Role management dropdown in admin panel
+- User-role assignment
+- Access control for different user types
+- Visible only to root admin user
 
 ---
 

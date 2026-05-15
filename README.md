@@ -1,5 +1,7 @@
 # FastAPI Blog
 
+> **Note:** This is a development fork. Original project: [pydanny/fastapi-blog](https://github.com/pydanny/fastapi-blog)
+
 A simple, easy-to-use blog application built with FastAPI.
 
 ## 🚀 Quick Start
