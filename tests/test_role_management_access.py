@@ -87,10 +87,6 @@ def test_role_view_accessible_only_for_root_user(app_with_roles):
 
     app, admins = app_with_roles
 
-    # Create mock request
-    request = Mock(spec=Request)
-    request.app.state.admin_username = "admin"
-
     # Get role view from first admin's dropdown
     admin = list(admins.values())[0]
     role_view = None
@@ -104,6 +100,11 @@ def test_role_view_accessible_only_for_root_user(app_with_roles):
                 break
 
     assert role_view is not None, "RoleModelView not found in dropdown"
+    # Verify that view stores admin_username correctly
+    assert role_view.admin_username == "admin"
+
+    # Create mock request (no need to set app.state - view reads from self.admin_username)
+    request = Mock(spec=Request)
 
     # Test root user access
     request.session = {"user": "admin"}
@@ -132,10 +133,6 @@ def test_user_roles_view_accessible_only_for_root_user(app_with_roles):
 
     app, admins = app_with_roles
 
-    # Create mock request
-    request = Mock(spec=Request)
-    request.app.state.admin_username = "admin"
-
     # Get user roles view from first admin's dropdown
     admin = list(admins.values())[0]
     user_roles_view = None
@@ -149,6 +146,11 @@ def test_user_roles_view_accessible_only_for_root_user(app_with_roles):
                 break
 
     assert user_roles_view is not None, "UserWithRolesModelView not found in dropdown"
+    # Verify that view stores admin_username correctly
+    assert user_roles_view.admin_username == "admin"
+
+    # Create mock request (no need to set app.state - view reads from self.admin_username)
+    request = Mock(spec=Request)
 
     # Test root user access
     request.session = {"user": "admin"}
@@ -287,18 +289,53 @@ def test_role_dropdown_has_correct_label(app_with_roles):
     assert ru_dropdown.icon == "fa fa-shield"
 
 
-def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
-    """Test that role management dropdown is not accessible for non-root users."""
-    from unittest.mock import Mock
-
+def test_is_accessible_does_not_use_app_state(app_with_roles):
+    """Test that is_accessible does NOT rely on request.app.state.
+    
+    This is a regression test for the bug where views were trying to read
+    admin_username from app.state, which caused issues with uvicorn --reload
+    (different app instances in parent/child processes).
+    """
     from starlette_admin import DropDown
 
     app, admins = app_with_roles
 
-    # Create mock request for non-root user
+    # Get role view from first admin's dropdown
+    admin = list(admins.values())[0]
+    role_view = None
+    for view in admin._views:
+        if isinstance(view, DropDown):
+            for subview in view.views:
+                if isinstance(subview, RoleModelView):
+                    role_view = subview
+                    break
+            if role_view:
+                break
+
+    assert role_view is not None
+    assert role_view.admin_username == "admin"
+
+    # Create mock request WITHOUT app.state
     request = Mock(spec=Request)
-    request.app.state.admin_username = "admin"
+    # Intentionally delete 'app' attribute to ensure view doesn't access it
+    if hasattr(request, 'app'):
+        delattr(request, 'app')
+    
+    # View should work without accessing app.state
+    request.session = {"user": "admin"}
+    assert role_view.is_accessible(request) is True, (
+        "is_accessible should work without request.app (reads from self.admin_username)"
+    )
+    
     request.session = {"user": "other_user"}
+    assert role_view.is_accessible(request) is False
+
+
+def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
+    """Test that role management dropdown is not accessible for non-root users."""
+    from starlette_admin import DropDown
+
+    app, admins = app_with_roles
 
     # Get admin instance
     admin = list(admins.values())[0]
@@ -314,6 +351,10 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
             break
 
     assert role_dropdown is not None, "Role management dropdown not found"
+
+    # Create mock request for non-root user (no need to set app.state)
+    request = Mock(spec=Request)
+    request.session = {"user": "other_user"}
 
     # DropDown.is_accessible checks if ANY nested view is accessible
     # Since all nested views check for root user, dropdown should be inaccessible
