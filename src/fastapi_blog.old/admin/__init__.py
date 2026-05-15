@@ -104,14 +104,12 @@ def _create_admin_for_locale(
     # Labels are hardcoded per locale (not using gettext to avoid global state)
     if locale == "ru":
         home_label = "Главная"
-        user_label_singular = "Пользователь"
-        user_label_plural = "Пользователи"
+        user_label = "Пользователи"
         user_name_for_button = "пользователя"  # Genitive case
         posts_label = "Посты"
     else:  # English
         home_label = "Home"
-        user_label_singular = "User"
-        user_label_plural = "Users"
+        user_label = "Users"
         user_name_for_button = "User"
         posts_label = "Posts"
 
@@ -129,9 +127,8 @@ def _create_admin_for_locale(
 
     # Add User view with translated labels
     user_view = UserModelView(User, icon="fa fa-users")
-    user_view.label = user_label_plural
+    user_view.label = user_label
     user_view.name = user_name_for_button
-    user_view.label_plural = user_label_plural
     admin.add_view(user_view)
 
     # Add markdown CRUD views
