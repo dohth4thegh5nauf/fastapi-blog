@@ -219,3 +219,141 @@ for "add_blog_to_fastapi"; did you mean "posts_dirname"?
 **Коммит:** `3740d52 - fix: correct parameter name from posts_dir to posts_dirname`
 
 **Статус:** ✅ mypy проходит, тесты зелёные
+
+---
+
+## ✅ Задачи 2.1 и 2.2 — Архитектурный долг (ВЫПОЛНЕНО)
+
+### Задача 2.1 — Зачистить deprecated параметры ✅
+
+**Статус:** Полностью выполнено
+
+**Что сделано:**
+1. Deprecated параметры удалены из публичного API `add_admin_to_app()`:
+   - `base_url` — теперь вычисляется автоматически
+   - `i18n_enabled` — используйте `locales` вместо него
+   - `i18n_default_locale` — переименован в `default_locale`
+   - `i18n_locales` — переименован в `locales`
+
+2. CHANGELOG.md обновлён:
+   - Добавлен раздел `[Unreleased]` с текущими изменениями
+   - Документированы все security fixes
+   - Перечислены удалённые параметры
+   - Следует формату [Keep a Changelog](https://keepachangelog.com/)
+
+3. Тесты обновлены:
+   - `test_admin_template_isolation.py` использует новый API (`locales=["en"]`)
+   - Все тесты проходят без warnings о deprecated параметрах
+
+**Коммит:** `14e0c5a - feat: complete setup_fastapi_blog() unified facade`
+
+---
+
+### Задача 2.2 — Унифицировать точки входа ✅
+
+**Статус:** Полностью выполнено
+
+**Что сделано:**
+
+#### 1. Lifespan композиция ✅
+Реализована корректная композиция lifespan (не замена, а обёртка):
+
+```python
+# src/fastapi_blog/admin/__init__.py, строки 343-361
+original_lifespan = getattr(app.router, "lifespan_context", None)
+
+@asynccontextmanager
+async def admin_lifespan(app):
+    await init_db(engine)
+    
+    if original_lifespan:
+        async with original_lifespan(app):  # Обёртка, не замена!
+            yield
+    else:
+        yield
+```
+
+**Тест:** `tests/test_lifespan.py::test_admin_lifespan_composition`
+- Проверяет, что оба lifespan (пользовательский и admin) выполняются
+- Гарантирует отсутствие конфликтов
+
+#### 2. Unified facade — setup_fastapi_blog() ✅
+
+**Создан единый фасад для настройки blog + admin:**
+
+```python
+def setup_fastapi_blog(
+    app: FastAPI,
+    *,
+    posts_dirname: str = "posts",
+    include_api: bool = False,
+    locales: list[str] = ["en"],
+    default_locale: str = "en",
+    admin_username: str | None = None,
+    admin_password: str | None = None,
+    secret_key: str | None = None,
+    enable_role_management: bool = False,
+) -> dict[str, Admin]:
+    """Single function to configure blog and admin."""
+```
+
+**Преимущества:**
+- ✅ Один вызов вместо двух
+- ✅ Все параметры в одном месте
+- ✅ Эквивалентен раздельным вызовам
+- ✅ Лучший Developer Experience
+
+**Тесты:** `tests/test_setup_fastapi_blog.py` — 5 тестов:
+1. `test_setup_fastapi_blog_basic` — базовая настройка
+2. `test_setup_fastapi_blog_with_api` — с REST API
+3. `test_setup_fastapi_blog_multiple_locales` — мультиязычность
+4. `test_setup_fastapi_blog_with_role_management` — RBAC
+5. `test_setup_fastapi_blog_is_convenience_wrapper` — эквивалентность
+
+**Документация:** Добавлен раздел в README.md:
+- "Recommended: Unified Setup (One Function)"
+- Примеры использования
+- Сравнение с раздельными вызовами
+
+**Коммит:** `14e0c5a - feat: complete setup_fastapi_blog() unified facade`
+
+---
+
+## 📊 Обновлённая статистика
+
+### Коммиты
+- Всего: **9 коммитов**
+- Fixes: 3
+- Features: 2
+- Docs: 3
+- Chores: 1
+
+### Тесты
+- Всего тестов: **81 passed, 1 skipped** (+5 новых)
+- Новые тесты для `setup_fastapi_blog()`: 5
+- Покрытие: **67%** (+1%)
+
+### Файлы
+- Изменено: 8
+- Создано: 5
+
+---
+
+## ✅ Задачи из TODO.md — Финальный статус
+
+| Этап | Задача | Статус |
+|------|--------|--------|
+| **Критические (Этап 1)** |
+| 1.1 | Firebase secrets проверены | ✅ Выполнено |
+| 1.2 | Ложноположительный тест исправлен | ✅ Выполнено |
+| **Качество кода (Этап 3)** |
+| 3.1 | Print с паролем убран | ✅ Выполнено |
+| 3.3 | Валидация weak secret_key | ✅ Выполнено |
+| **Документация (Этап 4)** |
+| 4.1 | README URLs обновлены | ✅ Выполнено |
+| **Архитектурный долг (Этап 2)** |
+| 2.1 | Deprecated параметры зачищены | ✅ Выполнено |
+| 2.2 | Lifespan композиция | ✅ Выполнено |
+| 2.2 | Unified facade создан | ✅ Выполнено |
+
+**Итого:** 8 задач из основного списка выполнено полностью.
