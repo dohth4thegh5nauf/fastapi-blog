@@ -1,0 +1,128 @@
+{% extends "custom_base.html" %}
+
+{% block header %}
+<div class="d-flex justify-content-between align-items-center">
+  <h1>{{ t.posts }}</h1>
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{{ url_for(__name__ ~ ':index') }}">{{ t.admin }}</a>
+    </li>
+    <li class="breadcrumb-item active">{{ t.posts }}</li>
+  </ol>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">{{ t.posts }}</h3>
+          <div class="card-actions">
+            <div class="btn-list">
+              <a href="{{ url_for(__name__ ~ ':posts:new') }}" class="btn btn-primary d-none d-sm-inline-block">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                {{ t.new_post }}
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-vcenter text-nowrap card-table">
+              <thead>
+                <tr>
+                  <th>{{ t.title }}</th>
+                  <th>{{ t.slug }}</th>
+                  <th>{{ t.date }}</th>
+                  <th>{{ t.status }}</th>
+                  <th>{{ t.tags }}</th>
+                  <th class="w-1">{{ t.actions }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if posts %}
+                  {% for post in posts %}
+                  <tr>
+                    <td><strong>{{ post.title }}</strong></td>
+                    <td><code class="text-muted">{{ post.slug }}</code></td>
+                    <td class="text-muted">{{ post.date }}</td>
+                    <td>
+                      {% if post.published %}
+                        <span class="badge badge-sm bg-green">{{ t.published }}</span>
+                      {% else %}
+                        <span class="badge badge-sm bg-yellow">{{ t.draft }}</span>
+                      {% endif %}
+                    </td>
+                    <td><span class="text-muted">{{ post.tags }}</span></td>
+                    <td>
+                      <div class="btn-list flex-nowrap">
+                        <a href="{{ url_for(__name__ ~ ':posts:edit', slug=post.slug) }}" class="btn btn-sm btn-icon" title="{{ t.edit }}" aria-label="{{ t.edit }}">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
+                            <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
+                            <path d="M16 5l3 3" />
+                          </svg>
+                        </a>
+                        <button class="btn btn-sm btn-icon btn-danger" onclick="deletePost('{{ post.slug }}')" title="{{ t.delete }}" aria-label="{{ t.delete }}">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M4 7l16 0" />
+                            <path d="M10 11l0 6" />
+                            <path d="M14 11l0 6" />
+                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                            <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="6" class="text-center text-muted">
+                      {{ t.no_posts_found }} <a href="{{ url_for(__name__ ~ ':posts:new') }}">{{ t.create_first_post }}</a>
+                    </td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Get translations from template context
+const translations = {
+  deleteConfirm: '{{ t.delete_confirm }}',
+  error: '{{ t.error }}',
+  failedToDelete: '{{ t.failed_to_delete }}'
+};
+
+async function deletePost(slug) {
+  if (!confirm(`${translations.deleteConfirm} "${slug}"?`)) return;
+  
+  try {
+    const response = await fetch(`/api/posts/delete/${slug}`, {
+      method: 'DELETE',
+    });
+    
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      const error = await response.json();
+      alert(`${translations.error}: ${error.detail || translations.failedToDelete}`);
+    }
+  } catch (err) {
+    alert(`${translations.error}: ${err.message}`);
+  }
+}
+</script>
+{% endblock %}

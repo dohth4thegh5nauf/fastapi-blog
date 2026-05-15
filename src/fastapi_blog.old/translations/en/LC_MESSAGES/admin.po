@@ -1,0 +1,110 @@
+# English translations for fastapi-blog.
+# Copyright (C) 2026 fastapi-blog
+# This file is distributed under the same license as the fastapi-blog project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: fastapi-blog 0.8.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-13 19:00+0000\n"
+"PO-Revision-Date: 2026-05-13 19:00+0000\n"
+"Last-Translator: \n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Manual 1.0\n"
+
+# Home page
+msgid "Home"
+msgstr "Home"
+
+# User management
+msgid "User"
+msgstr "User"
+
+msgid "Users"
+msgstr "Users"
+
+msgid "Email"
+msgstr "Email"
+
+msgid "Is Active"
+msgstr "Is Active"
+
+msgid "Is Admin"
+msgstr "Is Admin"
+
+msgid "Created At"
+msgstr "Created At"
+
+msgid "Updated At"
+msgstr "Updated At"
+
+msgid "Hashed Password"
+msgstr "Hashed Password"
+
+# Post management
+msgid "Post"
+msgstr "Post"
+
+msgid "Posts"
+msgstr "Posts"
+
+msgid "Slug"
+msgstr "Slug"
+
+msgid "Title"
+msgstr "Title"
+
+msgid "Content"
+msgstr "Content"
+
+msgid "Description"
+msgstr "Description"
+
+msgid "Tags"
+msgstr "Tags"
+
+msgid "Image"
+msgstr "Image"
+
+msgid "Published"
+msgstr "Published"
+
+msgid "Publish Date"
+msgstr "Publish Date"
+
+# Common actions
+msgid "Create"
+msgstr "Create"
+
+msgid "Edit"
+msgstr "Edit"
+
+msgid "Delete"
+msgstr "Delete"
+
+msgid "Save"
+msgstr "Save"
+
+msgid "Cancel"
+msgstr "Cancel"
+
+msgid "Search"
+msgstr "Search"
+
+msgid "Filter"
+msgstr "Filter"
+
+msgid "Export"
+msgstr "Export"
+
+# Messages
+msgid "No matching records found"
+msgstr "No matching records found"
+
+msgid "Showing %(start)s to %(end)s of %(total)s entries"
+msgstr "Showing %(start)s to %(end)s of %(total)s entries"

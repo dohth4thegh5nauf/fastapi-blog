@@ -1,0 +1,53 @@
+{% extends "admin/layout.html" %}
+{% block title %}Posts{% endblock %}
+{% block content %}
+<p><a href="{{ admin_prefix }}/new"><strong>+ New post</strong></a></p>
+{% if posts %}
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Slug</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for post in posts %}
+        <tr>
+            <td>{{ post.title }}</td>
+            <td><code>{{ post.slug }}</code></td>
+            <td>{{ post.date }}</td>
+            <td>
+                {% if post.published %}
+                <span class="badge published">published</span>
+                {% else %}
+                <span class="badge draft">draft</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                <a href="{{ admin_prefix }}/{{ post.slug }}">edit</a>
+                <button type="button" onclick="deletePost('{{ post.slug }}')">delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p><em>No posts yet. <a href="{{ admin_prefix }}/new">Create the first one</a>.</em></p>
+{% endif %}
+
+<script>
+async function deletePost(slug) {
+    if (!confirm(`Delete post "${slug}"?`)) return;
+    const response = await fetch(`{{ api_prefix }}/delete/${slug}`, { method: 'DELETE' });
+    if (response.ok) {
+        window.location.reload();
+    } else {
+        const err = await response.json().catch(() => ({ detail: response.statusText }));
+        alert(`Delete failed: ${err.detail || JSON.stringify(err)}`);
+    }
+}
+</script>
+{% endblock %}

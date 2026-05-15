@@ -1,0 +1,261 @@
+{% extends "@starlette-admin/layout.html" %}
+
+{% block head_css %}
+{{ super() }}
+<style>
+/* Theme transition configuration */
+:root {
+    --theme-transition-duration: 0.27s;
+    --theme-transition-timing: ease-out;
+    --theme-transition: 
+        background-color var(--theme-transition-duration) var(--theme-transition-timing),
+        color var(--theme-transition-duration) var(--theme-transition-timing),
+        border-color var(--theme-transition-duration) var(--theme-transition-timing);
+}
+
+/* Apply smooth transitions only to key UI elements for better performance */
+body,
+.page,
+.page-wrapper,
+.page-body,
+.card,
+.navbar,
+.navbar-nav,
+.nav-link,
+.avatar,
+.avatar svg,
+.avatar .icon,
+.table,
+.form-control,
+.form-select,
+.btn,
+.dropdown-menu,
+.list-group-item,
+.badge,
+.alert {
+    transition: background-color 0.27s ease-out !important,
+                color 0.27s ease-out !important,
+                border-color 0.27s ease-out !important;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --theme-transition-duration: 0s;
+    }
+    
+    body,
+    .page,
+    .page-wrapper,
+    .page-body,
+    .card,
+    .navbar,
+    .navbar-nav,
+    .nav-link,
+    .avatar,
+    .avatar svg,
+    .avatar .icon,
+    .table,
+    .form-control,
+    .form-select,
+    .btn,
+    .dropdown-menu,
+    .list-group-item,
+    .badge,
+    .alert {
+        transition: none !important;
+    }
+}
+
+/* Dark theme styles */
+[data-bs-theme="dark"] {
+    --tblr-body-bg: #1e293b;
+    --tblr-body-color: #e2e8f0;
+    --tblr-card-bg: #2d3748;
+    --tblr-border-color: #4a5568;
+    --tblr-navbar-bg: #1a202c;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--tblr-card-bg);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .navbar {
+    background-color: var(--tblr-navbar-bg) !important;
+    border-bottom-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .table {
+    color: var(--tblr-body-color);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #374151;
+    border-color: var(--tblr-border-color);
+    color: var(--tblr-body-color);
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #60a5fa;
+    border-color: #60a5fa;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: #60a5fa;
+    color: #1e293b;
+}
+
+[data-bs-theme="dark"] .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* Style user dropdown as button using Tabler classes */
+.navbar-nav .nav-item.dropdown > a.nav-link {
+    /* Make it look like .btn */
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.4285714286;
+    color: inherit;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid rgba(98, 105, 118, 0.16);
+    border-radius: 4px;
+    background-color: #ffffff;
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+                border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.navbar-nav .nav-item.dropdown > a.nav-link:hover {
+    color: inherit;
+    background-color: rgba(32, 107, 196, 0.06);
+    border-color: rgba(98, 105, 118, 0.16);
+}
+
+[data-bs-theme="dark"] .navbar-nav .nav-item.dropdown > a.nav-link {
+    background-color: var(--tblr-card-bg);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .navbar-nav .nav-item.dropdown > a.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Add dropdown arrow like .dropdown-toggle */
+.navbar-nav .nav-item.dropdown > a.nav-link::after {
+    display: inline-block;
+    margin-left: 0.255em;
+    vertical-align: 0.255em;
+    content: "";
+    border-top: 0.3em solid;
+    border-right: 0.3em solid transparent;
+    border-bottom: 0;
+    border-left: 0.3em solid transparent;
+}
+
+/* Avatar spacing */
+.navbar-nav .nav-item.dropdown > a.nav-link .avatar {
+    margin-right: 0.5rem;
+}
+
+/* Custom language switcher styles */
+.custom-language-switcher {
+  margin-right: 0.5rem;
+}
+
+.custom-language-switcher .dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block navbar %}
+{{ super() }}
+<!-- Custom language switcher (replaces built-in one) -->
+<script>
+(function() {
+  // Get current locale from URL
+  const pathMatch = window.location.pathname.match(/^\/admin\/([a-z]{2})(\/.*)?$/);
+  const currentLocale = pathMatch ? pathMatch[1] : 'en';
+  // Available locales - hardcoded for now
+  const availableLocales = ['en', 'ru'];
+  
+  // Locale display names
+  const localeNames = {
+    'en': 'English',
+    'ru': 'Русский'
+  };
+  
+  // Find navbar and add custom language switcher
+  document.addEventListener('DOMContentLoaded', function() {
+    const navbar = document.querySelector('.navbar.navbar-expand-md .navbar-nav.order-md-last');
+    if (!navbar || availableLocales.length <= 1) return;
+    
+    // Create custom switcher HTML
+    const switcherHTML = `
+      <div class="nav-item dropdown custom-language-switcher">
+        <button type="button" class="btn dropdown-toggle" data-bs-toggle="dropdown">
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-language" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+            <path d="M4 5h7"></path>
+            <path d="M9 3v2c0 4.418 -2.239 8 -5 8"></path>
+            <path d="M5 9c-.003 2.144 2.952 3.908 6.7 4"></path>
+            <path d="M12 20l4 -9l4 9"></path>
+            <path d="M19.1 18h-6.2"></path>
+          </svg>
+          <span>${localeNames[currentLocale] || currentLocale.toUpperCase()}</span>
+        </button>
+        <div class="dropdown-menu">
+          ${availableLocales.map(lang => `
+            <a href="#" class="dropdown-item custom-language-item" data-lang="${lang}">
+              ${localeNames[lang] || lang.toUpperCase()}
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    
+    // Insert before other items
+    navbar.insertAdjacentHTML('afterbegin', switcherHTML);
+    
+    // Add click handlers
+    document.querySelectorAll('.custom-language-item').forEach(item => {
+      item.addEventListener('click', function(e) {
+        e.preventDefault();
+        const targetLocale = this.getAttribute('data-lang');
+        const currentPath = window.location.pathname;
+        const pathMatch = currentPath.match(/^\/admin\/([a-z]{2})(\/.*)?$/);
+        
+        if (pathMatch) {
+          const restOfPath = pathMatch[2] || '';
+          const newPath = `/admin/${targetLocale}${restOfPath}`;
+          const queryString = window.location.search;
+          window.location.href = newPath + queryString;
+        } else {
+          window.location.href = `/admin/${targetLocale}`;
+        }
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}
+
+{% block footer_js %}
+{{ super() }}
+{% endblock %}

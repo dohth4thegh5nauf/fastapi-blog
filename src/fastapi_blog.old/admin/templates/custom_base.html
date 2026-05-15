@@ -1,0 +1,382 @@
+{% extends "layout.html" %}
+
+{% block head_css %}
+{{ super() }}
+<style>
+/* Theme transition configuration */
+:root {
+    --theme-transition-duration: 0.27s;
+    --theme-transition-timing: ease-out;
+    --theme-transition: 
+        background-color var(--theme-transition-duration) var(--theme-transition-timing),
+        color var(--theme-transition-duration) var(--theme-transition-timing),
+        border-color var(--theme-transition-duration) var(--theme-transition-timing);
+}
+
+/* Apply smooth transitions only to key UI elements for better performance */
+body,
+.page,
+.page-wrapper,
+.page-body,
+.card,
+.navbar,
+.navbar-nav,
+.nav-link,
+.avatar,
+.avatar svg,
+.avatar .icon,
+.table,
+.form-control,
+.form-select,
+.btn,
+.dropdown-menu,
+.list-group-item,
+.badge,
+.alert {
+    transition: background-color 0.27s ease-out !important,
+                color 0.27s ease-out !important,
+                border-color 0.27s ease-out !important;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --theme-transition-duration: 0s;
+    }
+    
+    body,
+    .page,
+    .page-wrapper,
+    .page-body,
+    .card,
+    .navbar,
+    .navbar-nav,
+    .nav-link,
+    .avatar,
+    .avatar svg,
+    .avatar .icon,
+    .table,
+    .form-control,
+    .form-select,
+    .btn,
+    .dropdown-menu,
+    .list-group-item,
+    .badge,
+    .alert {
+        transition: none !important;
+    }
+}
+
+/* Dark theme styles */
+[data-bs-theme="dark"] {
+    --tblr-body-bg: #1e293b;
+    --tblr-body-color: #e2e8f0;
+    --tblr-card-bg: #2d3748;
+    --tblr-border-color: #4a5568;
+    --tblr-navbar-bg: #1a202c;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--tblr-card-bg);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .navbar {
+    background-color: var(--tblr-navbar-bg) !important;
+    border-bottom-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .table {
+    color: var(--tblr-body-color);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #374151;
+    border-color: var(--tblr-border-color);
+    color: var(--tblr-body-color);
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #60a5fa;
+    border-color: #60a5fa;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: #60a5fa;
+    color: #1e293b;
+}
+
+[data-bs-theme="dark"] .text-muted {
+    color: #94a3b8 !important;
+}
+
+/* Theme switcher button styles */
+.theme-switcher {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.theme-switcher:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-bs-theme="dark"] .theme-switcher:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-switcher .icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-right: 0.25rem;
+}
+
+/* Style user dropdown as button using Tabler classes */
+.navbar-nav .nav-item.dropdown > a.nav-link {
+    /* Make it look like .btn */
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.4285714286;
+    color: inherit;
+    text-align: center;
+    text-decoration: none;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid rgba(98, 105, 118, 0.16);
+    border-radius: 4px;
+    background-color: #ffffff;
+    transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out,
+                border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.navbar-nav .nav-item.dropdown > a.nav-link:hover {
+    color: inherit;
+    background-color: rgba(32, 107, 196, 0.06);
+    border-color: rgba(98, 105, 118, 0.16);
+}
+
+[data-bs-theme="dark"] .navbar-nav .nav-item.dropdown > a.nav-link {
+    background-color: var(--tblr-card-bg);
+    border-color: var(--tblr-border-color);
+}
+
+[data-bs-theme="dark"] .navbar-nav .nav-item.dropdown > a.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Add dropdown arrow like .dropdown-toggle */
+.navbar-nav .nav-item.dropdown > a.nav-link::after {
+    display: inline-block;
+    margin-left: 0.255em;
+    vertical-align: 0.255em;
+    content: "";
+    border-top: 0.3em solid;
+    border-right: 0.3em solid transparent;
+    border-bottom: 0;
+    border-left: 0.3em solid transparent;
+}
+
+/* Avatar spacing */
+.navbar-nav .nav-item.dropdown > a.nav-link .avatar {
+    margin-right: 0.5rem;
+}
+</style>
+
+<script>
+// Theme management
+(function() {
+    const THEME_KEY = 'admin-theme';
+    
+    function getStoredTheme() {
+        return localStorage.getItem(THEME_KEY) || 'auto';  // Default: auto (system theme)
+    }
+    
+    function setStoredTheme(theme) {
+        localStorage.setItem(THEME_KEY, theme);
+    }
+    
+    function getPreferredTheme() {
+        const storedTheme = getStoredTheme();
+        if (storedTheme !== 'auto') {
+            return storedTheme;
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    
+    function setTheme(theme) {
+        document.documentElement.setAttribute('data-bs-theme', theme);
+    }
+    
+    function updateThemeIcon(currentTheme) {
+        const themes = {
+            'light': {
+                icon: '<path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="4"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" />',
+                text: 'Light'
+            },
+            'dark': {
+                icon: '<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />',
+                text: 'Dark'
+            },
+            'auto': {
+                icon: '<path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" /><path d="M7 20h10" /><path d="M9 16v4" /><path d="M15 16v4" />',
+                text: 'Auto'
+            }
+        };
+        
+        // Update all theme switcher buttons
+        const buttons = document.querySelectorAll('.theme-switcher');
+        buttons.forEach(function(button) {
+            const icon = button.querySelector('.icon');
+            const text = button.querySelector('.theme-text');
+            
+            if (icon) {
+                icon.innerHTML = themes[currentTheme].icon;
+            }
+            if (text) {
+                text.textContent = themes[currentTheme].text;
+            }
+        });
+    }
+    
+    function cycleTheme() {
+        const themes = ['light', 'dark', 'auto'];
+        const currentTheme = getStoredTheme();
+        const currentIndex = themes.indexOf(currentTheme);
+        const nextTheme = themes[(currentIndex + 1) % themes.length];
+        
+        setStoredTheme(nextTheme);
+        const actualTheme = nextTheme === 'auto' ? getPreferredTheme() : nextTheme;
+        setTheme(actualTheme);
+        updateThemeIcon(nextTheme);
+    }
+    
+    // Initialize theme on page load
+    window.addEventListener('DOMContentLoaded', function() {
+        const theme = getPreferredTheme();
+        setTheme(theme);
+        
+        // Listen for system theme changes when in auto mode
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+            if (getStoredTheme() === 'auto') {
+                setTheme(e.matches ? 'dark' : 'light');
+            }
+        });
+        
+        // Add theme switcher buttons to navbar
+        console.log('[Theme Switcher] Initializing...');
+        
+        // Find navbar - try header first, then any navbar that's not in aside (sidebar)
+        let navContainer = document.querySelector('header .navbar-nav');
+        
+        if (!navContainer) {
+            console.log('[Theme Switcher] No header navbar found, trying alternative selector');
+            // Try to find navbar not in sidebar
+            const allNavs = document.querySelectorAll('.navbar-nav');
+            console.log('[Theme Switcher] Found', allNavs.length, 'total navbars');
+            for (const nav of allNavs) {
+                // Skip if it's inside aside (sidebar)
+                if (!nav.closest('aside')) {
+                    navContainer = nav;
+                    console.log('[Theme Switcher] Using navbar:', nav);
+                    break;
+                }
+            }
+        }
+        
+        if (!navContainer) {
+            console.error('[Theme Switcher] Could not find suitable navbar element');
+            console.log('[Theme Switcher] Available elements:');
+            console.log('  - nav elements:', document.querySelectorAll('nav'));
+            console.log('  - navbar elements:', document.querySelectorAll('.navbar'));
+            console.log('  - header elements:', document.querySelectorAll('header'));
+            
+            // Fallback: add to body as a floating button
+            const floatingButton = document.createElement('div');
+            floatingButton.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999;';
+            floatingButton.innerHTML = `
+                <button class="theme-switcher btn btn-primary" title="Toggle theme (Light/Dark/Auto)" style="border-radius: 50%; width: 50px; height: 50px; padding: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" />
+                        <path d="M7 20h10" />
+                        <path d="M9 16v4" />
+                        <path d="M15 16v4" />
+                    </svg>
+                </button>
+            `;
+            document.body.appendChild(floatingButton);
+            const floatingBtn = floatingButton.querySelector('.theme-switcher');
+            if (floatingBtn) {
+                floatingBtn.addEventListener('click', cycleTheme);
+            }
+            console.log('[Theme Switcher] Added as floating button');
+            return;
+        }
+        
+        console.log('[Theme Switcher] Found navbar container:', navContainer);
+        
+        // Add theme switcher to navbar
+        (function() {
+            console.log('[Theme Switcher] Adding to container:', navContainer);
+            
+            // Create theme switcher element as button
+            const themeSwitcher = document.createElement('div');
+            themeSwitcher.className = 'nav-item';
+            themeSwitcher.innerHTML = `
+                <button type="button" class="btn theme-switcher" title="Toggle theme (Light/Dark/Auto)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" />
+                        <path d="M7 20h10" />
+                        <path d="M9 16v4" />
+                        <path d="M15 16v4" />
+                    </svg>
+                    <span class="theme-text">Auto</span>
+                </button>
+            `;
+            
+            // Insert at the beginning of navbar (before language and user menus)
+            navContainer.insertBefore(themeSwitcher, navContainer.firstChild);
+            
+            // Add click handler to cycle through themes
+            const button = themeSwitcher.querySelector('.theme-switcher');
+            if (button) {
+                button.addEventListener('click', function() {
+                    const themes = ['light', 'dark', 'auto'];
+                    const currentTheme = getStoredTheme();
+                    const currentIndex = themes.indexOf(currentTheme);
+                    const nextTheme = themes[(currentIndex + 1) % themes.length];
+                    
+                    setStoredTheme(nextTheme);
+                    const actualTheme = nextTheme === 'auto' ? getPreferredTheme() : nextTheme;
+                    setTheme(actualTheme);
+                    updateThemeIcon(nextTheme);
+                });
+            }
+        })();
+        
+        console.log('[Theme Switcher] Added theme switcher to navbar');
+        
+        // Update all theme switcher icons to show current theme
+        updateThemeIcon(getStoredTheme());
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "admin/layout.html" %}
+{% block title %}{% if is_new %}New post{% else %}Edit: {{ slug }}{% endif %}{% endblock %}
+{% block content %}
+<h2>{% if is_new %}New post{% else %}Edit <code>{{ slug }}</code>{% endif %}</h2>
+
+<form id="post-form" onsubmit="event.preventDefault(); savePost();">
+    <div class="form-row">
+        <label for="slug">Slug</label>
+        <input type="text" id="slug" name="slug"
+               value="{{ slug or '' }}"
+               pattern="^[a-z0-9][a-z0-9-]{0,99}$"
+               {% if not is_new %}readonly{% endif %}
+               required>
+        <div class="hint">Lowercase letters, digits, and hyphens only. Cannot be changed after creation.</div>
+    </div>
+
+    <div class="form-row">
+        <label for="title">Title *</label>
+        <input type="text" id="title" name="title" value="{{ frontmatter.title or '' }}" required>
+    </div>
+
+    <div class="form-row">
+        <label for="date">Date *</label>
+        <input type="text" id="date" name="date" value="{{ frontmatter.date or '' }}" placeholder="YYYY-MM-DD or ISO-8601" required>
+    </div>
+
+    <div class="form-row">
+        <label for="description">Description</label>
+        <input type="text" id="description" name="description" value="{{ frontmatter.description or '' }}">
+    </div>
+
+    <div class="form-row">
+        <label for="tags">Tags (comma-separated)</label>
+        <input type="text" id="tags" name="tags" value="{{ (frontmatter.tags or []) | join(', ') }}">
+    </div>
+
+    <div class="form-row">
+        <label>
+            <input type="checkbox" id="published" name="published" {% if frontmatter.published %}checked{% endif %}>
+            Published
+        </label>
+    </div>
+
+    <div class="form-row">
+        <label for="content">Content (markdown)</label>
+        <textarea id="content" name="content">{{ content or '' }}</textarea>
+    </div>
+
+    <div id="error-box" class="error" style="display: none;"></div>
+
+    <button type="submit">{% if is_new %}Create{% else %}Save{% endif %}</button>
+    <a href="{{ admin_prefix }}/" style="margin-left: 1rem;">Cancel</a>
+</form>
+
+<script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+<script>
+const isNew = {{ 'true' if is_new else 'false' }};
+const apiPrefix = "{{ api_prefix }}";
+const adminPrefix = "{{ admin_prefix }}";
+
+const easyMDE = new EasyMDE({
+    element: document.getElementById('content'),
+    autosave: { enabled: false },
+    spellChecker: false,
+    status: ['lines', 'words', 'cursor'],
+});
+
+async function savePost() {
+    const slug = document.getElementById('slug').value.trim();
+    const payload = {
+        frontmatter: {
+            title: document.getElementById('title').value,
+            date: document.getElementById('date').value,
+            published: document.getElementById('published').checked,
+            tags: document.getElementById('tags').value
+                .split(',').map(s => s.trim()).filter(Boolean),
+            description: document.getElementById('description').value || null,
+        },
+        content: easyMDE.value(),
+    };
+
+    const url = isNew
+        ? `${apiPrefix}/create/${slug}`
+        : `${apiPrefix}/update/${slug}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    const errorBox = document.getElementById('error-box');
+    errorBox.style.display = 'none';
+
+    const response = await fetch(url, {
+        method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+        window.location.href = `${adminPrefix}/`;
+    } else {
+        const err = await response.json().catch(() => ({ detail: response.statusText }));
+        errorBox.textContent = JSON.stringify(err, null, 2);
+        errorBox.style.display = 'block';
+    }
+}
+</script>
+{% endblock %}
