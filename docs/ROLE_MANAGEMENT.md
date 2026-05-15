@@ -10,6 +10,23 @@ The role management system provides:
 - **Many-to-Many Relationship:** Users can have multiple roles
 - **Admin Views:** Manage roles and users through admin panel
 - **Flexible Permissions:** Control access at the view and action level
+- **Root-Only Access:** Role management is only visible and accessible to the root admin user
+
+## Access URLs
+
+When role management is enabled, the following URLs are available **only to the root admin user**:
+
+- **English Admin:**
+  - Role management section: `/admin/en` (in sidebar under "Access Control")
+  - Roles list: `/admin/en/role/list`
+  - User roles list: `/admin/en/user_with_roles/list`
+
+- **Russian Admin:**
+  - Role management section: `/admin/ru` (in sidebar under "Управление доступом")
+  - Roles list: `/admin/ru/role/list`
+  - User roles list: `/admin/ru/user_with_roles/list`
+
+**Note:** Non-root users will not see the "Access Control" / "Управление доступом" section in the sidebar menu. Direct URL access is protected and will return a 403 Forbidden error.
 
 ## Models
 

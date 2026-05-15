@@ -144,21 +144,29 @@ def _create_admin_for_locale(
 
     # Add role management views if enabled
     if enable_role_management:
+        from starlette_admin import DropDown
+
         from .models_role import Role, UserWithRoles
         from .views_role import RoleModelView, UserWithRolesModelView
 
         # Get category label from translations
         role_category = translations["role"]["section_label"]
 
+        # Create role management views
         role_view = RoleModelView(Role, locale=locale, icon="fa fa-shield")
-        role_view.category = role_category  # type: ignore[attr-defined]
-        admin.add_view(role_view)
-
         user_roles_view = UserWithRolesModelView(
             UserWithRoles, locale=locale, icon="fa fa-users-cog"
         )
-        user_roles_view.category = role_category  # type: ignore[attr-defined]
-        admin.add_view(user_roles_view)
+
+        # Add as dropdown menu group
+        # DropDown automatically hides when all nested views are inaccessible
+        admin.add_view(
+            DropDown(
+                label=role_category,
+                icon="fa fa-shield",
+                views=[role_view, user_roles_view],
+            )
+        )
 
     # Add markdown CRUD views
     from .markdown_crud import (
