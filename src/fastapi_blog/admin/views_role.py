@@ -54,6 +54,15 @@ class RoleModelView(ModelView):
         """
         current_user = request.session.get("user")
         admin_username = getattr(request.app.state, "admin_username", None)
+        
+        # Debug output
+        import sys
+        print(f"\n[RoleModelView.is_accessible]", file=sys.stderr)
+        print(f"  current_user: {current_user!r} (type: {type(current_user)})", file=sys.stderr)
+        print(f"  admin_username: {admin_username!r} (type: {type(admin_username)})", file=sys.stderr)
+        print(f"  session: {dict(request.session)}", file=sys.stderr)
+        print(f"  result: {current_user == admin_username}", file=sys.stderr)
+        
         return current_user == admin_username
 
     def is_action_accessible(self, request: Request, name: str) -> bool:
