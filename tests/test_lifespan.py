@@ -35,8 +35,12 @@ def test_admin_lifespan_composition():
         # The admin lifespan initializes the database, so we check if tables exist.
         engine = client.app.state.admin_engine
         inspector = inspect(engine)
-        assert inspector.has_table("users"), "Table 'users' should be created by admin lifespan"
-        assert inspector.has_table("posts"), "Table 'posts' should be created by admin lifespan"
+        assert inspector.has_table("users"), (
+            "Table 'users' should be created by admin lifespan"
+        )
+        assert inspector.has_table("posts"), (
+            "Table 'posts' should be created by admin lifespan"
+        )
 
     # 3. Verify user's shutdown logic was called
     assert "user_shutdown" in shutdown_events
