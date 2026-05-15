@@ -29,6 +29,8 @@ def add_blog_to_fastapi(
     api_require_auth: bool = True,
     locales: list[str] = ["en"],
     default_locale: str = "en",
+    admin_username: str | None = None,
+    admin_password: str | None = None,
 ) -> FastAPI:
     """Add blog to FastAPI application.
 
@@ -51,6 +53,8 @@ def add_blog_to_fastapi(
         api_require_auth: Require authentication for API (default: True)
         locales: List of supported locales for blog UI (default: ['en'])
         default_locale: Default locale when Accept-Language not matched (default: 'en')
+        admin_username: Admin username for REST API auth (optional)
+        admin_password: Admin password for REST API auth (optional)
 
     Returns:
         FastAPI application with blog routes added
@@ -116,6 +120,8 @@ def add_blog_to_fastapi(
             posts_dirname=posts_dirname,
             strict=strict_frontmatter,
             require_auth=api_require_auth,
+            admin_username=admin_username,
+            admin_password=admin_password,
         )
         app.include_router(api_router, prefix=api_prefix, tags=["api"])
 
