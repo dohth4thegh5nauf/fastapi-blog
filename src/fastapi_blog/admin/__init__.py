@@ -86,6 +86,7 @@ def _create_admin_for_locale(
     templates_dir: str,
     available_locales: list[str],
     enable_role_management: bool = False,
+    admin_username: str = "admin",
 ) -> Admin:
     """Create an Admin instance for a specific locale.
 
@@ -152,10 +153,12 @@ def _create_admin_for_locale(
         # Get category label from translations
         role_category = translations["role"]["section_label"]
 
-        # Create role management views
-        role_view = RoleModelView(Role, locale=locale, icon="fa fa-shield")
+        # Create role management views with admin_username for access control
+        role_view = RoleModelView(
+            Role, locale=locale, admin_username=admin_username, icon="fa fa-shield"
+        )
         user_roles_view = UserWithRolesModelView(
-            UserWithRoles, locale=locale, icon="fa fa-users-cog"
+            UserWithRoles, locale=locale, admin_username=admin_username, icon="fa fa-users-cog"
         )
 
         # Add as dropdown menu group
@@ -377,14 +380,8 @@ def add_admin_to_app(
         # Replace app's lifespan
         app.router.lifespan_context = admin_lifespan
 
-    # Store admin username in app state for access control
-    app.state.admin_username = admin_username
-    
-    # Debug: verify it's set
-    import sys
-    print(f"\n[DEBUG] Set app.state.admin_username = {admin_username!r}", file=sys.stderr)
-    print(f"[DEBUG] app id: {id(app)}", file=sys.stderr)
-    print(f"[DEBUG] Verify: {getattr(app.state, 'admin_username', 'NOT SET')}", file=sys.stderr)
+    # Note: admin_username is passed directly to role management views
+    # to avoid app.state identity issues with uvicorn --reload
 
     # Get templates directory for custom templates
     from pathlib import Path
@@ -416,6 +413,7 @@ def add_admin_to_app(
             templates_dir=templates_dir,
             available_locales=locales,
             enable_role_management=enable_role_management,
+            admin_username=admin_username,
         )
 
         # Mount to app

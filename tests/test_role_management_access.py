@@ -25,12 +25,24 @@ def app_with_roles():
     return app, admins
 
 
-def test_admin_username_stored_in_app_state(app_with_roles):
-    """Verify admin_username is stored in app.state."""
+def test_admin_username_passed_to_views(app_with_roles):
+    """Verify admin_username is passed to role management views."""
+    from starlette_admin import DropDown
+
     app, admins = app_with_roles
 
-    assert hasattr(app.state, "admin_username")
-    assert app.state.admin_username == "admin"
+    # Check that role views have admin_username set
+    for locale, admin in admins.items():
+        for view in admin._views:
+            if isinstance(view, DropDown):
+                for subview in view.views:
+                    if isinstance(subview, (RoleModelView, UserWithRolesModelView)):
+                        assert hasattr(subview, "admin_username"), (
+                            f"{type(subview).__name__} missing admin_username attribute"
+                        )
+                        assert subview.admin_username == "admin", (
+                            f"{type(subview).__name__} has wrong admin_username"
+                        )
 
 
 def test_role_views_registered_when_enabled(app_with_roles):

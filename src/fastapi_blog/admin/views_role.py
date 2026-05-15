@@ -20,10 +20,11 @@ class RoleModelView(ModelView):
     label = "Roles"
     icon = "fa fa-shield"
 
-    def __init__(self, model, locale: str = "en", *args, **kwargs):
-        """Initialize with translations."""
+    def __init__(self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs):
+        """Initialize with translations and admin username."""
         super().__init__(model, *args, **kwargs)
         self.locale = locale
+        self.admin_username = admin_username  # Store for access checks
         self.translator = Translator(locale)
         self.label = self.translator.role.role_label
 
@@ -53,19 +54,8 @@ class RoleModelView(ModelView):
         Only the root admin user (matching admin_username) can access.
         """
         current_user = request.session.get("user")
-        admin_username = getattr(request.app.state, "admin_username", None)
-        
-        # Debug output
-        import sys
-        print(f"\n[RoleModelView.is_accessible]", file=sys.stderr)
-        print(f"  app id: {id(request.app)}", file=sys.stderr)
-        print(f"  current_user: {current_user!r} (type: {type(current_user)})", file=sys.stderr)
-        print(f"  admin_username: {admin_username!r} (type: {type(admin_username)})", file=sys.stderr)
-        print(f"  session: {dict(request.session)}", file=sys.stderr)
-        print(f"  app.state keys: {list(vars(request.app.state).keys())}", file=sys.stderr)
-        print(f"  result: {current_user == admin_username}", file=sys.stderr)
-        
-        return current_user == admin_username
+        # Use instance attribute instead of app.state to avoid app identity issues
+        return current_user == self.admin_username
 
     def is_action_accessible(self, request: Request, name: str) -> bool:
         """Check if action is accessible."""
@@ -125,10 +115,11 @@ class UserWithRolesModelView(ModelView):
     label = "Users with Roles"
     icon = "fa fa-users"
 
-    def __init__(self, model, locale: str = "en", *args, **kwargs):
-        """Initialize with translations."""
+    def __init__(self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs):
+        """Initialize with translations and admin username."""
         super().__init__(model, *args, **kwargs)
         self.locale = locale
+        self.admin_username = admin_username  # Store for access checks
         self.translator = Translator(locale)
         self.label = self.translator.role.user_roles_label
 
@@ -166,8 +157,8 @@ class UserWithRolesModelView(ModelView):
         Only the root admin user (matching admin_username) can access.
         """
         current_user = request.session.get("user")
-        admin_username = getattr(request.app.state, "admin_username", None)
-        return current_user == admin_username
+        # Use instance attribute instead of app.state to avoid app identity issues
+        return current_user == self.admin_username
 
     def is_action_accessible(self, request: Request, name: str) -> bool:
         """Check if action is accessible."""
