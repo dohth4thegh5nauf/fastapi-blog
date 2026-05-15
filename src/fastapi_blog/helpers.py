@@ -3,7 +3,7 @@ import logging
 import pathlib
 from typing import Any
 
-import markdown as md  #  type: ignore[import-untyped]
+import markdown as md  # type: ignore[import-untyped]
 import nh3
 import yaml
 from pydantic import ValidationError
