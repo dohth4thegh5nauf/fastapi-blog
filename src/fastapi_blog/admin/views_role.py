@@ -58,9 +58,11 @@ class RoleModelView(ModelView):
         # Debug output
         import sys
         print(f"\n[RoleModelView.is_accessible]", file=sys.stderr)
+        print(f"  app id: {id(request.app)}", file=sys.stderr)
         print(f"  current_user: {current_user!r} (type: {type(current_user)})", file=sys.stderr)
         print(f"  admin_username: {admin_username!r} (type: {type(admin_username)})", file=sys.stderr)
         print(f"  session: {dict(request.session)}", file=sys.stderr)
+        print(f"  app.state keys: {list(vars(request.app.state).keys())}", file=sys.stderr)
         print(f"  result: {current_user == admin_username}", file=sys.stderr)
         
         return current_user == admin_username

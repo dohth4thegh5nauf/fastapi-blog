@@ -379,6 +379,12 @@ def add_admin_to_app(
 
     # Store admin username in app state for access control
     app.state.admin_username = admin_username
+    
+    # Debug: verify it's set
+    import sys
+    print(f"\n[DEBUG] Set app.state.admin_username = {admin_username!r}", file=sys.stderr)
+    print(f"[DEBUG] app id: {id(app)}", file=sys.stderr)
+    print(f"[DEBUG] Verify: {getattr(app.state, 'admin_username', 'NOT SET')}", file=sys.stderr)
 
     # Get templates directory for custom templates
     from pathlib import Path
