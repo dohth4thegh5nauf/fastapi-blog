@@ -9,6 +9,7 @@ from .editor import add_editor_to_app, get_api_router
 from .main import add_blog_to_fastapi
 from .router import get_blog_router
 
+
 __version__ = "0.8.0"
 
 
@@ -24,6 +25,7 @@ def setup_fastapi_blog(
     secret_key: str | None = None,
     enable_role_management: bool = False,
 ) -> dict[str, Admin]:
+    """Configure the blog and admin panel for a FastAPI application."""
     add_blog_to_fastapi(app, posts_dir=posts_dir, include_api=include_api)
     return add_admin_to_app(
         app,
