@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers
+from .admin.i18n import Translator
 
 
 def get_blog_router(
@@ -16,8 +17,28 @@ def get_blog_router(
     sanitize_html: bool = True,
     posts_dirname: str = "posts",
     pages_dirname: str = "pages",
+    locales: list[str] = ["en"],
+    default_locale: str = "en",
 ) -> APIRouter:
     router = APIRouter()
+
+    def _get_locale(request: Request) -> str:
+        """Determine locale from Accept-Language header."""
+        accept_language = request.headers.get("accept-language", "")
+        if accept_language:
+            # Parse Accept-Language header (e.g., "en-US,en;q=0.9,ru;q=0.8")
+            for lang_spec in accept_language.split(","):
+                lang = lang_spec.split(";")[0].strip().split("-")[0]
+                if lang in locales:
+                    return lang
+        return default_locale
+
+    def _add_i18n_context(request: Request, context: dict) -> dict:
+        """Add i18n translator to template context."""
+        locale = _get_locale(request)
+        context["t"] = Translator(locale)
+        context["locale"] = locale
+        return context
 
     def _list_posts() -> tuple[dict, ...]:
         return helpers.list_posts(posts_dirname=posts_dirname, strict=strict)
@@ -31,10 +52,11 @@ def get_blog_router(
             filter(lambda x: x["slug"] in favorite_post_ids, posts)
         )
 
+        context = {"recent_3": recent_3, "favorite_posts": favorite_posts}
         return templates.TemplateResponse(
             request=request,
             name="index.html",
-            context={"recent_3": recent_3, "favorite_posts": favorite_posts},
+            context=_add_i18n_context(request, context),
         )
 
     @router.get("/posts/{post_id}")
@@ -51,16 +73,18 @@ def get_blog_router(
         )
         post["content"] = helpers.markdown(content, sanitize=sanitize_html)
 
+        context = {"post": post}
         return templates.TemplateResponse(
-            request=request, name="post.html", context={"post": post}
+            request=request, name="post.html", context=_add_i18n_context(request, context)
         )
 
     @router.get("/posts")
     async def blog_posts(request: Request, response_class=HTMLResponse):
         posts = _list_posts()
 
+        context = {"posts": posts}
         return templates.TemplateResponse(
-            request=request, name="posts.html", context={"posts": posts}
+            request=request, name="posts.html", context=_add_i18n_context(request, context)
         )
 
     @router.get("/tags")
@@ -81,16 +105,18 @@ def get_blog_router(
             sorted(unsorted_tags.items(), key=lambda x: x[1], reverse=True)
         )
 
+        context = {"tags": tags}
         return templates.TemplateResponse(
-            request=request, name="tags.html", context={"tags": tags}
+            request=request, name="tags.html", context=_add_i18n_context(request, context)
         )
 
     @router.get("/tags/{tag_id}")
     async def blog_tag(tag_id: str, request: Request, response_class=HTMLResponse):
         posts = [x for x in _list_posts() if tag_id in (x.get("tags") or [])]
 
+        context = {"tag_id": tag_id, "posts": posts}
         return templates.TemplateResponse(
-            request=request, name="tag.html", context={"tag_id": tag_id, "posts": posts}
+            request=request, name="tag.html", context=_add_i18n_context(request, context)
         )
 
     @router.get("/{page_id}")
@@ -101,13 +127,15 @@ def get_blog_router(
                 path, sanitize=sanitize_html
             )
         except FileNotFoundError:
+            context = {}
             return templates.TemplateResponse(
-                request=request, name="404.html", status_code=404
+                request=request, name="404.html", status_code=404, context=_add_i18n_context(request, context)
             )
         page["slug"] = page_id
 
+        context = {"page": page}
         return templates.TemplateResponse(
-            request=request, name="page.html", context={"page": page}
+            request=request, name="page.html", context=_add_i18n_context(request, context)
         )
 
     return router

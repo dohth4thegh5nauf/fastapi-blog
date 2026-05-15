@@ -26,7 +26,13 @@ def setup_fastapi_blog(
     enable_role_management: bool = False,
 ) -> dict[str, Admin]:
     """Configure the blog and admin panel for a FastAPI application."""
-    add_blog_to_fastapi(app, posts_dirname=posts_dirname, include_api=include_api)
+    add_blog_to_fastapi(
+        app,
+        posts_dirname=posts_dirname,
+        include_api=include_api,
+        locales=locales,
+        default_locale=default_locale,
+    )
     return add_admin_to_app(
         app,
         locales=locales,

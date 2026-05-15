@@ -1,6 +1,6 @@
 {% extends "layouts/base.html" %}
 {% block content %}
-<h1>Tags</h1>
+<h1>{{ t.blog.tags }}</h1>
 
 {% for tag, count in tags.items() %}
   <a href="{{ url_for('blog_tag', tag_id=tag) }}">{{ tag }}</a> ({{ count }})

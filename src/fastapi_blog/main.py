@@ -27,6 +27,8 @@ def add_blog_to_fastapi(
     include_api: bool | None = None,
     api_prefix: str = "/api/posts",
     api_require_auth: bool = True,
+    locales: list[str] = ["en"],
+    default_locale: str = "en",
 ) -> FastAPI:
     """Add blog to FastAPI application.
 
@@ -47,6 +49,8 @@ def add_blog_to_fastapi(
                      Note: Admin panel (/admin) is separate - it's a web UI, not REST API.
         api_prefix: URL prefix for REST API (default: '/api/posts')
         api_require_auth: Require authentication for API (default: True)
+        locales: List of supported locales for blog UI (default: ['en'])
+        default_locale: Default locale when Accept-Language not matched (default: 'en')
 
     Returns:
         FastAPI application with blog routes added
@@ -96,6 +100,8 @@ def add_blog_to_fastapi(
         sanitize_html=sanitize_html,
         posts_dirname=posts_dirname,
         pages_dirname=pages_dirname,
+        locales=locales,
+        default_locale=default_locale,
     )
     router_kwargs: dict[str, Any] = {"router": router, "tags": ["blog"]}
     if prefix is not None:
