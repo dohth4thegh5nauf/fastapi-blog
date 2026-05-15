@@ -93,6 +93,7 @@ target-version = "py312"
 line-length = 88
 exclude = [
     "+/*",  # Demo and reference code
+    "get-pip.py",  # External PyPA installer script
 ]
 
 [tool.ruff.lint]
