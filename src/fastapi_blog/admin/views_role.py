@@ -20,7 +20,9 @@ class RoleModelView(ModelView):
     label = "Roles"
     icon = "fa fa-shield"
 
-    def __init__(self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs):
+    def __init__(
+        self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs
+    ):
         """Initialize with translations and admin username."""
         super().__init__(model, *args, **kwargs)
         self.locale = locale
@@ -115,7 +117,9 @@ class UserWithRolesModelView(ModelView):
     label = "Users with Roles"
     icon = "fa fa-users"
 
-    def __init__(self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs):
+    def __init__(
+        self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs
+    ):
         """Initialize with translations and admin username."""
         super().__init__(model, *args, **kwargs)
         self.locale = locale

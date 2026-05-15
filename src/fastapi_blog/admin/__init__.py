@@ -99,6 +99,7 @@ def _create_admin_for_locale(
         templates_dir: Path to custom templates directory
         available_locales: List of all available locales for language switcher
         enable_role_management: Whether to automatically add role management views
+        admin_username: Root admin username for role management access control
 
     Returns:
         Configured Admin instance
@@ -158,7 +159,10 @@ def _create_admin_for_locale(
             Role, locale=locale, admin_username=admin_username, icon="fa fa-shield"
         )
         user_roles_view = UserWithRolesModelView(
-            UserWithRoles, locale=locale, admin_username=admin_username, icon="fa fa-users-cog"
+            UserWithRoles,
+            locale=locale,
+            admin_username=admin_username,
+            icon="fa fa-users-cog",
         )
 
         # Add as dropdown menu group
