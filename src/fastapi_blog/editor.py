@@ -1,5 +1,6 @@
 import pathlib
 import warnings
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import jinja2
@@ -35,9 +36,14 @@ async def require_authentication(request: Request) -> dict:
 
     """
     # Check session cookie (set by starlette-admin or SessionMiddleware)
-    user = request.session.get("user")
-    if user:
-        return {"username": user, "is_admin": request.session.get("is_admin", False)}
+    # Only check session if SessionMiddleware is installed
+    if "session" in request.scope:
+        user = request.session.get("user")
+        if user:
+            return {
+                "username": user,
+                "is_admin": request.session.get("is_admin", False),
+            }
 
     # No valid session found
     raise HTTPException(
@@ -106,6 +112,8 @@ def get_api_router(
     posts_dirname: str = "posts",
     strict: bool = True,
     require_auth: bool = True,
+    admin_username: str | None = None,
+    admin_password: str | None = None,
 ) -> APIRouter:
     """Get REST API router for post management.
 
@@ -117,6 +125,8 @@ def get_api_router(
         posts_dirname: Directory containing markdown posts (default: 'posts')
         strict: Use strict frontmatter validation (default: True)
         require_auth: Require authentication for all endpoints (default: True)
+        admin_username: Admin username for unified auth (optional)
+        admin_password: Admin password for unified auth (optional)
 
     Returns:
         APIRouter with REST API endpoints
@@ -146,7 +156,26 @@ def get_api_router(
     slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
 
     # Setup authentication dependency
-    auth_func = require_authentication if require_auth else optional_authentication
+    auth_func: Callable[[Request], Coroutine[Any, Any, dict[Any, Any] | None]]
+    if require_auth:
+        if admin_username and admin_password:
+            # Use unified auth (session + Basic auth)
+            from .auth import require_current_user
+
+            async def _unified_auth(request: Request) -> dict[str, Any]:
+                username = await require_current_user(
+                    request,
+                    admin_username=admin_username,
+                    admin_password=admin_password,
+                )
+                return {"username": username}
+
+            auth_func = _unified_auth
+        else:
+            # Use legacy session-only auth
+            auth_func = require_authentication
+    else:
+        auth_func = optional_authentication
 
     @api_router.get("/{slug}/raw")
     async def get_raw(

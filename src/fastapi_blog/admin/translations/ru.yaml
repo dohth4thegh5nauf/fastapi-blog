@@ -57,3 +57,14 @@ message:
   deleted: Успешно удалено
   error: Произошла ошибка
   no_data: Нет данных
+
+# Публичный интерфейс блога
+blog:
+  recent_writings: Последние записи
+  favorite_articles: Избранные статьи
+  articles: Статьи
+  tags: Теги
+  tags_prefix: "Теги:"
+  about: О блоге
+  not_found: "404"
+  all_rights_reserved: Все права защищены

@@ -46,7 +46,7 @@ Then open http://localhost:8000/admin (login: `admin` / `Admin123!`)
 ### Developer Experience
 - ⚡ Fast performance with FastAPI
 - 🔒 Modern security practices
-- 🧪 Comprehensive test coverage (50+ tests)
+- 🧪 Comprehensive test coverage (88+ tests)
 - 🚀 Python 3.12+ and 3.13 support
 - 🐳 Docker support
 

@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 import jinja2
@@ -26,7 +27,21 @@ def setup_fastapi_blog(
     enable_role_management: bool = False,
 ) -> dict[str, Admin]:
     """Configure the blog and admin panel for a FastAPI application."""
-    add_blog_to_fastapi(app, posts_dirname=posts_dirname, include_api=include_api)
+    # Get credentials from env if not provided
+    if admin_username is None:
+        admin_username = os.getenv("FASTAPI_BLOG_ADMIN_LOGIN", "admin")
+    if admin_password is None:
+        admin_password = os.getenv("FASTAPI_BLOG_ADMIN_PASSWORD", "Admin123!")
+
+    add_blog_to_fastapi(
+        app,
+        posts_dirname=posts_dirname,
+        include_api=include_api,
+        locales=locales,
+        default_locale=default_locale,
+        admin_username=admin_username,
+        admin_password=admin_password,
+    )
     return add_admin_to_app(
         app,
         locales=locales,

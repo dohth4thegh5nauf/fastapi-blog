@@ -57,3 +57,14 @@ message:
   deleted: Successfully deleted
   error: An error occurred
   no_data: No data available
+
+# Blog public interface
+blog:
+  recent_writings: Recent Writings
+  favorite_articles: Favorite Articles
+  articles: Articles
+  tags: Tags
+  tags_prefix: "Tags:"
+  about: About
+  not_found: "404"
+  all_rights_reserved: All rights reserved
