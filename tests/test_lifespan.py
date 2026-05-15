@@ -1,5 +1,3 @@
-
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,9 +8,7 @@ from fastapi_blog.admin import add_admin_to_app
 
 
 def test_admin_lifespan_composition():
-    """
-    Verify `add_admin_to_app` correctly composes with an existing app lifespan.
-    """
+    """Verify `add_admin_to_app` correctly composes with an existing app lifespan."""
     startup_events = []
     shutdown_events = []
 
