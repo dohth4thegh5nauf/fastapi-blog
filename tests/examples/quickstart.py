@@ -58,6 +58,7 @@ admins = fastapi_blog.add_admin_to_app(
     secret_key="change-me-in-production",
     locales=["en", "ru"],
     default_locale="en",  # /admin → /admin/en
+    enable_role_management=True,  # Enable role management (visible only to root admin)
 )
 
 # Mount static files
