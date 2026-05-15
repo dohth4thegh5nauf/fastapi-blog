@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 import jinja2
 from fastapi import FastAPI
@@ -110,13 +109,13 @@ def add_blog_to_fastapi(
             default_locale=default_locale,
             locale=locale,  # Pass current locale to router
         )
-        
+
         # Mount with prefix /{locale}/blog
         if prefix is not None:
             app.include_router(router, prefix=f"/{locale}/{prefix}", tags=["blog"])
         else:
             app.include_router(router, prefix=f"/{locale}", tags=["blog"])
-    
+
     # Add legacy routes without locale for backward compatibility
     # These will use Accept-Language header to determine locale
     legacy_router = get_blog_router(
@@ -130,7 +129,7 @@ def add_blog_to_fastapi(
         default_locale=default_locale,
         locale=None,  # No specific locale - use Accept-Language
     )
-    
+
     if prefix is not None:
         app.include_router(legacy_router, prefix=f"/{prefix}", tags=["blog"])
     else:

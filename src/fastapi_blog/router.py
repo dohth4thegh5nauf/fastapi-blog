@@ -28,7 +28,7 @@ def get_blog_router(
         # If locale is specified for this router, always use it
         if locale is not None:
             return locale
-            
+
         # 2. Check Accept-Language header
         accept_language = request.headers.get("accept-language", "")
         if accept_language:
@@ -41,9 +41,7 @@ def get_blog_router(
         # 3. Default locale
         return default_locale
 
-    def _add_i18n_context(
-        request: Request, context: dict
-    ) -> dict:
+    def _add_i18n_context(request: Request, context: dict) -> dict:
         """Add i18n translator to template context."""
         current_locale = _get_locale(request)
         context["t"] = Translator(current_locale)
@@ -58,10 +56,10 @@ def get_blog_router(
     # Create routes - same paths whether locale is specified or not
     # If locale is specified, these will be mounted at /{locale}/blog
     # If locale is None (legacy), these will be mounted at /blog
-    
+
     # Add suffix to route names based on locale to avoid conflicts
     name_suffix = f"_{locale}" if locale else ""
-    
+
     @router.get("/", name=f"blog_index{name_suffix}")
     async def blog_index(request: Request, response_class=HTMLResponse):
         posts = _list_posts()
