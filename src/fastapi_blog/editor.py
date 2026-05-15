@@ -39,7 +39,10 @@ async def require_authentication(request: Request) -> dict:
     if "session" in request.scope:
         user = request.session.get("user")
         if user:
-            return {"username": user, "is_admin": request.session.get("is_admin", False)}
+            return {
+                "username": user,
+                "is_admin": request.session.get("is_admin", False),
+            }
 
     # No valid session found
     raise HTTPException(

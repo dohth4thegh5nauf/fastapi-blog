@@ -75,7 +75,9 @@ def get_blog_router(
 
         context = {"post": post}
         return templates.TemplateResponse(
-            request=request, name="post.html", context=_add_i18n_context(request, context)
+            request=request,
+            name="post.html",
+            context=_add_i18n_context(request, context),
         )
 
     @router.get("/posts")
@@ -84,7 +86,9 @@ def get_blog_router(
 
         context = {"posts": posts}
         return templates.TemplateResponse(
-            request=request, name="posts.html", context=_add_i18n_context(request, context)
+            request=request,
+            name="posts.html",
+            context=_add_i18n_context(request, context),
         )
 
     @router.get("/tags")
@@ -107,7 +111,9 @@ def get_blog_router(
 
         context = {"tags": tags}
         return templates.TemplateResponse(
-            request=request, name="tags.html", context=_add_i18n_context(request, context)
+            request=request,
+            name="tags.html",
+            context=_add_i18n_context(request, context),
         )
 
     @router.get("/tags/{tag_id}")
@@ -116,7 +122,9 @@ def get_blog_router(
 
         context = {"tag_id": tag_id, "posts": posts}
         return templates.TemplateResponse(
-            request=request, name="tag.html", context=_add_i18n_context(request, context)
+            request=request,
+            name="tag.html",
+            context=_add_i18n_context(request, context),
         )
 
     @router.get("/{page_id}")
@@ -129,13 +137,18 @@ def get_blog_router(
         except FileNotFoundError:
             context = {}
             return templates.TemplateResponse(
-                request=request, name="404.html", status_code=404, context=_add_i18n_context(request, context)
+                request=request,
+                name="404.html",
+                status_code=404,
+                context=_add_i18n_context(request, context),
             )
         page["slug"] = page_id
 
         context = {"page": page}
         return templates.TemplateResponse(
-            request=request, name="page.html", context=_add_i18n_context(request, context)
+            request=request,
+            name="page.html",
+            context=_add_i18n_context(request, context),
         )
 
     return router
