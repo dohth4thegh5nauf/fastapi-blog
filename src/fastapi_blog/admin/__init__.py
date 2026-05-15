@@ -147,12 +147,17 @@ def _create_admin_for_locale(
         from .models_role import Role, UserWithRoles
         from .views_role import RoleModelView, UserWithRolesModelView
 
+        # Get category label from translations
+        role_category = translations["role"]["section_label"]
+
         role_view = RoleModelView(Role, locale=locale, icon="fa fa-shield")
+        role_view.category = role_category  # type: ignore[attr-defined]
         admin.add_view(role_view)
 
         user_roles_view = UserWithRolesModelView(
             UserWithRoles, locale=locale, icon="fa fa-users-cog"
         )
+        user_roles_view.category = role_category  # type: ignore[attr-defined]
         admin.add_view(user_roles_view)
 
     # Add markdown CRUD views

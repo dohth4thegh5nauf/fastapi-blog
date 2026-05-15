@@ -194,3 +194,98 @@ def test_role_management_disabled_by_default():
         assert "user_with_roles" not in view_identities, (
             f"UserWithRolesModelView should not be in {locale} admin"
         )
+
+
+def test_role_views_have_category(app_with_roles):
+    """Test that role views have category set from translations."""
+    app, admins = app_with_roles
+
+    # Check English admin
+    en_admin = admins.get("en")
+    assert en_admin is not None
+
+    role_view_en = None
+    user_roles_view_en = None
+    for view in en_admin._views:
+        if isinstance(view, RoleModelView):
+            role_view_en = view
+        elif isinstance(view, UserWithRolesModelView):
+            user_roles_view_en = view
+
+    assert role_view_en is not None
+    assert role_view_en.category == "Access Control"
+
+    assert user_roles_view_en is not None
+    assert user_roles_view_en.category == "Access Control"
+
+    # Check Russian admin
+    ru_admin = admins.get("ru")
+    assert ru_admin is not None
+
+    role_view_ru = None
+    user_roles_view_ru = None
+    for view in ru_admin._views:
+        if isinstance(view, RoleModelView):
+            role_view_ru = view
+        elif isinstance(view, UserWithRolesModelView):
+            user_roles_view_ru = view
+
+    assert role_view_ru is not None
+    assert role_view_ru.category == "Управление доступом"
+
+    assert user_roles_view_ru is not None
+    assert user_roles_view_ru.category == "Управление доступом"
+
+
+def test_role_views_not_in_menu_for_non_root_user(app_with_roles):
+    """Test that role views are not accessible (and thus not shown in menu) for non-root users."""
+    from unittest.mock import Mock
+
+    app, admins = app_with_roles
+
+    # Create mock request for non-root user
+    request = Mock(spec=Request)
+    request.app.state.admin_username = "admin"
+    request.session = {"user": "other_user"}
+
+    # Get admin instance
+    admin = list(admins.values())[0]
+
+    # Collect accessible views for non-root user
+    accessible_views = []
+    for view in admin._views:
+        # Check if view has is_accessible method (not all views do)
+        if hasattr(view, "is_accessible"):
+            if view.is_accessible(request):
+                accessible_views.append(view)
+
+    # Verify role views are NOT in accessible views
+    for view in accessible_views:
+        assert not isinstance(view, RoleModelView), (
+            "RoleModelView should not be accessible to non-root user"
+        )
+        assert not isinstance(view, UserWithRolesModelView), (
+            "UserWithRolesModelView should not be accessible to non-root user"
+        )
+
+    # Now check for root user - should have access
+    request.session = {"user": "admin"}
+    accessible_views_root = []
+    for view in admin._views:
+        if hasattr(view, "is_accessible"):
+            if view.is_accessible(request):
+                accessible_views_root.append(view)
+
+    # Verify role views ARE in accessible views for root
+    role_view_found = False
+    user_roles_view_found = False
+    for view in accessible_views_root:
+        if isinstance(view, RoleModelView):
+            role_view_found = True
+        if isinstance(view, UserWithRolesModelView):
+            user_roles_view_found = True
+
+    assert role_view_found, "RoleModelView should be accessible to root user"
+    assert user_roles_view_found, (
+        "UserWithRolesModelView should be accessible to root user"
+    )
