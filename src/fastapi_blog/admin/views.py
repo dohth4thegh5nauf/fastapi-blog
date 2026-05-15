@@ -77,6 +77,12 @@ class UserModelView(ModelView):
     in add_admin_to_app() function.
     """
 
+    # Custom templates with theme and language switchers
+    list_template = "list.html"
+    detail_template = "detail.html"
+    create_template = "create.html"
+    edit_template = "edit.html"
+
     exclude_fields_from_list = ["hashed_password"]
     exclude_fields_from_detail = ["hashed_password"]
     exclude_fields_from_edit = ["hashed_password", "created_at", "updated_at"]
@@ -113,6 +119,12 @@ class PostModelView(ModelView):
     Note: label, name, and label_plural are set dynamically per locale
     in add_admin_to_app() function.
     """
+
+    # Custom templates with theme and language switchers
+    list_template = "list.html"
+    detail_template = "detail.html"
+    create_template = "create.html"
+    edit_template = "edit.html"
 
     exclude_fields_from_edit = ["created_at", "updated_at"]
     exclude_fields_from_create = ["created_at", "updated_at"]

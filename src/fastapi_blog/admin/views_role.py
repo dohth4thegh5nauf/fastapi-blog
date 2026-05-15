@@ -20,6 +20,12 @@ class RoleModelView(ModelView):
     label = "Roles"
     icon = "fa fa-shield"
 
+    # Custom templates with theme and language switchers
+    list_template = "list.html"
+    detail_template = "detail.html"
+    create_template = "create.html"
+    edit_template = "edit.html"
+
     def __init__(
         self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs
     ):
@@ -116,6 +122,12 @@ class UserWithRolesModelView(ModelView):
     name = "User"
     label = "Users with Roles"
     icon = "fa fa-users"
+
+    # Custom templates with theme and language switchers
+    list_template = "list.html"
+    detail_template = "detail.html"
+    create_template = "create.html"
+    edit_template = "edit.html"
 
     def __init__(
         self, model, locale: str = "en", admin_username: str = "admin", *args, **kwargs

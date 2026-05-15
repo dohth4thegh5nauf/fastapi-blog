@@ -2,6 +2,35 @@
 
 {% block head %}
 {{ super() }}
+<script>
+// Common language switching utility
+// Available in all pages via window.languageSwitcher
+window.languageSwitcher = {
+  availableLocales: {{ available_locales | tojson | safe }},
+  localeNames: {{ locale_names | tojson | safe }},
+  currentLocale: '{{ current_locale }}',
+  
+  // Switch to a different locale
+  switchTo: function(targetLocale) {
+    const currentPath = window.location.pathname;
+    const pathMatch = currentPath.match(/^\/admin\/([a-z]{2})(\/.*)?$/);
+    
+    if (pathMatch) {
+      const restOfPath = pathMatch[2] || '';
+      const newPath = `/admin/${targetLocale}${restOfPath}`;
+      const queryString = window.location.search;
+      window.location.href = newPath + queryString;
+    } else {
+      window.location.href = `/admin/${targetLocale}`;
+    }
+  },
+  
+  // Get display name for a locale
+  getLocaleName: function(locale) {
+    return this.localeNames[locale] || locale.toUpperCase();
+  }
+};
+</script>
 {% endblock %}
 
 {% block head_css %}
