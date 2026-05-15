@@ -298,6 +298,23 @@ def add_admin_to_app(
             "SECRET_KEY", "change-me-in-production-please-use-strong-secret"
         )
 
+    # Validate secret_key strength
+    WEAK_SECRETS = {
+        "change-me-in-production-please-use-strong-secret",
+        "changeme",
+        "secret",
+        "test-secret-key",
+        "",
+    }
+    if secret_key in WEAK_SECRETS or len(secret_key) < 32:
+        warnings.warn(
+            f"secret_key is weak (length: {len(secret_key)}). "
+            "Use secrets.token_hex(32) for production. "
+            "Example: python -c 'import secrets; print(secrets.token_hex(32))'",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Add session middleware if needed (must be added AFTER CORS)
     if add_session_middleware:
         if _has_session_middleware(app):

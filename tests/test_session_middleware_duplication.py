@@ -16,10 +16,12 @@ def test_no_duplication_when_not_added_manually():
     assert len(app.user_middleware) == 0
 
     # Add admin (should add SessionMiddleware)
+    # Use strong secret to avoid weak key warning
     add_admin_to_app(
         app,
         admin_username="test",
         admin_password="test123",
+        secret_key="a" * 64,  # Strong secret
         init_database=False,
     )
 
@@ -43,15 +45,21 @@ def test_warning_when_middleware_already_added():
             app,
             admin_username="test",
             admin_password="test123",
+            secret_key="a" * 64,  # Strong secret to avoid weak key warning
             init_database=False,
             # add_session_middleware=True by default
         )
 
-        # Should have issued a warning
-        assert len(w) == 1
-        assert issubclass(w[0].category, UserWarning)
-        assert "SessionMiddleware is already added" in str(w[0].message)
-        assert "add_session_middleware=False" in str(w[0].message)
+        # Should have issued a warning about SessionMiddleware duplication
+        # Filter out other warnings
+        middleware_warnings = [
+            warning
+            for warning in w
+            if "SessionMiddleware is already added" in str(warning.message)
+        ]
+        assert len(middleware_warnings) == 1
+        assert issubclass(middleware_warnings[0].category, UserWarning)
+        assert "add_session_middleware=False" in str(middleware_warnings[0].message)
 
     # Should still have exactly one middleware (no duplication)
     assert len(app.user_middleware) == 1
@@ -72,12 +80,16 @@ def test_explicit_false_no_warning():
             app,
             admin_username="test",
             admin_password="test123",
+            secret_key="a" * 64,  # Strong secret
             init_database=False,
             add_session_middleware=False,  # Explicit False
         )
 
-        # Should NOT have issued any warnings
-        assert len(w) == 0
+        # Should NOT have issued any warnings about SessionMiddleware
+        middleware_warnings = [
+            warning for warning in w if "SessionMiddleware" in str(warning.message)
+        ]
+        assert len(middleware_warnings) == 0
 
     # Should still have exactly one middleware
     assert len(app.user_middleware) == 1
@@ -92,6 +104,7 @@ def test_multiple_calls_with_false():
         app,
         admin_username="admin1",
         admin_password="test123",
+        secret_key="a" * 64,  # Strong secret
         init_database=False,
     )
 
@@ -105,12 +118,16 @@ def test_multiple_calls_with_false():
             app,
             admin_username="admin2",
             admin_password="test456",
+            secret_key="b" * 64,  # Strong secret
             init_database=False,
             add_session_middleware=False,
         )
 
-        # Should not warn (we're using False correctly)
-        assert len(w) == 0
+        # Should not have SessionMiddleware warnings
+        middleware_warnings = [
+            warning for warning in w if "SessionMiddleware" in str(warning.message)
+        ]
+        assert len(middleware_warnings) == 0
 
     # Middleware count should not increase
     # Note: This test might fail if add_admin_to_app can't be called twice
