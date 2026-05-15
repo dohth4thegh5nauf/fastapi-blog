@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
-from jinja2.loaders import ChoiceLoader, FileSystemLoader, PackageLoader
+from jinja2.loaders import ChoiceLoader, FileSystemLoader, PrefixLoader
 
 import fastapi_blog
 
@@ -36,42 +36,43 @@ def test_admin_template_loader_isolation(app_with_admin):
     loader = admin.templates.env.loader
     assert isinstance(loader, ChoiceLoader), "Expected ChoiceLoader"
 
-    # Verify loaders in ChoiceLoader
-    loaders = loader.loaders
-    assert len(loaders) >= 2, "Expected at least 2 loaders"
+    # Collect all FileSystemLoader search paths recursively
+    def collect_filesystem_paths(loader_obj, paths=None):
+        if paths is None:
+            paths = []
+        if isinstance(loader_obj, FileSystemLoader):
+            paths.extend(loader_obj.searchpath)
+        elif isinstance(loader_obj, ChoiceLoader):
+            for sub_loader in loader_obj.loaders:
+                collect_filesystem_paths(sub_loader, paths)
+        elif isinstance(loader_obj, PrefixLoader):
+            for sub_loader in loader_obj.mapping.values():
+                collect_filesystem_paths(sub_loader, paths)
+        return paths
 
-    # First loader should be FileSystemLoader pointing to admin/templates
-    first_loader = loaders[0]
-    assert isinstance(first_loader, FileSystemLoader), (
-        "First loader should be FileSystemLoader"
-    )
+    all_fs_paths = collect_filesystem_paths(loader)
 
-    # Get the searchpath from FileSystemLoader
-    searchpath = first_loader.searchpath
-    assert len(searchpath) == 1, "Should have exactly one search path"
+    # Verify at least one path points to admin/templates
+    admin_templates_found = False
+    for path_str in all_fs_paths:
+        path = Path(path_str)
+        if path.name == "templates" and path.parent.name == "admin":
+            admin_templates_found = True
+            break
 
-    admin_templates_path = Path(searchpath[0])
-    assert admin_templates_path.name == "templates", (
-        "Should point to templates directory"
-    )
-    assert admin_templates_path.parent.name == "admin", (
-        "Should be inside admin directory"
-    )
+    assert admin_templates_found, "Admin templates path not found in loader"
 
-    # Verify second loader is PackageLoader for starlette_admin
-    second_loader = loaders[1]
-    assert isinstance(second_loader, PackageLoader), (
-        "Second loader should be PackageLoader"
-    )
-    assert second_loader.package_name == "starlette_admin", (
-        "Should load from starlette_admin package"
-    )
+    # Verify public templates directory is NOT in any FileSystemLoader path
+    pkg_path = Path(fastapi_blog.__file__).parent
+    public_templates_path = pkg_path / "templates"
 
-    # Verify public templates directory is NOT in the loader path
-    public_templates_path = admin_templates_path.parent.parent / "templates"
-    assert str(public_templates_path) not in searchpath, (
-        "Public templates should not be accessible"
-    )
+    for path_str in all_fs_paths:
+        path = Path(path_str).resolve()
+        public_path = public_templates_path.resolve()
+        assert path != public_path, (
+            f"Public templates path {public_path} should not be in loader, "
+            f"found: {path}"
+        )
 
 
 def test_admin_cannot_access_public_templates(app_with_admin):
@@ -86,7 +87,14 @@ def test_admin_cannot_access_public_templates(app_with_admin):
 
     # Try to get templates that exist only in public templates
     # These should raise TemplateNotFound because public templates are not in the loader
-    public_only_templates = ["post.html", "posts.html", "tag.html", "tags.html"]
+    # Note: index.html exists in starlette-admin built-ins, so excluded from this test
+    public_only_templates = [
+        "page.html",
+        "post.html",
+        "posts.html",
+        "tag.html",
+        "tags.html",
+    ]
 
     for template_name in public_only_templates:
         with pytest.raises(TemplateNotFound, match=template_name):
