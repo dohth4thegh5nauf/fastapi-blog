@@ -11,7 +11,6 @@ import fastapi_blog
 
 @pytest.fixture
 def app_with_admin():
-    """Create FastAPI app with admin panel."""
     app = FastAPI()
     admins = fastapi_blog.add_admin_to_app(
         app,
@@ -19,10 +18,16 @@ def app_with_admin():
         admin_username="admin",
         admin_password="Admin123!",
         secret_key="test-secret-key",
-        i18n_enabled=False,  # Disable i18n to get single admin instance
+        locales=["en"],        # instead of i18n_enabled=False
+        default_locale="en",
     )
     return app, admins
 
+
+def test_deprecated_i18n_locales_warns():
+    app = FastAPI()
+    with pytest.warns(DeprecationWarning, match="i18n_locales is deprecated"):
+        fastapi_blog.add_admin_to_app(app, i18n_locales=["en"])
 
 def test_admin_template_loader_isolation(app_with_admin):
     """Verify admin template loader only includes admin/templates directory."""

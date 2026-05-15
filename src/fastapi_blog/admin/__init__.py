@@ -235,12 +235,16 @@ def add_admin_to_app(
       locales: List of available locales (default: ['en', 'ru'])
       default_locale: Default locale for /admin redirect (default: 'en')
       enable_role_management: Enable role management views (default: False)
+      
+      base_url: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
+        Ignored in new multi-locale architecture.
+      i18n_enabled: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
+        Multi-locale is always enabled.
+      i18n_default_locale: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
+        Use default_locale instead.
+      i18n_locales: .. deprecated:: 0.8.0 — will be removed in 0.9.0.
+        Use locales instead.
 
-      # Deprecated parameters (for backward compatibility):
-      base_url: Deprecated. Ignored in new multi-locale architecture.
-      i18n_enabled: Deprecated. Multi-locale is always enabled.
-      i18n_default_locale: Deprecated. Use default_locale instead.
-      i18n_locales: Deprecated. Use locales instead.
 
     Returns:
       Dictionary mapping locale codes to Admin instances
