@@ -18,7 +18,7 @@ def app_with_admin():
         admin_username="admin",
         admin_password="Admin123!",
         secret_key="test-secret-key",
-        locales=["en"],        # instead of i18n_enabled=False
+        locales=["en"],  # instead of i18n_enabled=False
         default_locale="en",
     )
     return app, admins
