@@ -19,8 +19,7 @@ from starlette_admin.i18n import I18nConfig
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
-from .models import Post, User
-from .models_role import Role, UserWithRoles
+from .models import Post, Role, User, UserWithRoles
 from .views_role import RoleModelView, UserWithRolesModelView
 
 

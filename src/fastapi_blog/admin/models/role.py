@@ -13,7 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .models import Base
+from .base import Base
 
 
 # Association table for many-to-many relationship between users and roles
