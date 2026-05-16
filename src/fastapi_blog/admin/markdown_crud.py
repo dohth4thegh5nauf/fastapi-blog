@@ -130,8 +130,8 @@ class MarkdownFileManager:
 class MarkdownListView(CustomView):
     """List view for markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts"):
-        """Initialize list view with posts directory."""
+    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
+        """Initialize list view with posts directory and locale."""
         super().__init__(
             label=_("Posts"),
             icon="fa fa-file-text",
@@ -140,6 +140,7 @@ class MarkdownListView(CustomView):
             name="posts:list",
         )
         self.manager = MarkdownFileManager(posts_dir)
+        self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render list of posts."""
@@ -161,10 +162,8 @@ class MarkdownListView(CustomView):
             for p in posts
         ]
 
-        # Get current locale for translations
-        from starlette_admin.i18n import get_locale
-
-        locale = get_locale()
+        # Use locale from instance (set during initialization)
+        locale = self.locale
 
         # Translations dictionary
         translations = {
@@ -236,8 +235,8 @@ class MarkdownListView(CustomView):
 class MarkdownEditView(CustomView):
     """Edit view for markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts"):
-        """Initialize edit view with posts directory."""
+    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
+        """Initialize edit view with posts directory and locale."""
         super().__init__(
             label=_("Edit Post"),
             path="/posts/edit/{slug}",
@@ -246,6 +245,7 @@ class MarkdownEditView(CustomView):
             add_to_menu=False,  # Don't show in menu
         )
         self.manager = MarkdownFileManager(posts_dir)
+        self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render edit form."""
@@ -270,13 +270,10 @@ class MarkdownEditView(CustomView):
                 status_code=404,
             )
 
-        # Get current locale and translations
-        from starlette_admin.i18n import get_locale
-
+        # Get translations for this view's locale
         from .i18n import load_translations
 
-        locale = get_locale()
-        translations = load_translations(locale)
+        translations = load_translations(self.locale)
         t = translations["post"]
 
         return templates.TemplateResponse(
@@ -299,8 +296,8 @@ class MarkdownEditView(CustomView):
 class MarkdownCreateView(CustomView):
     """Create view for new markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts"):
-        """Initialize create view with posts directory."""
+    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
+        """Initialize create view with posts directory and locale."""
         super().__init__(
             label=_("New Post"),
             path="/posts/new",
@@ -309,16 +306,14 @@ class MarkdownCreateView(CustomView):
             add_to_menu=False,
         )
         self.manager = MarkdownFileManager(posts_dir)
+        self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render create form."""
-        # Get current locale and translations
-        from starlette_admin.i18n import get_locale
-
+        # Get translations for this view's locale
         from .i18n import load_translations
 
-        locale = get_locale()
-        translations = load_translations(locale)
+        translations = load_translations(self.locale)
         t = translations["post"]
 
         return templates.TemplateResponse(

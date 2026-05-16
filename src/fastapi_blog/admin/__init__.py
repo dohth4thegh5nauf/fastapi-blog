@@ -197,13 +197,13 @@ def _create_admin_for_locale(
     posts_dir = get_posts_directory()
 
     # Add list view (shows in menu)
-    posts_list_view = MarkdownListView(posts_dir=posts_dir)
+    posts_list_view = MarkdownListView(posts_dir=posts_dir, locale=locale)
     posts_list_view.label = posts_label
     admin.add_view(posts_list_view)
 
     # Add edit and create views (don't show in menu)
-    admin.add_view(MarkdownEditView(posts_dir=posts_dir))
-    admin.add_view(MarkdownCreateView(posts_dir=posts_dir))
+    admin.add_view(MarkdownEditView(posts_dir=posts_dir, locale=locale))
+    admin.add_view(MarkdownCreateView(posts_dir=posts_dir, locale=locale))
 
     return admin
 
@@ -435,12 +435,11 @@ def add_admin_to_app(
         admins[locale] = admin
         logger.info("Admin panel (%s) mounted at /%s/admin", locale, locale)
 
-    # Add middleware to:
-    # 1. Set locale cookie based on URL path to ensure consistent locale detection
-    # 2. Redirect URLs with default locale to clean URLs
+    # Add middleware to redirect URLs with default locale to clean URLs
+    # e.g. /en/admin -> /admin
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request as StarletteRequest
-    from starlette.responses import RedirectResponse, Response
+    from starlette.responses import RedirectResponse
 
     class AdminDefaultLocaleRedirectMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: StarletteRequest, call_next):
@@ -456,37 +455,7 @@ def add_admin_to_app(
                     new_path = f"{new_path}?{request.url.query}"
                 return RedirectResponse(url=new_path, status_code=302)
 
-            # Detect locale from URL path
-            # This will be used to set cookie for consistent locale detection
-            locale_from_url = None
-            for locale in locales:
-                if locale == default_locale:
-                    # Default locale is at /admin (no prefix)
-                    if path.startswith("/admin"):
-                        locale_from_url = default_locale
-                        break
-                else:
-                    # Non-default locales are at /{locale}/admin
-                    if path.startswith(f"/{locale}/admin"):
-                        locale_from_url = locale
-                        break
-
-            # Get response
-            response = await call_next(request)
-
-            # Set locale cookie if we detected locale from URL
-            # This ensures that custom views (like MarkdownCreateView) get the correct locale
-            if locale_from_url:
-                # Set cookie with 1 year expiration
-                response.set_cookie(
-                    key="language",
-                    value=locale_from_url,
-                    max_age=31536000,  # 1 year in seconds
-                    path="/",
-                    httponly=False,  # Allow JavaScript access if needed
-                )
-
-            return response
+            return await call_next(request)
 
     app.add_middleware(AdminDefaultLocaleRedirectMiddleware)
 
