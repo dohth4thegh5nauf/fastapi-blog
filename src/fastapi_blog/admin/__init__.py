@@ -127,10 +127,12 @@ def _create_admin_for_locale(
     posts_label = translations["nav"]["posts"]
 
     # Create admin instance
+    # Use a unique route_name for each locale to ensure url_for generates correct URLs.
     admin = Admin(
         engine,
         title=title,
         base_url=base_url,
+        route_name=f"admin_{locale}",  # Unique route name for each locale
         auth_provider=auth_provider,
         templates_dir=templates_dir,
         i18n_config=i18n_config,
@@ -144,6 +146,8 @@ def _create_admin_for_locale(
     admin.templates.env.globals["locale_names"] = locale_names
     admin.templates.env.globals["current_locale"] = locale
     admin.templates.env.globals["default_locale"] = default_locale
+    # This is needed for templates that don't use url_for (e.g., logo, logout)
+    admin.templates.env.globals["admin_base_url"] = base_url
 
     # Add User view with translated labels
     user_view = UserModelView(User, icon="fa fa-users")
