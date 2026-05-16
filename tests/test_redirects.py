@@ -119,3 +119,61 @@ def test_non_default_locale_routes_work():
     response = client.get("/blog/posts")
     assert response.status_code == 200
     assert "Articles" in response.text
+
+
+def test_root_redirect_with_prefix():
+    """Test GET / → 302 → /blog/ when prefix='blog'."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(
+        app, prefix="blog", locales=["en", "ru"], default_locale="en"
+    )
+    client = TestClient(app, follow_redirects=False)
+    response = client.get("/")
+    assert response.status_code == 302
+    assert response.headers["location"] == "/blog/"
+
+
+def test_root_no_infinite_redirect_without_prefix():
+    """Test GET / returns 200 (not redirect) when prefix=None."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(
+        app, prefix=None, locales=["en", "ru"], default_locale="en"
+    )
+    client = TestClient(app, follow_redirects=False)
+    response = client.get("/")
+    assert response.status_code == 200  # Router handles / directly
+
+
+def test_blog_prefix_redirect_uses_prefix_variable():
+    """Test GET /blog → 302 → /blog/ (uses prefix variable, not hardcoded)."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(
+        app, prefix="blog", locales=["en", "ru"], default_locale="en"
+    )
+    client = TestClient(app, follow_redirects=False)
+    response = client.get("/blog")
+    assert response.status_code == 302
+    assert response.headers["location"] == "/blog/"
+
+
+def test_custom_prefix_redirect():
+    """Test GET /myblog → 302 → /myblog/ when prefix='myblog'."""
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(
+        app, prefix="myblog", locales=["en", "ru"], default_locale="en"
+    )
+    client = TestClient(app, follow_redirects=False)
+
+    # Test prefix redirect
+    response = client.get("/myblog")
+    assert response.status_code == 302
+    assert response.headers["location"] == "/myblog/"
+
+    # Test root redirect
+    response = client.get("/")
+    assert response.status_code == 302
+    assert response.headers["location"] == "/myblog/"
+
+    # Test that /myblog/ actually works
+    response = client.get("/myblog/")
+    assert response.status_code == 200

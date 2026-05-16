@@ -98,17 +98,18 @@ def add_blog_to_fastapi(
     # Add redirects
     from starlette.responses import RedirectResponse
 
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        # Redirect to blog homepage (without locale for default)
-        if prefix is not None:
-            return RedirectResponse(url=f"/{prefix}/", status_code=302)
-        else:
-            return RedirectResponse(url="/", status_code=302)
+    # Only add root redirect when prefix is set
+    # When prefix=None, the blog router itself handles /
+    if prefix is not None:
 
-    @app.get("/blog", include_in_schema=False)
-    async def blog_redirect():
-        return RedirectResponse(url="/blog/", status_code=302)
+        @app.get("/", include_in_schema=False)
+        async def root_redirect():
+            return RedirectResponse(url=f"/{prefix}/", status_code=302)
+
+        # Add redirect from /{prefix} to /{prefix}/
+        @app.get(f"/{prefix}", include_in_schema=False)
+        async def blog_prefix_redirect():
+            return RedirectResponse(url=f"/{prefix}/", status_code=302)
 
     # Router controls:
     # 1. Main router without locale prefix (uses default_locale)
@@ -126,6 +127,7 @@ def add_blog_to_fastapi(
         locales=locales,
         default_locale=default_locale,
         locale=default_locale,
+        prefix=prefix,
     )
 
     # Mount main router without locale prefix
@@ -149,6 +151,7 @@ def add_blog_to_fastapi(
             locales=locales,
             default_locale=default_locale,
             locale=locale,
+            prefix=prefix,
         )
 
         # Mount with locale prefix
@@ -190,6 +193,45 @@ def add_blog_to_fastapi(
             return await call_next(request)
 
     app.add_middleware(DefaultLocaleRedirectMiddleware)
+
+    # Add canonical Link header middleware
+    class CanonicalLinkHeaderMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: StarletteRequest, call_next):
+            response = await call_next(request)
+
+            # Only apply to HTML responses from public blog
+            content_type = response.headers.get("content-type", "")
+            if "text/html" not in content_type:
+                return response
+
+            path = request.url.path
+
+            # Don't apply to /admin
+            if path.startswith("/admin") or any(
+                path.startswith(f"/{loc}/admin") for loc in locales
+            ):
+                return response
+
+            # Calculate canonical URL
+            base = str(request.base_url).rstrip("/")
+            canonical_path = path
+
+            # Remove default locale prefix if present
+            default_prefix = f"/{default_locale}"
+            if prefix is not None:
+                duplicate_pattern = f"/{default_locale}/{prefix}"
+                if canonical_path.startswith(duplicate_pattern):
+                    canonical_path = canonical_path[len(default_prefix) :]
+            else:
+                if canonical_path.startswith(default_prefix + "/"):
+                    canonical_path = canonical_path[len(default_prefix) :]
+
+            canonical_url = base + canonical_path
+            response.headers["Link"] = f'<{canonical_url}>; rel="canonical"'
+
+            return response
+
+    app.add_middleware(CanonicalLinkHeaderMiddleware)
 
     # Optionally include REST API for post management
     if include_api:
