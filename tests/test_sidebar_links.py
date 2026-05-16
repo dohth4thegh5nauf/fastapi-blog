@@ -279,7 +279,7 @@ def test_admin_sidebar_links_respect_locale():
         if "/admin" in link
         and "/statics/" not in link
     ]
-    
+
     # Strip http://testserver prefix if present
     admin_links = [
         link.replace("http://testserver", "") if link.startswith("http://testserver") else link
