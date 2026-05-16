@@ -145,7 +145,9 @@ class HomeView(CustomView):
     - Top tags by usage
     """
 
-    def __init__(self, label: str = "Home", icon: str = "fa fa-home", locale: str = "en"):
+    def __init__(
+        self, label: str = "Home", icon: str = "fa fa-home", locale: str = "en"
+    ):
         """Initialize home view with locale."""
         super().__init__(label=label, icon=icon)
         self.locale = locale
