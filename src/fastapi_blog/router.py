@@ -97,6 +97,25 @@ def get_blog_router(
         # 3. Default locale
         return default_locale
 
+    def _make_locale_url_for(request: Request, current_locale: str):
+        """Create a locale-aware url_for function.
+
+        Returns a function that generates URLs with correct locale prefix.
+        All routes are registered with _{locale} suffix, even for default locale.
+        For default locale: /blog/tags (from route blog_tags_en)
+        For non-default locale: /ru/blog/tags (from route blog_tags_ru)
+        """
+
+        def locale_url_for(name: str, **path_params) -> str:
+            # All routes have _{locale} suffix, including default locale
+            route_name = f"{name}_{current_locale}"
+
+            # Use FastAPI's url_for to build the URL, then extract the path
+            url = request.url_for(route_name, **path_params)
+            return url.path
+
+        return locale_url_for
+
     def _add_i18n_context(request: Request, context: dict) -> dict:
         """Add i18n translator to template context."""
         current_locale = _get_locale(request)
@@ -104,6 +123,9 @@ def get_blog_router(
         context["locale"] = current_locale
         context["available_locales"] = locales
         context["default_locale"] = default_locale
+
+        # Add locale-aware url_for function
+        context["locale_url_for"] = _make_locale_url_for(request, current_locale)
 
         # Add canonical URL and alternate URLs for SEO
         canonical_url = _get_canonical_url(request)
