@@ -110,12 +110,12 @@ def _create_admin_for_locale(
         Configured Admin instance
 
     """
-    # Configure i18n without built-in language switcher
-    # We'll use custom language switcher with URL redirects
+    # Configure i18n for this locale
     # Each admin instance uses its own locale via I18nConfig
+    # We provide available_locales to enable i18n, but disable the built-in switcher
     i18n_config = I18nConfig(
         default_locale=locale,
-        language_switcher=None,  # Disabled - we use custom switcher
+        language_switcher=available_locales,  # Enable i18n with available locales
     )
 
     # Load translations from YAML files
