@@ -84,7 +84,7 @@ h4 {
 </head>
 <body>
     <header>
-        <a href="{% if locale %}{{ url_for('blog_index_' + locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">
+        <a href="{{ locale_url_for('blog_index') }}">
     <image
         priority
         src="/static/images/profile.webp'"
@@ -93,17 +93,17 @@ h4 {
         alt="Daniel Roy Greenfeld"
         class="borderCircle"
         /></a>
-    <h1><a href="{% if locale %}{{ url_for('blog_index_' + locale) }}{% else %}{{ url_for('blog_index') }}{% endif %}">Daniel Roy Greenfeld</a></h1>
+    <h1><a href="{{ locale_url_for('blog_index') }}">Daniel Roy Greenfeld</a></h1>
     <p>
-      <a href="{% if locale %}{{ url_for('blog_page_' + locale, page_id='about') }}{% else %}{{ url_for('blog_page', page_id='about') }}{% endif %}">
+      <a href="{{ locale_url_for('blog_page', page_id='about') }}">
         {{ t.blog.about }}
       </a>    
       |           
-      <a href="{% if locale %}{{ url_for('blog_posts_' + locale) }}{% else %}{{ url_for('blog_posts') }}{% endif %}">
+      <a href="{{ locale_url_for('blog_posts') }}">
         {{ t.blog.articles }}
       </a>
       |
-      <a href="{% if locale %}{{ url_for('blog_tags_' + locale) }}{% else %}{{ url_for('blog_tags') }}{% endif %}">
+      <a href="{{ locale_url_for('blog_tags') }}">
         {{ t.blog.tags }}
       </a>
       {% if available_locales and available_locales|length > 1 %}

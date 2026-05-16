@@ -10,7 +10,7 @@
 
 
 {% for tag in post.tags %}
-    <a href="{% if locale %}{{ url_for('blog_tag_' + locale, tag_id=tag) }}{% else %}{{ url_for('blog_tag', tag_id=tag) }}{% endif %}">{{ tag }}</a>
+    <a href="{{ locale_url_for('blog_tag', tag_id=tag) }}">{{ tag }}</a>
 {% endfor %}
 </p>
 {% endif %}

@@ -3,6 +3,6 @@
 <h1>{{ t.blog.tags }}</h1>
 
 {% for tag, count in tags.items() %}
-  <a href="{% if locale %}{{ url_for('blog_tag_' + locale, tag_id=tag) }}{% else %}{{ url_for('blog_tag', tag_id=tag) }}{% endif %}">{{ tag }}</a> ({{ count }})
+  <a href="{{ locale_url_for('blog_tag', tag_id=tag) }}">{{ tag }}</a> ({{ count }})
 {% endfor %}
 {% endblock content %}
