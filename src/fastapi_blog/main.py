@@ -1,5 +1,4 @@
 import os
-from typing import Any
 
 import jinja2
 from fastapi import FastAPI
@@ -96,8 +95,38 @@ def add_blog_to_fastapi(
     )
     templates = Jinja2Templates(env=env)
 
-    # Router controls
-    router = get_blog_router(
+    # Add redirect for root path without locale
+    # Note: We don't redirect /blog/* because legacy router handles those with Accept-Language
+    from starlette.responses import RedirectResponse
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse(url=f"/{default_locale}/", status_code=302)
+
+    # Router controls - mount for each locale with pattern /{locale}/blog
+    # For each locale, create a router and mount it
+    for locale in locales:
+        router = get_blog_router(
+            templates=templates,
+            favorite_post_ids=favorite_post_ids,
+            strict=strict_frontmatter,
+            sanitize_html=sanitize_html,
+            posts_dirname=posts_dirname,
+            pages_dirname=pages_dirname,
+            locales=locales,
+            default_locale=default_locale,
+            locale=locale,  # Pass current locale to router
+        )
+
+        # Mount with prefix /{locale}/blog
+        if prefix is not None:
+            app.include_router(router, prefix=f"/{locale}/{prefix}", tags=["blog"])
+        else:
+            app.include_router(router, prefix=f"/{locale}", tags=["blog"])
+
+    # Add legacy routes without locale for backward compatibility
+    # These will use Accept-Language header to determine locale
+    legacy_router = get_blog_router(
         templates=templates,
         favorite_post_ids=favorite_post_ids,
         strict=strict_frontmatter,
@@ -106,11 +135,13 @@ def add_blog_to_fastapi(
         pages_dirname=pages_dirname,
         locales=locales,
         default_locale=default_locale,
+        locale=None,  # No specific locale - use Accept-Language
     )
-    router_kwargs: dict[str, Any] = {"router": router, "tags": ["blog"]}
+
     if prefix is not None:
-        router_kwargs["prefix"] = f"/{prefix}"
-    app.include_router(**router_kwargs)
+        app.include_router(legacy_router, prefix=f"/{prefix}", tags=["blog"])
+    else:
+        app.include_router(legacy_router, tags=["blog"])
 
     # Optionally include REST API for post management
     if include_api:
