@@ -233,9 +233,10 @@ class RBACAuthProvider(AuthProvider):
 
         """
         request.session.clear()
-        return Response(
-            status_code=302, headers={"Location": str(request.url_for("admin:login"))}
-        )
+        # Use relative path to avoid route name conflicts with multi-locale admin instances
+        # Each locale has its own route_name (e.g., admin_en, admin_ru)
+        login_url = str(request.url).rsplit("/", 1)[0] + "/login"
+        return Response(status_code=302, headers={"Location": login_url})
 
 
 def has_permission(request: Request, resource: str, action: str) -> bool:
