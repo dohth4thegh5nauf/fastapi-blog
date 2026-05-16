@@ -137,7 +137,7 @@ def _create_admin_for_locale(
         templates_dir=templates_dir,
         i18n_config=i18n_config,
         debug=os.getenv("DEBUG", "false").lower() == "true",
-        index_view=HomeView(label=home_label, icon="fa fa-home"),
+        index_view=HomeView(label=home_label, icon="fa fa-home", locale=locale),
     )
 
     # Add locale data to template context
