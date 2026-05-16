@@ -95,6 +95,14 @@ def add_blog_to_fastapi(
     )
     templates = Jinja2Templates(env=env)
 
+    # Add redirect for root path without locale
+    # Note: We don't redirect /blog/* because legacy router handles those with Accept-Language
+    from starlette.responses import RedirectResponse
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse(url=f"/{default_locale}/", status_code=302)
+
     # Router controls - mount for each locale with pattern /{locale}/blog
     # For each locale, create a router and mount it
     for locale in locales:
