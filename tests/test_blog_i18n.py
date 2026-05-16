@@ -6,25 +6,27 @@ from fastapi.testclient import TestClient
 import fastapi_blog
 
 
-def test_blog_responds_to_accept_language_en():
-    """Test blog uses English when Accept-Language is 'en'."""
+def test_blog_shows_default_locale_content():
+    """Test blog shows default locale content on clean URLs."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    response = client.get("/blog/posts", headers={"Accept-Language": "en"})
+    # /blog/posts shows default locale (English) regardless of Accept-Language
+    response = client.get("/blog/posts")
     assert response.status_code == 200
     assert "Articles" in response.text
     assert "Статьи" not in response.text
 
 
-def test_blog_responds_to_accept_language_ru():
-    """Test blog uses Russian when Accept-Language is 'ru'."""
+def test_blog_shows_non_default_locale_with_prefix():
+    """Test blog shows Russian content on /ru/blog/* URLs."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    response = client.get("/blog/posts", headers={"Accept-Language": "ru"})
+    # /ru/blog/posts shows Russian regardless of Accept-Language
+    response = client.get("/ru/blog/posts")
     assert response.status_code == 200
     assert "Статьи" in response.text
     assert "Articles" not in response.text
@@ -58,12 +60,12 @@ def test_blog_index_translations():
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # English
-    response_en = client.get("/blog/", headers={"Accept-Language": "en"})
+    # English (default locale, clean URL)
+    response_en = client.get("/blog/")
     assert "Recent Writings" in response_en.text
 
-    # Russian
-    response_ru = client.get("/blog/", headers={"Accept-Language": "ru"})
+    # Russian (non-default locale, prefixed URL)
+    response_ru = client.get("/ru/blog/")
     assert "Последние записи" in response_ru.text
 
 
@@ -73,12 +75,12 @@ def test_blog_tags_page_translations():
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # English
-    response_en = client.get("/blog/tags", headers={"Accept-Language": "en"})
+    # English (default, clean URL)
+    response_en = client.get("/blog/tags")
     assert ">Tags<" in response_en.text
 
-    # Russian
-    response_ru = client.get("/blog/tags", headers={"Accept-Language": "ru"})
+    # Russian (prefixed URL)
+    response_ru = client.get("/ru/blog/tags")
     assert ">Теги<" in response_ru.text
 
 
@@ -88,17 +90,15 @@ def test_blog_navigation_translations():
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # English
-    response_en = client.get("/blog/", headers={"Accept-Language": "en"})
-    # Check navigation contains English words (with possible whitespace)
+    # English (default, clean URL)
+    response_en = client.get("/blog/")
     nav_text = response_en.text
     assert "About" in nav_text
     assert "Articles" in nav_text
     assert "Tags" in nav_text
 
-    # Russian
-    response_ru = client.get("/blog/", headers={"Accept-Language": "ru"})
-    # Check navigation contains Russian words
+    # Russian (prefixed URL)
+    response_ru = client.get("/ru/blog/")
     nav_text = response_ru.text
     assert "О блоге" in nav_text
     assert "Статьи" in nav_text
@@ -111,59 +111,54 @@ def test_blog_footer_translations():
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # English
-    response_en = client.get("/blog/", headers={"Accept-Language": "en"})
+    # English (default, clean URL)
+    response_en = client.get("/blog/")
     assert "All rights reserved" in response_en.text
 
-    # Russian
-    response_ru = client.get("/blog/", headers={"Accept-Language": "ru"})
+    # Russian (prefixed URL)
+    response_ru = client.get("/ru/blog/")
     assert "Все права защищены" in response_ru.text
 
 
-def test_blog_accept_language_quality_parsing():
-    """Test Accept-Language header with quality values."""
+def test_blog_locale_prefix_overrides_all():
+    """Test that locale prefix in URL determines language, not Accept-Language."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # Russian has higher priority
-    response = client.get(
-        "/blog/posts", headers={"Accept-Language": "ru;q=0.9,en;q=0.8"}
-    )
+    # /ru/blog/posts shows Russian even with Accept-Language: en
+    response = client.get("/ru/blog/posts", headers={"Accept-Language": "en"})
     assert "Статьи" in response.text
 
-    # English has higher priority
-    response = client.get(
-        "/blog/posts", headers={"Accept-Language": "en;q=0.9,ru;q=0.8"}
-    )
+    # /blog/posts shows default (English) even with Accept-Language: ru
+    response = client.get("/blog/posts", headers={"Accept-Language": "ru"})
     assert "Articles" in response.text
 
 
-def test_blog_accept_language_with_region():
-    """Test Accept-Language header with region codes (e.g., en-US)."""
+def test_blog_different_default_locale():
+    """Test blog with different default locale."""
     app = FastAPI()
-    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="ru")
     client = TestClient(app)
 
-    # en-US should match 'en'
-    response = client.get("/blog/posts", headers={"Accept-Language": "en-US"})
-    assert "Articles" in response.text
-
-    # ru-RU should match 'ru'
-    response = client.get("/blog/posts", headers={"Accept-Language": "ru-RU"})
+    # Clean URL shows default (Russian)
+    response = client.get("/blog/posts")
     assert "Статьи" in response.text
 
+    # /en/blog/posts shows English
+    response = client.get("/en/blog/posts")
+    assert "Articles" in response.text
 
-def test_blog_url_with_locale_en():
-    """Test blog works with /en/blog/ URL prefix."""
+
+def test_blog_default_locale_redirects():
+    """Test that /en/blog/* redirects to /blog/* when en is default."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
-    client = TestClient(app)
+    client = TestClient(app, follow_redirects=False)
 
     response = client.get("/en/blog/posts")
-    assert response.status_code == 200
-    assert "Articles" in response.text
-    assert "Статьи" not in response.text
+    assert response.status_code == 302
+    assert response.headers["location"] == "/blog/posts"
 
 
 def test_blog_url_with_locale_ru():
@@ -178,17 +173,16 @@ def test_blog_url_with_locale_ru():
     assert "Articles" not in response.text
 
 
-def test_blog_url_locale_overrides_accept_language():
-    """Test that URL locale parameter takes priority over Accept-Language."""
+def test_blog_follows_redirects_automatically():
+    """Test that redirects are followed automatically by default."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
-    client = TestClient(app)
+    client = TestClient(app)  # follow_redirects=True by default
 
-    # URL says 'en', header says 'ru' - URL should win
-    response = client.get("/en/blog/posts", headers={"Accept-Language": "ru"})
+    # /en/blog/posts redirects to /blog/posts and shows English
+    response = client.get("/en/blog/posts")
     assert response.status_code == 200
     assert "Articles" in response.text
-    assert "Статьи" not in response.text
 
 
 def test_language_switcher_present_in_header():
@@ -253,13 +247,13 @@ def test_language_switcher_javascript_logic():
     assert "parts.unshift(targetLocale)" in response.text
 
 
-def test_legacy_routes_show_language_switcher():
-    """Test that language switcher appears on legacy routes without locale."""
+def test_clean_urls_show_language_switcher():
+    """Test that language switcher appears on clean URLs."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    # Legacy route should still show switcher
+    # Clean URL (default locale) should show switcher
     response = client.get("/blog/")
     assert response.status_code == 200
     assert '<select id="language-select"' in response.text
@@ -267,13 +261,13 @@ def test_legacy_routes_show_language_switcher():
     assert "Русский" in response.text
 
 
-def test_all_legacy_routes_have_language_switcher():
-    """Test that all legacy routes (without locale) show language switcher."""
+def test_all_blog_routes_have_language_switcher():
+    """Test that all blog routes show language switcher."""
     app = FastAPI()
     fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
     client = TestClient(app)
 
-    paths = ["/blog/", "/blog/posts", "/blog/tags"]
+    paths = ["/blog/", "/blog/posts", "/blog/tags", "/ru/blog/", "/ru/blog/posts"]
     for path in paths:
         response = client.get(path)
         assert response.status_code == 200, f"Failed to load {path}"

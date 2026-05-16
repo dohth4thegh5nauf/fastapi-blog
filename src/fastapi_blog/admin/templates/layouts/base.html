@@ -198,19 +198,47 @@ body,
     availableLocales: {{ available_locales | tojson | safe }},
     localeNames: {{ locale_names | tojson | safe }},
     currentLocale: '{{ current_locale }}',
+    defaultLocale: {{ default_locale | tojson | safe }},
     
     switchTo: function(targetLocale) {
       const currentPath = window.location.pathname;
-      const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+      const queryString = window.location.search;
       
-      if (pathMatch) {
-        const restOfPath = pathMatch[2] || '';
-        const newPath = `/${targetLocale}/admin${restOfPath}`;
-        const queryString = window.location.search;
-        window.location.href = newPath + queryString;
+      // New URL structure:
+      // - default locale: /admin/... (no locale prefix)
+      // - other locales: /ru/admin/... (locale prefix)
+      
+      let newPath;
+      
+      if (targetLocale === this.defaultLocale) {
+        // Switching to default locale - remove locale prefix if present
+        const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+        if (pathMatch) {
+          const restOfPath = pathMatch[2] || '';
+          newPath = `/admin${restOfPath}`;
+        } else {
+          newPath = currentPath; // Already at default locale URL
+        }
       } else {
-        window.location.href = `/${targetLocale}/admin`;
+        // Switching to non-default locale - add/replace locale prefix
+        const defaultPathMatch = currentPath.match(/^\/admin(\/.*)?$/);
+        const localePathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+        
+        if (defaultPathMatch) {
+          // Currently at default locale URL - add locale prefix
+          const restOfPath = defaultPathMatch[1] || '';
+          newPath = `/${targetLocale}/admin${restOfPath}`;
+        } else if (localePathMatch) {
+          // Currently at another locale URL - replace locale prefix
+          const restOfPath = localePathMatch[2] || '';
+          newPath = `/${targetLocale}/admin${restOfPath}`;
+        } else {
+          // Fallback
+          newPath = `/${targetLocale}/admin`;
+        }
       }
+      
+      window.location.href = newPath + queryString;
     },
     
     getLocaleName: function(locale) {

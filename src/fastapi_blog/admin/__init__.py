@@ -89,6 +89,7 @@ def _create_admin_for_locale(
     auth_provider,
     templates_dir: str,
     available_locales: list[str],
+    default_locale: str,
     enable_role_management: bool = False,
     admin_username: str = "admin",
 ) -> Admin:
@@ -102,6 +103,7 @@ def _create_admin_for_locale(
         auth_provider: Authentication provider instance
         templates_dir: Path to custom templates directory
         available_locales: List of all available locales for language switcher
+        default_locale: Default locale for the application
         enable_role_management: Whether to automatically add role management views
         admin_username: Root admin username for role management access control
 
@@ -141,6 +143,7 @@ def _create_admin_for_locale(
     admin.templates.env.globals["available_locales"] = available_locales
     admin.templates.env.globals["locale_names"] = locale_names
     admin.templates.env.globals["current_locale"] = locale
+    admin.templates.env.globals["default_locale"] = default_locale
 
     # Add User view with translated labels
     user_view = UserModelView(User, icon="fa fa-users")
@@ -371,19 +374,46 @@ def add_admin_to_app(
     pkg_path = Path(fastapi_blog.__file__).parent
     templates_dir = str(pkg_path / "admin" / "templates")
 
-    # Create admin instances for each locale
+    # Create admin instances:
+    # - Default locale at /admin (no locale prefix)
+    # - Other locales at /{locale}/admin
     admins = {}
 
+    # Create main admin for default locale (no locale in URL)
+    default_auth_provider = SimpleAuthProvider(
+        username=admin_username,
+        password=admin_password,
+        redirect_after_login="/admin/user/list",
+    )
+
+    default_admin = _create_admin_for_locale(
+        locale=default_locale,
+        engine=engine,
+        title=title,
+        base_url="/admin",
+        auth_provider=default_auth_provider,
+        templates_dir=templates_dir,
+        available_locales=locales,
+        default_locale=default_locale,
+        enable_role_management=enable_role_management,
+        admin_username=admin_username,
+    )
+
+    default_admin.mount_to(app)
+    admins[default_locale] = default_admin
+    logger.info("Admin panel (%s) mounted at /admin", default_locale)
+
+    # Create admin instances for non-default locales
     for locale in locales:
-        # Create auth provider for this locale
-        # redirect_after_login will be set to /{locale}/admin/user/list
+        if locale == default_locale:
+            continue  # Skip default - already mounted
+
         auth_provider = SimpleAuthProvider(
             username=admin_username,
             password=admin_password,
             redirect_after_login=f"/{locale}/admin/user/list",
         )
 
-        # Create admin instance for this locale
         admin = _create_admin_for_locale(
             locale=locale,
             engine=engine,
@@ -392,25 +422,38 @@ def add_admin_to_app(
             auth_provider=auth_provider,
             templates_dir=templates_dir,
             available_locales=locales,
+            default_locale=default_locale,
             enable_role_management=enable_role_management,
             admin_username=admin_username,
         )
 
-        # Mount to app
         admin.mount_to(app)
         admins[locale] = admin
-
         logger.info("Admin panel (%s) mounted at /%s/admin", locale, locale)
 
-    # Add redirect from /admin to /{default_locale}/admin
+    # Add middleware to redirect URLs with default locale to clean URLs
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request as StarletteRequest
     from starlette.responses import RedirectResponse
 
-    @app.get("/admin")
-    @app.get("/admin/")
-    async def admin_redirect():
-        return RedirectResponse(url=f"/{default_locale}/admin", status_code=307)
+    class AdminDefaultLocaleRedirectMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: StarletteRequest, call_next):
+            path = request.url.path
 
-    logger.info("/admin redirects to /%s/admin", default_locale)
+            # Check for /{default_locale}/admin/...
+            locale_prefix = f"/{default_locale}/admin"
+            if path.startswith(locale_prefix):
+                # Redirect to /admin/...
+                new_path = path[len(f"/{default_locale}") :]
+                # Preserve query string if present
+                if request.url.query:
+                    new_path = f"{new_path}?{request.url.query}"
+                return RedirectResponse(url=new_path, status_code=302)
+
+            return await call_next(request)
+
+    app.add_middleware(AdminDefaultLocaleRedirectMiddleware)
+
     logger.info("Markdown CRUD API available at /api/posts (authenticated)")
 
     if init_database:
@@ -422,6 +465,6 @@ def add_admin_to_app(
 
     logger.debug("Admin credentials: username=%s", admin_username)
     logger.info("Available locales: %s", ", ".join(locales))
-    logger.info("Access at: http://localhost:8000/%s/admin", default_locale)
+    logger.info("Access at: http://localhost:8000/admin")
 
     return admins

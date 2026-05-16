@@ -10,19 +10,38 @@ window.languageSwitcher = {
   availableLocales: {{ available_locales | tojson | safe }},
   localeNames: {{ locale_names | tojson | safe }},
   currentLocale: '{{ current_locale }}',
+  defaultLocale: {{ default_locale | tojson | safe }},
   
   switchTo: function(targetLocale) {
     const currentPath = window.location.pathname;
-    const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+    const queryString = window.location.search;
     
-    if (pathMatch) {
-      const restOfPath = pathMatch[2] || '';
-      const newPath = `/${targetLocale}/admin${restOfPath}`;
-      const queryString = window.location.search;
-      window.location.href = newPath + queryString;
+    let newPath;
+    
+    if (targetLocale === this.defaultLocale) {
+      const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+      if (pathMatch) {
+        const restOfPath = pathMatch[2] || '';
+        newPath = `/admin${restOfPath}`;
+      } else {
+        newPath = currentPath;
+      }
     } else {
-      window.location.href = `/${targetLocale}/admin`;
+      const defaultPathMatch = currentPath.match(/^\/admin(\/.*)?$/);
+      const localePathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+      
+      if (defaultPathMatch) {
+        const restOfPath = defaultPathMatch[1] || '';
+        newPath = `/${targetLocale}/admin${restOfPath}`;
+      } else if (localePathMatch) {
+        const restOfPath = localePathMatch[2] || '';
+        newPath = `/${targetLocale}/admin${restOfPath}`;
+      } else {
+        newPath = `/${targetLocale}/admin`;
+      }
     }
+    
+    window.location.href = newPath + queryString;
   },
   
   getLocaleName: function(locale) {

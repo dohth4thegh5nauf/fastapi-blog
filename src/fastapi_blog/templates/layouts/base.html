@@ -109,20 +109,30 @@ h4 {
     function switchLanguage(targetLocale) {
       const currentPath = window.location.pathname;
       const locales = {{ available_locales|tojson }};
+      const defaultLocale = {{ default_locale|tojson }};
       
-      // New URL structure: /{locale}/blog/posts
-      // Locale is the first segment
+      // New URL structure:
+      // - default locale: /blog/posts (no locale prefix)
+      // - other locales: /ru/blog/posts (locale prefix)
       const parts = currentPath.split('/').filter(p => p);
       
       let newPath;
-      if (parts.length > 0 && locales.includes(parts[0])) {
-        // Replace existing locale (first segment)
-        parts[0] = targetLocale;
+      if (targetLocale === defaultLocale) {
+        // Switching to default locale - remove locale prefix if present
+        if (parts.length > 0 && locales.includes(parts[0])) {
+          // Remove locale prefix
+          parts.shift();
+        }
         newPath = '/' + parts.join('/');
       } else {
-        // Insert locale as first segment
-        // Structure: /blog/posts → /{locale}/blog/posts
-        parts.unshift(targetLocale);
+        // Switching to non-default locale - add/replace locale prefix
+        if (parts.length > 0 && locales.includes(parts[0])) {
+          // Replace existing locale
+          parts[0] = targetLocale;
+        } else {
+          // Add locale prefix
+          parts.unshift(targetLocale);
+        }
         newPath = '/' + parts.join('/');
       }
       
