@@ -27,6 +27,26 @@ post:
   create: Create Post
   edit: Edit Post
   delete: Delete Post
+  # Markdown post editor
+  create_new: Create New Post
+  create: Create
+  edit_title: Edit
+  slug: Slug
+  slug_hint: URL-friendly identifier (e.g., my-post-title)
+  title: Title
+  date: Date
+  published: Published
+  "yes": "Yes"
+  "no": "No"
+  tags: Tags
+  tags_hint: Comma-separated tags
+  description: Description
+  content: Content (Markdown)
+  content_hint: Write your content in Markdown format
+  save: Save Post
+  cancel: Cancel
+  admin: Admin
+  posts: Posts
 
 # Role management
 role:
