@@ -270,11 +270,20 @@ class MarkdownEditView(CustomView):
                 status_code=404,
             )
 
+        # Get current locale and translations
+        from starlette_admin.i18n import get_locale
+
+        from .i18n import load_translations
+
+        locale = get_locale()
+        translations = load_translations(locale)
+        t = translations["post"]
+
         return templates.TemplateResponse(
             request=request,
             name=self.template_path,
             context={
-                "title": f"Edit: {post.title}",
+                "title": f"{t['edit_title']}: {post.title}",
                 "post": {
                     "slug": post.slug,
                     "title": post.title,
@@ -282,6 +291,7 @@ class MarkdownEditView(CustomView):
                     "frontmatter": post.frontmatter,
                 },
                 "base_url": request.scope["root_path"],
+                "t": t,
             },
         )
 
@@ -302,11 +312,20 @@ class MarkdownCreateView(CustomView):
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render create form."""
+        # Get current locale and translations
+        from starlette_admin.i18n import get_locale
+
+        from .i18n import load_translations
+
+        locale = get_locale()
+        translations = load_translations(locale)
+        t = translations["post"]
+
         return templates.TemplateResponse(
             request=request,
             name=self.template_path,
             context={
-                "title": "Create New Post",
+                "title": t["create_new"],
                 "post": {
                     "slug": "",
                     "title": "",
@@ -319,5 +338,6 @@ class MarkdownCreateView(CustomView):
                 },
                 "is_new": True,
                 "base_url": request.scope["root_path"],
+                "t": t,
             },
         )

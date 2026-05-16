@@ -27,6 +27,26 @@ post:
   create: Создать пост
   edit: Редактировать пост
   delete: Удалить пост
+  # Markdown post editor
+  create_new: Создать новый пост
+  create: Создать
+  edit_title: Редактировать
+  slug: URL
+  slug_hint: URL-идентификатор (например, my-post-title)
+  title: Заголовок
+  date: Дата
+  published: Опубликовано
+  "yes": Да
+  "no": Нет
+  tags: Теги
+  tags_hint: Теги через запятую
+  description: Описание
+  content: Содержание (Markdown)
+  content_hint: Напишите содержание в формате Markdown
+  save: Сохранить пост
+  cancel: Отмена
+  admin: Админ
+  posts: Посты
 
 # Role management
 role:
@@ -42,7 +62,7 @@ role:
 # Common actions
 action:
   save: Сохранить
-  cancel: Отменить
+  cancel: Отмена
   delete: Удалить
   edit: Редактировать
   create: Создать
