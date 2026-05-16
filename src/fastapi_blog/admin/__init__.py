@@ -144,6 +144,7 @@ def _create_admin_for_locale(
     admin.templates.env.globals["locale_names"] = locale_names
     admin.templates.env.globals["current_locale"] = locale
     admin.templates.env.globals["default_locale"] = default_locale
+    admin.templates.env.globals["admin_base_url"] = base_url
 
     # Add User view with translated labels
     user_view = UserModelView(User, icon="fa fa-users")
