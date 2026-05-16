@@ -98,17 +98,18 @@ def add_blog_to_fastapi(
     # Add redirects
     from starlette.responses import RedirectResponse
 
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        # Redirect to blog homepage (without locale for default)
-        if prefix is not None:
-            return RedirectResponse(url=f"/{prefix}/", status_code=302)
-        else:
-            return RedirectResponse(url="/", status_code=302)
+    # Only add root redirect when prefix is set
+    # When prefix=None, the blog router itself handles /
+    if prefix is not None:
 
-    @app.get("/blog", include_in_schema=False)
-    async def blog_redirect():
-        return RedirectResponse(url="/blog/", status_code=302)
+        @app.get("/", include_in_schema=False)
+        async def root_redirect():
+            return RedirectResponse(url=f"/{prefix}/", status_code=302)
+
+        # Add redirect from /{prefix} to /{prefix}/
+        @app.get(f"/{prefix}", include_in_schema=False)
+        async def blog_prefix_redirect():
+            return RedirectResponse(url=f"/{prefix}/", status_code=302)
 
     # Router controls:
     # 1. Main router without locale prefix (uses default_locale)
