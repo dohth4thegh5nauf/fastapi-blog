@@ -25,9 +25,11 @@ def test_no_duplication_when_not_added_manually():
         init_database=False,
     )
 
-    # Should have exactly one middleware
-    assert len(app.user_middleware) == 1
-    assert app.user_middleware[0].cls == SessionMiddleware
+    # Should have SessionMiddleware and AdminDefaultLocaleRedirectMiddleware
+    assert len(app.user_middleware) == 2
+    middleware_classes = [m.cls.__name__ for m in app.user_middleware]
+    assert "SessionMiddleware" in middleware_classes
+    assert "AdminDefaultLocaleRedirectMiddleware" in middleware_classes
 
 
 def test_warning_when_middleware_already_added():
@@ -61,8 +63,10 @@ def test_warning_when_middleware_already_added():
         assert issubclass(middleware_warnings[0].category, UserWarning)
         assert "add_session_middleware=False" in str(middleware_warnings[0].message)
 
-    # Should still have exactly one middleware (no duplication)
-    assert len(app.user_middleware) == 1
+    # Should have manually added SessionMiddleware only (admin skipped adding duplicate)
+    assert len(app.user_middleware) == 2  # Manual Session + Admin redirect middleware
+    middleware_classes = [m.cls.__name__ for m in app.user_middleware]
+    assert middleware_classes.count("SessionMiddleware") == 1
 
 
 def test_explicit_false_no_warning():
@@ -91,8 +95,10 @@ def test_explicit_false_no_warning():
         ]
         assert len(middleware_warnings) == 0
 
-    # Should still have exactly one middleware
-    assert len(app.user_middleware) == 1
+    # Should have manually added SessionMiddleware + admin redirect middleware
+    assert len(app.user_middleware) == 2
+    middleware_classes = [m.cls.__name__ for m in app.user_middleware]
+    assert middleware_classes.count("SessionMiddleware") == 1
 
 
 def test_multiple_calls_with_false():

@@ -95,24 +95,50 @@ def add_blog_to_fastapi(
     )
     templates = Jinja2Templates(env=env)
 
-    # Add redirects for paths without locale
+    # Add redirects
     from starlette.responses import RedirectResponse
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():
-        # Redirect to blog homepage with default locale
+        # Redirect to blog homepage (without locale for default)
         if prefix is not None:
-            return RedirectResponse(url=f"/{default_locale}/{prefix}/", status_code=302)
+            return RedirectResponse(url=f"/{prefix}/", status_code=302)
         else:
-            return RedirectResponse(url=f"/{default_locale}/", status_code=302)
+            return RedirectResponse(url="/", status_code=302)
 
     @app.get("/blog", include_in_schema=False)
     async def blog_redirect():
-        return RedirectResponse(url=f"/{default_locale}/blog/", status_code=302)
+        return RedirectResponse(url="/blog/", status_code=302)
 
-    # Router controls - mount for each locale with pattern /{locale}/blog
-    # For each locale, create a router and mount it
+    # Router controls:
+    # 1. Main router without locale prefix (uses default_locale)
+    # 2. Routers for non-default locales with /{locale} prefix
+    # 3. Redirect from /{default_locale} to clean URLs
+
+    # Create main router for default locale (no locale in URL)
+    main_router = get_blog_router(
+        templates=templates,
+        favorite_post_ids=favorite_post_ids,
+        strict=strict_frontmatter,
+        sanitize_html=sanitize_html,
+        posts_dirname=posts_dirname,
+        pages_dirname=pages_dirname,
+        locales=locales,
+        default_locale=default_locale,
+        locale=default_locale,
+    )
+
+    # Mount main router without locale prefix
+    if prefix is not None:
+        app.include_router(main_router, prefix=f"/{prefix}", tags=["blog"])
+    else:
+        app.include_router(main_router, tags=["blog"])
+
+    # Create routers for non-default locales
     for locale in locales:
+        if locale == default_locale:
+            continue  # Skip default locale - it's already mounted
+
         router = get_blog_router(
             templates=templates,
             favorite_post_ids=favorite_post_ids,
@@ -122,33 +148,48 @@ def add_blog_to_fastapi(
             pages_dirname=pages_dirname,
             locales=locales,
             default_locale=default_locale,
-            locale=locale,  # Pass current locale to router
+            locale=locale,
         )
 
-        # Mount with prefix /{locale}/blog
+        # Mount with locale prefix
         if prefix is not None:
             app.include_router(router, prefix=f"/{locale}/{prefix}", tags=["blog"])
         else:
             app.include_router(router, prefix=f"/{locale}", tags=["blog"])
 
-    # Add legacy routes without locale for backward compatibility
-    # These will use Accept-Language header to determine locale
-    legacy_router = get_blog_router(
-        templates=templates,
-        favorite_post_ids=favorite_post_ids,
-        strict=strict_frontmatter,
-        sanitize_html=sanitize_html,
-        posts_dirname=posts_dirname,
-        pages_dirname=pages_dirname,
-        locales=locales,
-        default_locale=default_locale,
-        locale=None,  # No specific locale - use Accept-Language
-    )
+    # Add middleware to redirect URLs with default locale to clean URLs
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request as StarletteRequest
 
-    if prefix is not None:
-        app.include_router(legacy_router, prefix=f"/{prefix}", tags=["blog"])
-    else:
-        app.include_router(legacy_router, tags=["blog"])
+    class DefaultLocaleRedirectMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: StarletteRequest, call_next):
+            path = request.url.path
+
+            # Check if path starts with /{default_locale}
+            if prefix is not None:
+                # Check for /{default_locale}/blog/...
+                locale_prefix = f"/{default_locale}/{prefix}"
+                if path.startswith(locale_prefix):
+                    # Redirect to /blog/...
+                    new_path = path[len(f"/{default_locale}") :]
+                    # Preserve query string if present
+                    if request.url.query:
+                        new_path = f"{new_path}?{request.url.query}"
+                    return RedirectResponse(url=new_path, status_code=302)
+            else:
+                # Check for /{default_locale}/...
+                locale_prefix = f"/{default_locale}/"
+                if path.startswith(locale_prefix):
+                    # Redirect to /...
+                    new_path = path[len(f"/{default_locale}") :]
+                    # Preserve query string if present
+                    if request.url.query:
+                        new_path = f"{new_path}?{request.url.query}"
+                    return RedirectResponse(url=new_path, status_code=302)
+
+            return await call_next(request)
+
+    app.add_middleware(DefaultLocaleRedirectMiddleware)
 
     # Optionally include REST API for post management
     if include_api:

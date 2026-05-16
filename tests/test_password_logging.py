@@ -64,8 +64,8 @@ def test_logger_info_messages(caplog):
         )
 
     # Check expected INFO messages
-    assert "Admin panel (en) mounted at /en/admin" in caplog.text
+    assert "Admin panel (en) mounted at /admin" in caplog.text
     assert "Admin panel (ru) mounted at /ru/admin" in caplog.text
-    assert "/admin redirects to /en/admin" in caplog.text
+    # No redirect message in new architecture (middleware handles it)
     assert "Available locales: en, ru" in caplog.text
-    assert "Access at: http://localhost:8000/en/admin" in caplog.text
+    assert "Access at: http://localhost:8000/admin" in caplog.text

@@ -33,8 +33,8 @@ def test_setup_fastapi_blog_basic():
     # Blog routes should be present
     assert any("/blog" in path for path in routes), "Blog routes not found"
 
-    # Admin routes should be present (new structure: /en/admin)
-    assert any("/en/admin" in path for path in routes), "Admin routes not found"
+    # Admin routes should be present (new structure: /admin for default locale)
+    assert any("/admin" in path for path in routes), "Admin routes not found"
 
 
 def test_setup_fastapi_blog_with_api():
@@ -75,10 +75,13 @@ def test_setup_fastapi_blog_multiple_locales():
     assert "en" in admins
     assert "ru" in admins
 
-    # Verify both admin instances are mounted (new structure: /en/admin, /ru/admin)
+    # Verify both admin instances are mounted
+    # default_locale="ru" means: /admin for Russian, /en/admin for English
     routes = [route.path for route in app.routes]
+    assert any("/admin" in path and "/en/admin" not in path for path in routes), (
+        "Default (Russian) admin not found"
+    )
     assert any("/en/admin" in path for path in routes), "English admin not found"
-    assert any("/ru/admin" in path for path in routes), "Russian admin not found"
 
 
 def test_setup_fastapi_blog_with_role_management():
