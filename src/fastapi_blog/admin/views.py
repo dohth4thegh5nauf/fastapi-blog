@@ -145,6 +145,13 @@ class HomeView(CustomView):
     - Top tags by usage
     """
 
+    def __init__(
+        self, label: str = "Home", icon: str = "fa fa-home", locale: str = "en"
+    ):
+        """Initialize home view with locale."""
+        super().__init__(label=label, icon=icon)
+        self.locale = locale
+
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render custom home page with blog statistics."""
         from .markdown_crud import get_posts_directory
@@ -196,10 +203,8 @@ class HomeView(CustomView):
             "total_tags": len(all_tags),
         }
 
-        # Get current locale for translations
-        from starlette_admin.i18n import get_locale
-
-        locale = get_locale()
+        # Use locale from instance (set during initialization)
+        locale = self.locale
 
         # Translations dictionary
         translations = {
