@@ -5,6 +5,17 @@ locale:
   code: en
   name: English
 
+# Authentication
+auth:
+  login_to_account: Login to your account
+  sign_in: Sign In
+  username: Username
+  password: Password
+  remember_me: Remember me
+  login: Login
+  logout: Logout
+  invalid_credentials: Invalid username or password
+
 # Navigation and menu items
 nav:
   home: Home
