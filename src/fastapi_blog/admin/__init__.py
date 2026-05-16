@@ -11,11 +11,12 @@ import os
 import warnings
 from pathlib import Path
 
-import fastapi_blog
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from starlette_admin.contrib.sqla import Admin
 from starlette_admin.i18n import I18nConfig
+
+import fastapi_blog
 
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
@@ -25,6 +26,7 @@ from .models import Post, User
 from .models_role import Role, UserWithRoles
 from .views import HomeView, PostModelView, UserModelView
 from .views_role import RoleModelView, UserWithRolesModelView
+
 
 try:
     from starlette_admin.i18n import lazy_gettext as _
@@ -398,7 +400,6 @@ def add_admin_to_app(
     default_admin.mount_to(app)
     admins[default_locale] = default_admin
     logger.info("Admin panel (%s) mounted at /admin", default_locale)
-
 
     # Create admin instances for non-default locales
     for locale in locales:

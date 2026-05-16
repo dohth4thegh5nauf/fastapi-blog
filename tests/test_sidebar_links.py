@@ -250,9 +250,10 @@ def test_admin_sidebar_links_respect_locale():
 
     client = TestClient(app)
 
-    # Login
+    # Login to default admin (English)
+    # Note: default locale uses /admin/login, not /admin/en/login
     response = client.post(
-        "/admin/en/login",
+        "/admin/login",
         data={"username": "admin", "password": "testpass"},
         follow_redirects=False,
     )
@@ -260,7 +261,8 @@ def test_admin_sidebar_links_respect_locale():
     cookies = response.cookies
 
     # Access Russian admin
-    response = client.get("/admin/ru/user/list", cookies=cookies)
+    # Note: Russian admin is at /ru/admin/, not /admin/ru/
+    response = client.get("/ru/admin/user/list", cookies=cookies)
     assert response.status_code == 200
 
     # Find all admin navigation links in sidebar
@@ -272,12 +274,15 @@ def test_admin_sidebar_links_respect_locale():
     # Find all hrefs that point to /admin
     all_hrefs = re.findall(r'href="([^"]*)"', html)
     admin_links = [
-        link
-        for link in all_hrefs
-        if "/admin" in link
-        and "/statics/" not in link
-        and not link.startswith("http://")
-        and not link.startswith("https://")
+        link for link in all_hrefs if "/admin" in link and "/statics/" not in link
+    ]
+
+    # Strip http://testserver prefix if present
+    admin_links = [
+        link.replace("http://testserver", "")
+        if link.startswith("http://testserver")
+        else link
+        for link in admin_links
     ]
 
     # Filter to likely navigation links (short paths, not detail pages)
