@@ -88,3 +88,28 @@ blog:
   about: О блоге
   not_found: "404"
   all_rights_reserved: Все права защищены
+
+# Home page
+home:
+  title: Главная
+  admin: Админ
+  total_posts: Всего постов
+  all_posts_in_system: Все посты в системе
+  published: Опубликовано
+  live_on_blog: Живые на блоге
+  drafts: Черновики
+  not_yet_published: Ещё не опубликовано
+  total_tags: Всего тегов
+  unique_categories: Уникальных категорий
+  latest_posts: Последние посты
+  top_tags: Популярные теги
+  view: Посмотреть
+  no_posts_yet: Пока нет постов
+  create_first_post: Создайте свой первый пост
+  create_post: Создать пост
+  no_tags_yet: Пока нет тегов
+  post: пост
+  posts: постов
+  new_post: Новый пост
+  all_posts: Все посты
+  users: Пользователи
