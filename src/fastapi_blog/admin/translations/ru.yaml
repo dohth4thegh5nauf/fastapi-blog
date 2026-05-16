@@ -5,6 +5,17 @@ locale:
   code: ru
   name: Русский
 
+# Authentication
+auth:
+  login_to_account: Войти в аккаунт
+  sign_in: Войти
+  username: Имя пользователя
+  password: Пароль
+  remember_me: Запомнить меня
+  login: Вход
+  logout: Выход
+  invalid_credentials: Неверное имя пользователя или пароль
+
 # Navigation and menu items
 nav:
   home: Главная
