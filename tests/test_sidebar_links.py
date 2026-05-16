@@ -298,7 +298,7 @@ def test_admin_sidebar_links_respect_locale():
     bad_links = [link for link in nav_links if not link.startswith("/ru/admin")]
 
     if bad_links:
-        print(f"\n⚠️  Найдены ссылки БЕЗ /ru/ префикса:")
+        print("\n⚠️  Найдены ссылки БЕЗ /ru/ префикса:")
         for link in bad_links:
             print(f"  {link}")
 

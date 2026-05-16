@@ -64,8 +64,7 @@ homepage = "https://github.com/pydanny/fastapi-blog"
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-"*" = ["*.*"]
-"fastapi_blog.translations" = ["*/LC_MESSAGES/*.mo", "*/LC_MESSAGES/*.po"]
+fastapi_blog = ["**/*.html", "**/*.mo", "**/*.po", "py.typed"]
 
 
 # Mypy
