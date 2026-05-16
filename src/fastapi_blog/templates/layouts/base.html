@@ -7,6 +7,20 @@
     {% else %}
         <title>Daniel Roy Greenfeld</title>
     {% endif %}
+    
+    {# SEO: Canonical URL #}
+    {% if canonical_url %}
+    <link rel="canonical" href="{{ canonical_url }}">
+    {% endif %}
+    
+    {# SEO: hreflang alternates - only on canonical pages, not on duplicates #}
+    {% if is_canonical and alternate_urls %}
+    {% for lang, url in alternate_urls.items() %}
+    <link rel="alternate" hreflang="{{ lang }}" href="{{ url }}">
+    {% endfor %}
+    <link rel="alternate" hreflang="x-default" href="{{ alternate_urls[default_locale] }}">
+    {% endif %}
+    
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/normalize-css@2.3.1/normalize.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sakura.css/css/sakura.css" type="text/css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pygments-css@1.0.0/friendly.min.css">

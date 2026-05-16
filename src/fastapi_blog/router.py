@@ -20,8 +20,64 @@ def get_blog_router(
     locales: list[str] = ["en"],
     default_locale: str = "en",
     locale: str | None = None,  # If set, creates routes for this specific locale
+    prefix: str | None = "blog",  # URL prefix (e.g., 'blog')
 ) -> APIRouter:
     router = APIRouter()
+
+    def _get_canonical_url(request: Request) -> str:
+        """Get canonical URL for current page.
+
+        Rules:
+        - If current locale is default: canonical = current URL without query string
+        - If current locale is non-default: canonical = current URL without query string
+        - If URL contains default locale prefix (e.g., /en/blog/...): canonical = URL without /en prefix
+        """
+        base = str(request.base_url).rstrip("/")
+        path = request.url.path
+
+        # Remove default locale prefix if present (these are duplicates)
+        default_prefix = f"/{default_locale}"
+        if prefix is not None:
+            duplicate_pattern = f"/{default_locale}/{prefix}"
+            if path.startswith(duplicate_pattern):
+                path = path[len(default_prefix) :]  # Remove /en from /en/blog/...
+        else:
+            if path.startswith(default_prefix + "/"):
+                path = path[len(default_prefix) :]  # Remove /en from /en/...
+
+        return base + path
+
+    def _get_alternate_urls(request: Request) -> dict[str, str]:
+        """Get alternate URLs for all locales.
+
+        Returns dict mapping locale codes to absolute URLs.
+        """
+        base = str(request.base_url).rstrip("/")
+        path = request.url.path
+
+        # Normalize path: remove any locale prefix to get the "clean" path
+        clean_path = path
+        for loc in locales:
+            loc_prefix = f"/{loc}"
+            if prefix is not None:
+                pattern = f"/{loc}/{prefix}"
+                if path.startswith(pattern):
+                    clean_path = path[len(loc_prefix) :]  # Remove /ru from /ru/blog/...
+                    break
+            else:
+                if path.startswith(loc_prefix + "/"):
+                    clean_path = path[len(loc_prefix) :]  # Remove /ru from /ru/...
+                    break
+
+        # Build URLs for each locale
+        result = {}
+        for loc in locales:
+            if loc == default_locale:
+                result[loc] = base + clean_path  # No prefix for default
+            else:
+                result[loc] = base + f"/{loc}" + clean_path  # Prefix for non-default
+
+        return result
 
     def _get_locale(request: Request) -> str:
         """Determine locale from Accept-Language header when locale is not specified in URL."""
@@ -48,6 +104,16 @@ def get_blog_router(
         context["locale"] = current_locale
         context["available_locales"] = locales
         context["default_locale"] = default_locale
+
+        # Add canonical URL and alternate URLs for SEO
+        canonical_url = _get_canonical_url(request)
+        context["canonical_url"] = canonical_url
+        context["alternate_urls"] = _get_alternate_urls(request)
+
+        # Check if current page is canonical (not a duplicate)
+        current_url = str(request.url).split("?")[0]  # Remove query string
+        context["is_canonical"] = canonical_url == current_url
+
         return context
 
     def _list_posts() -> tuple[dict, ...]:
