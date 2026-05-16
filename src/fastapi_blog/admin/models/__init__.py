@@ -3,6 +3,7 @@
 from .base import Base, Post, User
 from .role import Role, UserWithRoles
 
+
 __all__ = [
     "Base",
     "User",

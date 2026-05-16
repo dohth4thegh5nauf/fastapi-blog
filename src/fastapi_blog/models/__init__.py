@@ -12,6 +12,7 @@ from .api import (
     payload_model,
 )
 
+
 __all__ = [
     "SLUG_PATTERN",
     "Slug",
