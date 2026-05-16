@@ -203,71 +203,11 @@ class HomeView(CustomView):
             "total_tags": len(all_tags),
         }
 
-        # Use locale from instance (set during initialization)
-        locale = self.locale
+        # Load translations from YAML files
+        from .i18n import load_translations
 
-        # Translations dictionary
-        translations = {
-            "ru": {
-                "home": "Главная",
-                "admin": "Админ",
-                "total_posts": "Всего постов",
-                "all_posts_in_system": "Все посты в системе",
-                "published": "Опубликовано",
-                "live_on_blog": "Живые на блоге",
-                "drafts": "Черновики",
-                "not_yet_published": "Ещё не опубликовано",
-                "total_tags": "Всего тегов",
-                "unique_categories": "Уникальных категорий",
-                "latest_posts": "Последние посты",
-                "top_tags": "Популярные теги",
-                "view": "Посмотреть",
-                "no_posts_yet": "Пока нет постов",
-                "create_first_post": "Создайте свой первый пост",
-                "create_post": "Создать пост",
-                "no_tags_yet": "Пока нет тегов",
-                "post": "пост",
-                "posts": "постов",
-                "fastapi_blog_admin": "Админ FastAPI Blog",
-                "home_desc": "Это кастомная домашняя страница, которая показывает статистику блога, последние посты и популярные теги.",
-                "navigate_desc": "Используйте меню слева для управления постами, пользователями и настройками.",
-                "quick_actions": "Быстрые действия",
-                "new_post": "Новый пост",
-                "all_posts": "Все посты",
-                "users": "Пользователи",
-            },
-            "en": {
-                "home": "Home",
-                "admin": "Admin",
-                "total_posts": "Total Posts",
-                "all_posts_in_system": "All posts in the system",
-                "published": "Published",
-                "live_on_blog": "Live on the blog",
-                "drafts": "Drafts",
-                "not_yet_published": "Not yet published",
-                "total_tags": "Total Tags",
-                "unique_categories": "Unique categories",
-                "latest_posts": "Latest Posts",
-                "top_tags": "Top Tags",
-                "view": "View",
-                "no_posts_yet": "No posts yet",
-                "create_first_post": "Create your first blog post to get started",
-                "create_post": "Create Post",
-                "no_tags_yet": "No tags yet",
-                "post": "post",
-                "posts": "posts",
-                "fastapi_blog_admin": "FastAPI Blog Admin",
-                "home_desc": "This is a custom home page that displays your blog statistics, latest posts, and popular tags.",
-                "navigate_desc": "Navigate using the menu on the left to manage posts, users, and settings.",
-                "quick_actions": "Quick Actions",
-                "new_post": "New Post",
-                "all_posts": "All Posts",
-                "users": "Users",
-            },
-        }
-
-        # Get translations for current locale (default to English)
-        t = translations.get(locale, translations["en"])
+        translations = load_translations(self.locale)
+        t = translations["home"]
 
         return templates.TemplateResponse(
             request,
