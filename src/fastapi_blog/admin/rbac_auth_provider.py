@@ -11,7 +11,7 @@ from starlette.responses import RedirectResponse, Response
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.exceptions import FormValidationError, LoginFailed
 
-from .models import User  # from .models.base
+from .models import User
 from .views import get_pwd_context
 
 

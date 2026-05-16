@@ -60,7 +60,7 @@ admins = fastapi_blog.add_admin_to_app(
 # Add role management views to each locale admin
 for locale, admin in admins.items():
     # Add Role management view
-    from fastapi_blog.admin.models_role import Role, UserWithRoles
+    from fastapi_blog.admin.models import Role, UserWithRoles
 
     role_view = RoleModelView(Role, icon="fa fa-shield")
     admin.add_view(role_view)

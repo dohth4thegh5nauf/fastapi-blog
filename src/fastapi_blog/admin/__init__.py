@@ -158,7 +158,7 @@ def _create_admin_for_locale(
     if enable_role_management:
         from starlette_admin import DropDown
 
-        from .models_role import Role, UserWithRoles
+        from .models import Role, UserWithRoles
         from .views_role import RoleModelView, UserWithRolesModelView
 
         # Get category label from translations

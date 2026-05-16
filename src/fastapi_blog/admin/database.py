@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from .models import Base  # from .models.base
+from .models import Base
 
 
 def get_database_url() -> str:
