@@ -2,35 +2,6 @@
 
 {% block head %}
 {{ super() }}
-<script>
-// Common language switching utility
-// Available in all pages via window.languageSwitcher
-window.languageSwitcher = {
-  availableLocales: {{ available_locales | tojson | safe }},
-  localeNames: {{ locale_names | tojson | safe }},
-  currentLocale: '{{ current_locale }}',
-  
-  // Switch to a different locale
-  switchTo: function(targetLocale) {
-    const currentPath = window.location.pathname;
-    const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
-    
-    if (pathMatch) {
-      const restOfPath = pathMatch[2] || '';
-      const newPath = `/${targetLocale}/admin${restOfPath}`;
-      const queryString = window.location.search;
-      window.location.href = newPath + queryString;
-    } else {
-      window.location.href = `/${targetLocale}/admin`;
-    }
-  },
-  
-  // Get display name for a locale
-  getLocaleName: function(locale) {
-    return this.localeNames[locale] || locale.toUpperCase();
-  }
-};
-</script>
 {% endblock %}
 
 {% block head_css %}
@@ -222,6 +193,31 @@ body,
 <!-- Custom theme and language switchers -->
 <script>
 (function() {
+  // Define language switcher first
+  window.languageSwitcher = {
+    availableLocales: {{ available_locales | tojson | safe }},
+    localeNames: {{ locale_names | tojson | safe }},
+    currentLocale: '{{ current_locale }}',
+    
+    switchTo: function(targetLocale) {
+      const currentPath = window.location.pathname;
+      const pathMatch = currentPath.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
+      
+      if (pathMatch) {
+        const restOfPath = pathMatch[2] || '';
+        const newPath = `/${targetLocale}/admin${restOfPath}`;
+        const queryString = window.location.search;
+        window.location.href = newPath + queryString;
+      } else {
+        window.location.href = `/${targetLocale}/admin`;
+      }
+    },
+    
+    getLocaleName: function(locale) {
+      return this.localeNames[locale] || locale.toUpperCase();
+    }
+  };
+  
   const ls = window.languageSwitcher;
   
   document.addEventListener('DOMContentLoaded', function() {
