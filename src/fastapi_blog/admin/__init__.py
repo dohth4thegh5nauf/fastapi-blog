@@ -8,9 +8,10 @@ Provides starlette-admin based administration interface with:
 
 import logging
 import os
-import pathlib
 import warnings
+from pathlib import Path
 
+import fastapi_blog
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from starlette_admin.contrib.sqla import Admin
@@ -19,10 +20,11 @@ from starlette_admin.i18n import I18nConfig
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
+from .i18n import get_all_locale_names, load_translations
 from .models import Post, User
 from .models_role import Role, UserWithRoles
+from .views import HomeView, PostModelView, UserModelView
 from .views_role import RoleModelView, UserWithRolesModelView
-
 
 try:
     from starlette_admin.i18n import lazy_gettext as _
@@ -32,19 +34,12 @@ except ImportError:
         return message
 
 
-# Import i18n utilities
-from .i18n import get_all_locale_names, load_translations
-
-# NOTE: Custom translation loading removed - now we create separate admin instances
-# for each locale instead of dynamically switching translations
-# Import views after translations are loaded and locale is set
-from .views import HomeView, PostModelView, UserModelView  # noqa: E402
-
-
 # Set up logger
 logger = logging.getLogger("fastapi_blog.admin")
 
-# File-based views removed - using CustomView instead
+# Define an absolute path to the templates directory
+TEMPLATES_DIR = Path(fastapi_blog.__file__).parent / "admin" / "templates"
+
 
 __all__ = [
     "add_admin_to_app",
@@ -127,12 +122,14 @@ def _create_admin_for_locale(
     posts_label = translations["nav"]["posts"]
 
     # Create admin instance
+    # Use a unique route_name for each locale to ensure url_for generates correct URLs.
     admin = Admin(
         engine,
         title=title,
         base_url=base_url,
+        route_name=f"admin_{locale}",  # Unique route name
         auth_provider=auth_provider,
-        templates_dir=templates_dir,
+        templates_dir=templates_dir,  # Absolute path to custom templates
         i18n_config=i18n_config,
         debug=os.getenv("DEBUG", "false").lower() == "true",
         index_view=HomeView(label=home_label, icon="fa fa-home"),
@@ -144,6 +141,7 @@ def _create_admin_for_locale(
     admin.templates.env.globals["locale_names"] = locale_names
     admin.templates.env.globals["current_locale"] = locale
     admin.templates.env.globals["default_locale"] = default_locale
+    # This is still needed for templates that don't use url_for (e.g., logo, logout)
     admin.templates.env.globals["admin_base_url"] = base_url
 
     # Add User view with translated labels
@@ -367,13 +365,8 @@ def add_admin_to_app(
     # Note: admin_username is passed directly to role management views
     # to avoid app.state identity issues with uvicorn --reload
 
-    # Get templates directory for custom templates
-    from pathlib import Path
-
-    import fastapi_blog
-
-    pkg_path = Path(fastapi_blog.__file__).parent
-    templates_dir = str(pkg_path / "admin" / "templates")
+    # Get absolute path to templates directory
+    templates_dir = str(TEMPLATES_DIR)
 
     # Create admin instances:
     # - Default locale at /admin (no locale prefix)
@@ -400,9 +393,12 @@ def add_admin_to_app(
         admin_username=admin_username,
     )
 
+    # Mount the default admin instance.
+    # Note: We mount to the app with the unique route_name.
     default_admin.mount_to(app)
     admins[default_locale] = default_admin
     logger.info("Admin panel (%s) mounted at /admin", default_locale)
+
 
     # Create admin instances for non-default locales
     for locale in locales:
