@@ -156,3 +156,72 @@ def test_sidebar_links_on_non_default_locale_homepage():
     # Navigation links should have /ru/ prefix
     assert 'href="/ru/blog/posts"' in response.text
     assert 'href="/ru/blog/tags"' in response.text
+
+
+def test_no_unprefixed_blog_links_on_ru_pages():
+    """Regression test: На русских страницах НЕ должно быть ссылок /blog/ без /ru/ префикса.
+
+    Это защита от регрессии - если где-то в шаблонах останется url_for вместо locale_url_for,
+    или если middleware начнёт редиректить /ru/blog/... на /blog/..., этот тест поймает проблему.
+    """
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # Проверяем несколько страниц
+    test_pages = [
+        "/ru/blog/",
+        "/ru/blog/posts",
+        "/ru/blog/tags",
+    ]
+
+    for page_url in test_pages:
+        response = client.get(page_url)
+        assert response.status_code == 200, f"Page {page_url} failed to load"
+
+        # Извлекаем все href из body (не из head, т.к. там canonical и hreflang)
+        html = response.text
+        body_start = html.find("<body")
+        assert body_start > 0, f"No <body> tag found in {page_url}"
+        body_html = html[body_start:]
+
+        # Находим все href
+        import re
+
+        hrefs_in_body = re.findall(r'href="([^"]+)"', body_html)
+
+        # Фильтруем только внутренние ссылки на /blog
+        blog_links = [
+            h for h in hrefs_in_body if h.startswith("/blog") or "/blog/" in h
+        ]
+
+        # Проверяем что НИ ОДНА ссылка на blog не идёт без /ru/ префикса
+        # (кроме абсолютных URL типа http://testserver/blog/ которые могут быть в тестах)
+        for href in blog_links:
+            # Пропускаем абсолютные URLs
+            if href.startswith("http://") or href.startswith("https://"):
+                continue
+
+            assert href.startswith("/ru/blog"), (
+                f"На странице {page_url} найдена ссылка без /ru/ префикса: {href}"
+            )
+
+
+def test_no_redirect_from_ru_blog_to_default():
+    """Regression test: Переходы на /ru/blog/... НЕ должны редиректить на /blog/..."""  # noqa: E501
+    app = FastAPI()
+    fastapi_blog.add_blog_to_fastapi(app, locales=["en", "ru"], default_locale="en")
+    client = TestClient(app)
+
+    # Проверяем что эти URL возвращают 200, а не редирект
+    test_urls = [
+        "/ru/blog/",
+        "/ru/blog/posts",
+        "/ru/blog/tags",
+    ]
+
+    for url in test_urls:
+        response = client.get(url, follow_redirects=False)
+        assert response.status_code == 200, (
+            f"URL {url} редиректит (status {response.status_code}) вместо отображения страницы"
+        )
