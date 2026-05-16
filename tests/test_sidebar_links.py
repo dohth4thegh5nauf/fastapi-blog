@@ -274,15 +274,14 @@ def test_admin_sidebar_links_respect_locale():
     # Find all hrefs that point to /admin
     all_hrefs = re.findall(r'href="([^"]*)"', html)
     admin_links = [
-        link
-        for link in all_hrefs
-        if "/admin" in link
-        and "/statics/" not in link
+        link for link in all_hrefs if "/admin" in link and "/statics/" not in link
     ]
 
     # Strip http://testserver prefix if present
     admin_links = [
-        link.replace("http://testserver", "") if link.startswith("http://testserver") else link
+        link.replace("http://testserver", "")
+        if link.startswith("http://testserver")
+        else link
         for link in admin_links
     ]
 
