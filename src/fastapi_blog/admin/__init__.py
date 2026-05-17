@@ -387,6 +387,7 @@ def add_admin_to_app(
         username=admin_username,
         password=admin_password,
         redirect_after_login="/admin/user/list",
+        locale=default_locale,
     )
 
     default_admin = _create_admin_for_locale(
@@ -415,6 +416,7 @@ def add_admin_to_app(
             username=admin_username,
             password=admin_password,
             redirect_after_login=f"/{locale}/admin/user/list",
+            locale=locale,
         )
 
         admin = _create_admin_for_locale(
