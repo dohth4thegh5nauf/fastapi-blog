@@ -93,15 +93,64 @@ class SimpleAuthProvider(AuthProvider):
             }
             return key_mapping.get(key, key)
 
-        # Get the login template from admin's template environment
-        context = {
-            "request": request,
-            "admin": admin,
-            "_": _,  # Our custom translation function
-            "login_logo_url": admin.login_logo_url
-            if hasattr(admin, "login_logo_url")
-            else None,
-            "logo_url": admin.logo_url if hasattr(admin, "logo_url") else None,
-        }
+        # Handle GET request - show login form
+        if request.method == "GET":
+            context = {
+                "request": request,
+                "admin": admin,
+                "_": _,
+                "_is_login_path": True,
+                "login_logo_url": admin.login_logo_url
+                if hasattr(admin, "login_logo_url")
+                else None,
+                "logo_url": admin.logo_url if hasattr(admin, "logo_url") else None,
+            }
+            return admin.templates.TemplateResponse(request, "login.html", context)
 
-        return admin.templates.TemplateResponse(request, "login.html", context)
+        # Handle POST request - process login
+        form = await request.form()
+        try:
+            return await self.login(
+                form.get("username"),  # type: ignore
+                form.get("password"),  # type: ignore
+                form.get("remember_me") == "on",
+                request,
+                RedirectResponse(
+                    request.query_params.get("next")
+                    or request.url_for(admin.route_name + ":index"),
+                    status_code=HTTP_303_SEE_OTHER,
+                ),
+            )
+        except FormValidationError as errors:
+            context = {
+                "request": request,
+                "admin": admin,
+                "_": _,
+                "form_errors": errors,
+                "_is_login_path": True,
+                "login_logo_url": admin.login_logo_url
+                if hasattr(admin, "login_logo_url")
+                else None,
+                "logo_url": admin.logo_url if hasattr(admin, "logo_url") else None,
+            }
+            return admin.templates.TemplateResponse(
+                request,
+                "login.html",
+                context,
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except LoginFailed as error:
+            context = {
+                "request": request,
+                "admin": admin,
+                "_": _,
+                "error": error.msg,
+                "_is_login_path": True,
+                "login_logo_url": admin.login_logo_url
+                if hasattr(admin, "login_logo_url")
+                else None,
+                "logo_url": admin.logo_url if hasattr(admin, "logo_url") else None,
+            }
+            return admin.templates.TemplateResponse(
+                request, "login.html", context, status_code=HTTP_400_BAD_REQUEST
+            )
