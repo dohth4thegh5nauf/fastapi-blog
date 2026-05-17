@@ -5,8 +5,13 @@ from typing import TYPE_CHECKING
 
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
+from starlette.status import (
+    HTTP_303_SEE_OTHER,
+    HTTP_400_BAD_REQUEST,
+    HTTP_422_UNPROCESSABLE_ENTITY,
+)
 from starlette_admin.auth import AdminUser, AuthProvider
-from starlette_admin.exceptions import LoginFailed
+from starlette_admin.exceptions import FormValidationError, LoginFailed
 
 from .i18n import load_translations
 
