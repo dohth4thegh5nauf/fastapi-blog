@@ -1,8 +1,8 @@
 # Configurable Frontmatter Schema
 
-> **Status:** step 1 of 4. The schema object and the generated Pydantic model are
-> implemented. The blog, REST API and admin still use the built-in fields; they
-> will be switched to the schema in the next steps (see "Roadmap").
+> **Status:** step 2 of 4. The public blog (`/blog`) already uses the schema. The
+> REST API and the admin panel still use the built-in fields; they will be switched
+> in the next steps (see "Roadmap").
 
 ## Why
 
@@ -77,26 +77,56 @@ schema = FrontmatterSchema.from_file("schema.yaml")
 
 Field names must be Python identifiers that don't start with `_` or `model_` and
 don't clash with `pydantic.BaseModel` attributes (for example `json` or `copy`).
-For such keys use another name plus an `alias`. Names and aliases share one
+`slug` and `content` are reserved: the blog sets them on every post (the file name
+and the rendered text). For such keys use another name plus an `alias`, for example
+`FieldSpec("post_slug", alias="slug")`. Names and aliases share one
 namespace, so they can't clash with each other.
 
 An empty YAML value for a list or dict field (`tags:`) is read as an empty
 container.
 
+## Using a schema in the blog
+
+```python
+app = FastAPI()
+fastapi_blog.add_blog_to_fastapi(app, frontmatter_schema=schema)
+```
+
+The blog reads each post with the schema and looks at the **roles**, not at field
+names. The same applies to `helpers.list_posts(schema=...)` and `get_blog_router(
+frontmatter_schema=...)`. When `frontmatter_schema` is given, `strict_frontmatter`
+is ignored: set `extra` on the schema instead. Files that don't match the schema
+are skipped with a warning, as before.
+
 ## Roles
 
 A role tells the blog what a field means without hardcoding its name:
 
-| Role | Required type | Planned use |
+| Role | Required type | What the blog does with it |
 | --- | --- | --- |
-| `title` | `str` | Page title |
-| `date` | `str`, `date`, `datetime` | Sort key |
-| `published` | `bool` | Published/draft filter |
-| `tags` | `list[str]` | Tag pages |
-| `description` | `str` | Meta description, snippets |
+| `title` | `str` | Page and list titles. Without a value the slug is shown |
+| `date` | `str`, `date`, `datetime` | Sort key (newest first) and the date shown in lists |
+| `published` | `bool` | Published/draft filter (`published=False` returns drafts) |
+| `tags` | `list[str]` | Tag list, `/tags` and `/tags/{tag}` pages |
+| `description` | `str` | Short text in post lists |
 
-Each role is bound to at most one field. A role that isn't bound disables the
-related feature (no `tags` role means no tag pages).
+Each role is bound to at most one field. Templates and routes receive every bound
+role under its own name (`post.date` is the value of the field with the `date`
+role, whatever its name is), and all fields under their internal names as well.
+So no other field may be named like a role that is bound elsewhere.
+
+What happens when a role is **not** bound:
+
+- no `date`: posts are ordered by slug, and no date is shown;
+- no `published`: there is no draft concept, every post is published;
+- no `tags`: the tag pages stay empty;
+- no `title`: the slug is used as the title;
+- no `description`: nothing is shown.
+
+Posts with an empty `date` come after the dated ones. Dates can be strings or YAML
+dates (`date` / `datetime` types); they are compared as ISO strings.
+
+Pages (`pages/*.md`) are not part of the schema yet.
 
 ## Built-in schemas
 
@@ -104,13 +134,21 @@ related feature (no `tags` role means no tag pages).
 - `LOOSE_DEFAULT_SCHEMA` is the same, but keeps unknown keys (`LooseFrontmatter`).
 
 `frontmatter_model(strict, schema=None)` still returns the old classes when no
-schema is passed.
+schema is passed. Without `frontmatter_schema` the blog behaves exactly as before.
+
+## Known limits (until steps 3 and 4)
+
+- The REST API (`include_api=True`) and the admin panel still write and edit posts
+  with the built-in fields. Combining `include_api=True` with `frontmatter_schema`
+  emits a `UserWarning`, because posts written by the API may be skipped by the blog.
+- `published` is a plain flag: a `draft: true` flag (the opposite meaning) needs
+  its own role, which is not available yet.
 
 ## Roadmap
 
 1. **Done:** `FrontmatterSchema`, `FieldSpec`, model generation, `frontmatter_model(schema=...)`.
-2. `helpers.list_posts` and `router` use roles instead of fixed keys.
+2. **Done:** `helpers.list_posts`, the blog router and the templates use roles
+   instead of fixed keys; `add_blog_to_fastapi(frontmatter_schema=...)`.
 3. REST API (`editor.py`) validates and serializes with the schema.
 4. Admin forms and `MarkdownPost` are built from the schema; a `frontmatter_schema`
-   parameter is added to `setup_fastapi_blog`, `add_blog_to_fastapi`,
-   `add_admin_to_app` and `get_api_router`.
+   parameter is added to `setup_fastapi_blog` and `add_admin_to_app`.

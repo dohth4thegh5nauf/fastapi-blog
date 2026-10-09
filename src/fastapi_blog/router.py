@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import helpers
 from .admin.i18n import Translator
+from .models import FrontmatterSchema
 
 
 def get_blog_router(
@@ -21,6 +22,7 @@ def get_blog_router(
     default_locale: str = "en",
     locale: str | None = None,  # If set, creates routes for this specific locale
     prefix: str | None = "blog",  # URL prefix (e.g., 'blog')
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -139,7 +141,9 @@ def get_blog_router(
         return context
 
     def _list_posts() -> tuple[dict, ...]:
-        return helpers.list_posts(posts_dirname=posts_dirname, strict=strict)
+        return helpers.list_posts(
+            posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
+        )
 
     # Create routes - same paths whether locale is specified or not
     # If locale is specified, these will be mounted at /{locale}/blog

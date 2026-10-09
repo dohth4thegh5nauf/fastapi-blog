@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 # Semantic roles the blog understands. Each role can be bound to one field.
 ROLES: tuple[str, ...] = ("title", "date", "published", "tags", "description")
 
+# Keys the blog sets on every post itself, so a field can't use them as a name.
+RESERVED_NAMES: tuple[str, ...] = ("slug", "content")
+
 # How unknown frontmatter keys are handled (same names as in Pydantic).
 EXTRA_MODES: tuple[str, ...] = ("forbid", "allow", "ignore")
 
@@ -101,6 +104,11 @@ class FieldSpec:
             raise ValueError(
                 f"Invalid field name {self.name!r}: use a Python identifier that "
                 "does not start with `_` or `model_` (set `alias` for the real key)"
+            )
+        if self.name in RESERVED_NAMES:
+            raise ValueError(
+                f"Field name {self.name!r} is reserved by the blog: use another "
+                f"name and set `alias={self.name!r}` to keep the key"
             )
         if self.type not in _TYPES:
             raise ValueError(
@@ -205,6 +213,20 @@ class FrontmatterSchema:
                     f"and {spec.name!r}"
                 )
             roles[spec.role] = spec.name
+
+        # The blog exposes a role under its own name (`post["date"]`), so no other
+        # field may already use that name.
+        names = {spec.name for spec in self.fields}
+        for role, name in roles.items():
+            if role != name and role in names:
+                raise ValueError(
+                    f"Field {role!r} clashes with the role {role!r}, which is "
+                    f"bound to field {name!r}: rename it or set `alias`"
+                )
+
+    def role_map(self) -> dict[str, str]:
+        """Return a mapping from each bound role to its field name."""
+        return {spec.role: spec.name for spec in self.fields if spec.role}
 
     def get(self, name: str) -> FieldSpec | None:
         """Return the field with the given internal name, if any."""

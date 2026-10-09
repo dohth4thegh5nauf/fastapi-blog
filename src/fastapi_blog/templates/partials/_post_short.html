@@ -4,7 +4,9 @@
       {% if post.description %}
       {{ post.description }}<br/>  
       {% endif %}
+      {% if post.date %}
       <small><time datetime="{{ post.date }}">{{ post.date }}</time></small><br />
+      {% endif %}
       {% if post.tags %}
         {{ t.blog.tags_prefix }} {% for tag in post.tags %}
           <a href="{{ locale_url_for('blog_tag', tag_id=tag) }}">{{ tag }}</a>

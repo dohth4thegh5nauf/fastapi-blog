@@ -100,12 +100,12 @@ def test_from_dict_mapping_form():
             "fields": {
                 "title": {"required": True, "role": "title"},
                 "draft": {"type": "bool", "default": True},
-                "slug": None,
+                "author": None,
             },
         }
     )
     assert schema.extra == "allow"
-    assert [f.name for f in schema.fields] == ["title", "draft", "slug"]
+    assert [f.name for f in schema.fields] == ["title", "draft", "author"]
     assert schema.get("draft").default is True
 
 
@@ -272,3 +272,39 @@ def test_frontmatter_model_without_schema_is_unchanged():
 def test_frontmatter_model_with_schema():
     schema = FrontmatterSchema(fields=(FieldSpec("title"),))
     assert frontmatter_model(schema=schema) is schema.model()
+
+
+# --- Reserved names, role clashes, role map ---------------------------------
+
+
+@pytest.mark.parametrize("name", ["slug", "content"])
+def test_field_spec_rejects_reserved_names(name):
+    with pytest.raises(ValueError, match="reserved by the blog"):
+        FieldSpec(name)
+
+
+def test_reserved_name_can_be_used_as_alias():
+    assert FieldSpec("post_slug", alias="slug").key == "slug"
+
+
+def test_schema_rejects_field_named_like_a_role_bound_elsewhere():
+    with pytest.raises(ValueError, match="clashes with the role"):
+        FrontmatterSchema(
+            fields=(FieldSpec("pub_date", role="date"), FieldSpec("date"))
+        )
+
+
+def test_schema_allows_field_named_like_its_own_role():
+    schema = FrontmatterSchema(fields=(FieldSpec("date", role="date"),))
+    assert schema.role_map() == {"date": "date"}
+
+
+def test_role_map():
+    assert DEFAULT_SCHEMA.role_map() == {
+        "title": "title",
+        "date": "date",
+        "published": "published",
+        "tags": "tags",
+        "description": "description",
+    }
+    assert FrontmatterSchema(fields=(FieldSpec("x"),)).role_map() == {}
