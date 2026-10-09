@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Configurable frontmatter schema** (step 1): `FrontmatterSchema` and `FieldSpec`
+  describe frontmatter fields (types, defaults, aliases, semantic roles) in code or
+  in a YAML/JSON file and build a Pydantic model on demand
+  - `DEFAULT_SCHEMA` and `LOOSE_DEFAULT_SCHEMA` reproduce the old hardcoded behavior
+  - `frontmatter_model()` accepts an optional `schema` argument
+  - See `docs/FRONTMATTER_SCHEMA.md`
 - **i18n for blog routes**: Blog public interface now supports internationalization
   - Added `blog` namespace to translation files (en.yaml, ru.yaml)
   - New parameters: `locales` and `default_locale` in `add_blog_to_fastapi()`

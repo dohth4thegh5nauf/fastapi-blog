@@ -11,9 +11,23 @@ from .api import (
     is_valid_slug,
     payload_model,
 )
+from .schema import (
+    DEFAULT_SCHEMA,
+    LOOSE_DEFAULT_SCHEMA,
+    MISSING,
+    ROLES,
+    FieldSpec,
+    FrontmatterSchema,
+)
 
 
 __all__ = [
+    "DEFAULT_SCHEMA",
+    "LOOSE_DEFAULT_SCHEMA",
+    "MISSING",
+    "ROLES",
+    "FieldSpec",
+    "FrontmatterSchema",
     "SLUG_PATTERN",
     "Slug",
     "StrictFrontmatter",

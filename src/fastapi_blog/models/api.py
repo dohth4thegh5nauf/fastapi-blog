@@ -3,6 +3,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from .schema import FrontmatterSchema
+
 
 SLUG_PATTERN = r"^[a-z0-9][a-z0-9-]{0,99}$"
 SLUG_RE = re.compile(SLUG_PATTERN)
@@ -29,7 +31,22 @@ class LooseFrontmatter(StrictFrontmatter):
     model_config = ConfigDict(extra="allow")
 
 
-def frontmatter_model(strict: bool) -> type[StrictFrontmatter]:
+def frontmatter_model(
+    strict: bool = True, schema: FrontmatterSchema | None = None
+) -> type[BaseModel]:
+    """Return the frontmatter model.
+
+    Args:
+        strict: Used only when `schema` isn't given: strict forbids unknown keys.
+        schema: Custom schema. If given, its model is returned and `strict`
+            is ignored (set `extra` on the schema instead).
+
+    Returns:
+        Pydantic model class used to validate frontmatter.
+
+    """
+    if schema is not None:
+        return schema.model()
     return StrictFrontmatter if strict else LooseFrontmatter
 
 
