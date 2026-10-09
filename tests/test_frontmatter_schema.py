@@ -11,7 +11,9 @@ from fastapi_blog.models import (
     FieldSpec,
     FrontmatterSchema,
     StrictFrontmatter,
+    StrictPostPayload,
     frontmatter_model,
+    payload_model,
 )
 
 
@@ -308,3 +310,46 @@ def test_role_map():
         "description": "description",
     }
     assert FrontmatterSchema(fields=(FieldSpec("x"),)).role_map() == {}
+
+
+# --- REST API payload model ---------------------------------------------------
+
+
+def test_payload_model_is_cached():
+    assert DEFAULT_SCHEMA.payload_model() is DEFAULT_SCHEMA.payload_model()
+
+
+def test_payload_model_validates_frontmatter_and_content():
+    schema = FrontmatterSchema(
+        fields=(FieldSpec("pub_date", alias="pubDate", required=True),)
+    )
+    Payload = schema.payload_model()
+    payload = Payload(frontmatter={"pubDate": "2024-01-01"}, content="Hi")
+    assert payload.frontmatter.pub_date == "2024-01-01"
+    assert payload.content == "Hi"
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"frontmatter": {}, "content": "Hi"},  # required field is missing
+        {"frontmatter": {"pubDate": "d"}, "content": ""},  # empty content
+        {"frontmatter": {"pubDate": "d"}},  # no content
+        {"frontmatter": {"pubDate": "d", "other": 1}, "content": "Hi"},  # extra key
+        {"frontmatter": {"pubDate": "d"}, "content": "Hi", "slug": "x"},  # extra
+    ],
+)
+def test_payload_model_rejects_invalid_requests(data):
+    schema = FrontmatterSchema(
+        fields=(FieldSpec("pub_date", alias="pubDate", required=True),)
+    )
+    with pytest.raises(ValidationError):
+        schema.payload_model()(**data)
+
+
+def test_payload_model_function():
+    assert payload_model(True) is StrictPostPayload
+    assert payload_model() is StrictPostPayload
+    assert payload_model(False).__name__ == "LoosePostPayload"
+    schema = FrontmatterSchema(fields=(FieldSpec("title"),))
+    assert payload_model(True, schema) is schema.payload_model()

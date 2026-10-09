@@ -1,8 +1,8 @@
 # Configurable Frontmatter Schema
 
-> **Status:** step 2 of 4. The public blog (`/blog`) already uses the schema. The
-> REST API and the admin panel still use the built-in fields; they will be switched
-> in the next steps (see "Roadmap").
+> **Status:** step 3 of 4. The public blog (`/blog`) and the REST API
+> (`/api/posts`) use the schema. The admin panel still uses the built-in fields; it
+> will be switched in the next step (see "Roadmap").
 
 ## Why
 
@@ -98,6 +98,28 @@ frontmatter_schema=...)`. When `frontmatter_schema` is given, `strict_frontmatte
 is ignored: set `extra` on the schema instead. Files that don't match the schema
 are skipped with a warning, as before.
 
+## Using a schema in the REST API
+
+```python
+fastapi_blog.add_blog_to_fastapi(app, include_api=True, frontmatter_schema=schema)
+# or, with the editor helper:
+add_editor_to_app(app, ui=False, frontmatter_schema=schema)
+# or, with the router itself:
+get_api_router(frontmatter_schema=schema)
+```
+
+- `POST /create/{slug}`, `PUT /update/{slug}` and `POST /save` validate the
+  `frontmatter` object with the schema. Keys can be external names (aliases) or
+  internal names. Unknown keys follow `extra` (`forbid` gives a 422 error).
+- Posts are written to disk with the **external keys** (aliases), so files stay
+  compatible with the other service. Empty (`None`) values are not written.
+- `GET /{slug}/raw` returns the frontmatter as it is in the file, so it can be sent
+  back to `PUT /update/{slug}` unchanged.
+- `/docs` shows the schema keys (for example `pubDate`) in the request body.
+- `strict_frontmatter` is ignored when a schema is given.
+- `add_editor_to_app(ui=True)` (deprecated UI) doesn't support a schema: it emits a
+  `UserWarning` and keeps the built-in fields.
+
 ## Roles
 
 A role tells the blog what a field means without hardcoding its name:
@@ -136,11 +158,10 @@ Pages (`pages/*.md`) are not part of the schema yet.
 `frontmatter_model(strict, schema=None)` still returns the old classes when no
 schema is passed. Without `frontmatter_schema` the blog behaves exactly as before.
 
-## Known limits (until steps 3 and 4)
+## Known limits (until step 4)
 
-- The REST API (`include_api=True`) and the admin panel still write and edit posts
-  with the built-in fields. Combining `include_api=True` with `frontmatter_schema`
-  emits a `UserWarning`, because posts written by the API may be skipped by the blog.
+- The admin panel (`/admin`) still edits posts with the built-in fields, so it can't
+  open or save posts of a custom schema.
 - `published` is a plain flag: a `draft: true` flag (the opposite meaning) needs
   its own role, which is not available yet.
 
@@ -149,6 +170,8 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
 1. **Done:** `FrontmatterSchema`, `FieldSpec`, model generation, `frontmatter_model(schema=...)`.
 2. **Done:** `helpers.list_posts`, the blog router and the templates use roles
    instead of fixed keys; `add_blog_to_fastapi(frontmatter_schema=...)`.
-3. REST API (`editor.py`) validates and serializes with the schema.
+3. **Done:** the REST API (`editor.py`) validates and serializes with the schema;
+   `frontmatter_schema` parameter of `get_api_router`, `add_editor_to_app`
+   and `add_blog_to_fastapi`.
 4. Admin forms and `MarkdownPost` are built from the schema; a `frontmatter_schema`
    parameter is added to `setup_fastapi_blog` and `add_admin_to_app`.

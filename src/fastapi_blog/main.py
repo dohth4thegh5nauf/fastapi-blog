@@ -1,5 +1,4 @@
 import os
-import warnings
 
 import jinja2
 from fastapi import FastAPI
@@ -61,7 +60,8 @@ def add_blog_to_fastapi(
         frontmatter_schema: Custom schema of the post frontmatter. Its roles
                             (title, date, published, tags, description) tell the
                             blog which field is which. Default: the built-in fields.
-                            Note: the REST API and the admin panel don’t use it yet.
+                            Also used by the REST API when `include_api=True`.
+                            Note: the admin panel doesn’t use it yet.
 
     Returns:
         FastAPI application with blog routes added
@@ -94,14 +94,6 @@ def add_blog_to_fastapi(
     if include_api is None:
         env_value = os.getenv("FASTAPI_BLOG_INCLUDE_API", "false").lower()
         include_api = env_value in ("true", "1", "yes")
-
-    if frontmatter_schema is not None and include_api:
-        warnings.warn(
-            "The REST API doesn’t use `frontmatter_schema` yet: posts it writes "
-            "follow the built-in fields and may be skipped by the blog.",
-            UserWarning,
-            stacklevel=2,
-        )
 
     # Prep the templates
     env = jinja2.Environment(
@@ -261,6 +253,7 @@ def add_blog_to_fastapi(
             require_auth=api_require_auth,
             admin_username=admin_username,
             admin_password=admin_password,
+            frontmatter_schema=frontmatter_schema,
         )
         app.include_router(api_router, prefix=api_prefix, tags=["api"])
 

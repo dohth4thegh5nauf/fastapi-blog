@@ -10,13 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers
-from .models import (
-    SLUG_PATTERN,
-    LoosePostPayload,
-    StrictPostPayload,
-    is_valid_slug,
-    payload_model,
-)
+from .models import SLUG_PATTERN, FrontmatterSchema, is_valid_slug, payload_model
 
 
 async def require_authentication(request: Request) -> dict:
@@ -83,8 +77,12 @@ def _post_path(slug: str, posts_dirname: str) -> pathlib.Path:
     return pathlib.Path(posts_dirname) / f"{slug}.md"
 
 
-def _serialize(payload: StrictPostPayload | LoosePostPayload) -> str:
-    fm_dump = payload.frontmatter.model_dump(exclude_none=True)
+def _serialize(payload: Any, schema: FrontmatterSchema | None = None) -> str:
+    if schema is None:
+        fm_dump = payload.frontmatter.model_dump(exclude_none=True)
+    else:
+        # Write the keys other services expect (aliases), not internal names
+        fm_dump = schema.dump(payload.frontmatter, by_alias=True)
     fm_yaml = yaml.safe_dump(fm_dump, sort_keys=False, allow_unicode=True)
     return f"---\n{fm_yaml}---\n\n{payload.content.rstrip()}\n"
 
@@ -114,6 +112,7 @@ def get_api_router(
     require_auth: bool = True,
     admin_username: str | None = None,
     admin_password: str | None = None,
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> APIRouter:
     """Get REST API router for post management.
 
@@ -127,6 +126,9 @@ def get_api_router(
         require_auth: Require authentication for all endpoints (default: True)
         admin_username: Admin username for unified auth (optional)
         admin_password: Admin password for unified auth (optional)
+        frontmatter_schema: Custom frontmatter schema (optional). Requests are
+            validated with it and posts are written with its keys (aliases).
+            `strict` is ignored when it is given.
 
     Returns:
         APIRouter with REST API endpoints
@@ -152,7 +154,7 @@ def get_api_router(
 
     """
     api_router = APIRouter(tags=["editor"])
-    Payload = payload_model(strict)
+    Payload = payload_model(strict, frontmatter_schema)
     slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
 
     # Setup authentication dependency
@@ -204,7 +206,7 @@ def get_api_router(
                 detail=f"Post '{slug}' already exists",
             )
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_serialize(payload))
+        path.write_text(_serialize(payload, frontmatter_schema))
         helpers.list_posts.cache_clear()
         return {"slug": slug, "status": "created"}
 
@@ -220,7 +222,7 @@ def get_api_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Post '{slug}' not found",
             )
-        path.write_text(_serialize(payload))
+        path.write_text(_serialize(payload, frontmatter_schema))
         helpers.list_posts.cache_clear()
         return {"slug": slug, "status": "updated"}
 
@@ -270,7 +272,7 @@ def get_api_router(
         if is_new:
             path.parent.mkdir(parents=True, exist_ok=True)
 
-        path.write_text(_serialize(payload))
+        path.write_text(_serialize(payload, frontmatter_schema))
         helpers.list_posts.cache_clear()
 
         return JSONResponse(
@@ -289,6 +291,7 @@ def add_editor_to_app(
     ui: bool = True,
     ui_prefix: str = "/admin/editor",
     require_auth: bool = True,
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> FastAPI:
     """Add editor REST API and optional UI to FastAPI app.
 
@@ -305,6 +308,8 @@ def add_editor_to_app(
         ui: (DEPRECATED) Include UI routes (default: True)
         ui_prefix: (DEPRECATED) URL prefix for UI (default: '/admin/editor')
         require_auth: Require authentication for all endpoints (default: True)
+        frontmatter_schema: Custom frontmatter schema for the REST API (optional).
+            The deprecated UI doesn’t support it and keeps the built-in fields.
 
     Returns:
         FastAPI application with editor routes added
@@ -346,11 +351,20 @@ def add_editor_to_app(
             stacklevel=2,
         )
 
+    if ui and frontmatter_schema is not None:
+        warnings.warn(
+            "The deprecated editor UI doesn’t support `frontmatter_schema` and "
+            "keeps the built-in fields. Use `ui=False` and the admin panel.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     # Use get_api_router() to get REST API endpoints
     api_router = get_api_router(
         posts_dirname=posts_dirname,
         strict=strict,
         require_auth=require_auth,
+        frontmatter_schema=frontmatter_schema,
     )
     app.include_router(api_router, prefix=prefix)
 

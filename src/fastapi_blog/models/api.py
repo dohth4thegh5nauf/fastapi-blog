@@ -64,7 +64,22 @@ class LoosePostPayload(BaseModel):
     content: str = Field(min_length=1)
 
 
-def payload_model(strict: bool) -> type[StrictPostPayload | LoosePostPayload]:
+def payload_model(
+    strict: bool = True, schema: FrontmatterSchema | None = None
+) -> type[BaseModel]:
+    """Return the REST API request model (`frontmatter` plus `content`).
+
+    Args:
+        strict: Used only when `schema` isn’t given: strict forbids unknown keys.
+        schema: Custom schema. If given, its payload model is returned and
+            `strict` is ignored (set `extra` on the schema instead).
+
+    Returns:
+        Pydantic model class used to validate API requests.
+
+    """
+    if schema is not None:
+        return schema.payload_model()
     return StrictPostPayload if strict else LoosePostPayload
 
 

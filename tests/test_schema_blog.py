@@ -191,11 +191,3 @@ def test_index_shows_recent_posts(client):
     response = client.get("/blog/")
     assert response.status_code == 200
     assert "Second" in response.text
-
-
-def test_schema_with_rest_api_warns(external_posts):
-    app = FastAPI()
-    with pytest.warns(UserWarning, match="REST API"):
-        fastapi_blog.add_blog_to_fastapi(
-            app, frontmatter_schema=EXTERNAL_SCHEMA, include_api=True
-        )

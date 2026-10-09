@@ -18,6 +18,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     parameter of `helpers.list_posts()`
   - Post lists hide the date when a post has none; posts without a date go last
   - `slug` and `content` are reserved field names (use an `alias`)
+  - Step 3: the REST API validates requests with the schema and writes posts with
+    the external keys (aliases): `frontmatter_schema` parameter of
+    `get_api_router()` and `add_editor_to_app()` (also passed on by
+    `add_blog_to_fastapi(include_api=True)`), `payload_model(strict, schema)`,
+    `FrontmatterSchema.payload_model()`
+  - `add_editor_to_app(ui=True, frontmatter_schema=...)` warns: the deprecated UI
+    keeps the built-in fields
   - See `docs/FRONTMATTER_SCHEMA.md`
 - **i18n for blog routes**: Blog public interface now supports internationalization
   - Added `blog` namespace to translation files (en.yaml, ru.yaml)

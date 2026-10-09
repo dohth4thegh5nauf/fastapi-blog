@@ -182,6 +182,7 @@ class FrontmatterSchema:
     fields: tuple[FieldSpec, ...] = ()
     extra: str = "forbid"
     _model: Any = dataclasses.field(default=None, init=False, repr=False)
+    _payload_model: Any = dataclasses.field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.fields = tuple(self.fields)
@@ -258,6 +259,15 @@ class FrontmatterSchema:
         if self._model is None:
             self._model = _build_model(self)
         return self._model
+
+    def payload_model(self) -> "type[BaseModel]":
+        """Return the REST API request model: `frontmatter` plus `content`.
+
+        It is built once and cached, like `model()`.
+        """
+        if self._payload_model is None:
+            self._payload_model = _build_payload_model(self)
+        return self._payload_model
 
     def dump(
         self,
@@ -418,6 +428,17 @@ def _build_model(schema: FrontmatterSchema) -> "type[BaseModel]":
         populate_by_name=True,
     )
     return create_model("Frontmatter", __config__=config, **definitions)
+
+
+def _build_payload_model(schema: FrontmatterSchema) -> "type[BaseModel]":
+    from pydantic import ConfigDict, Field, create_model
+
+    return create_model(
+        "PostPayload",
+        __config__=ConfigDict(extra="forbid"),
+        frontmatter=(schema.model(), ...),
+        content=(str, Field(..., min_length=1)),
+    )
 
 
 # The schema that matches the original hardcoded behavior.
