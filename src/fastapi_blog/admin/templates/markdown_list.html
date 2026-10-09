@@ -38,9 +38,9 @@
                 <tr>
                   <th>{{ t.title }}</th>
                   <th>{{ t.slug }}</th>
-                  <th>{{ t.date }}</th>
-                  <th>{{ t.status }}</th>
-                  <th>{{ t.tags }}</th>
+                  {% if columns.date %}<th>{{ t.date }}</th>{% endif %}
+                  {% if columns.published %}<th>{{ t.status }}</th>{% endif %}
+                  {% if columns.tags %}<th>{{ t.tags }}</th>{% endif %}
                   <th class="w-1">{{ t.actions }}</th>
                 </tr>
               </thead>
@@ -50,7 +50,8 @@
                   <tr>
                     <td><strong>{{ post.title }}</strong></td>
                     <td><code class="text-muted">{{ post.slug }}</code></td>
-                    <td class="text-muted">{{ post.date }}</td>
+                    {% if columns.date %}<td class="text-muted">{{ post.date }}</td>{% endif %}
+                    {% if columns.published %}
                     <td>
                       {% if post.published %}
                         <span class="badge badge-sm bg-green">{{ t.published }}</span>
@@ -58,7 +59,8 @@
                         <span class="badge badge-sm bg-yellow">{{ t.draft }}</span>
                       {% endif %}
                     </td>
-                    <td><span class="text-muted">{{ post.tags }}</span></td>
+                    {% endif %}
+                    {% if columns.tags %}<td><span class="text-muted">{{ post.tags }}</span></td>{% endif %}
                     <td>
                       <div class="btn-list flex-nowrap">
                         <a href="{{ url_for(__name__ ~ ':posts:edit', slug=post.slug) }}" class="btn btn-sm btn-icon" title="{{ t.edit }}" aria-label="{{ t.edit }}">
@@ -85,7 +87,7 @@
                   {% endfor %}
                 {% else %}
                   <tr>
-                    <td colspan="6" class="text-center text-muted">
+                    <td colspan="{{ 3 + columns.date + columns.published + columns.tags }}" class="text-center text-muted">
                       {{ t.no_posts_found }} <a href="{{ url_for(__name__ ~ ':posts:new') }}">{{ t.create_first_post }}</a>
                     </td>
                   </tr>

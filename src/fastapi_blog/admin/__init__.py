@@ -18,6 +18,7 @@ from starlette_admin.i18n import I18nConfig
 
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
+from ..models import FrontmatterSchema
 from .fields import MarkdownField, SlugField, TagsField
 from .models import Post, Role, User, UserWithRoles
 from .views_role import RoleModelView, UserWithRolesModelView
@@ -91,6 +92,7 @@ def _create_admin_for_locale(
     default_locale: str,
     enable_role_management: bool = False,
     admin_username: str = "admin",
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> Admin:
     """Create an Admin instance for a specific locale.
 
@@ -105,6 +107,7 @@ def _create_admin_for_locale(
         default_locale: Default locale for the application
         enable_role_management: Whether to automatically add role management views
         admin_username: Root admin username for role management access control
+        frontmatter_schema: Custom frontmatter schema for the markdown posts
 
     Returns:
         Configured Admin instance
@@ -136,7 +139,12 @@ def _create_admin_for_locale(
         templates_dir=templates_dir,
         i18n_config=i18n_config,
         debug=os.getenv("DEBUG", "false").lower() == "true",
-        index_view=HomeView(label=home_label, icon="fa fa-home", locale=locale),
+        index_view=HomeView(
+            label=home_label,
+            icon="fa fa-home",
+            locale=locale,
+            schema=frontmatter_schema,
+        ),
     )
 
     # Add locale data to template context
@@ -196,13 +204,21 @@ def _create_admin_for_locale(
     posts_dir = get_posts_directory()
 
     # Add list view (shows in menu)
-    posts_list_view = MarkdownListView(posts_dir=posts_dir, locale=locale)
+    posts_list_view = MarkdownListView(
+        posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
+    )
     posts_list_view.label = posts_label
     admin.add_view(posts_list_view)
 
     # Add edit and create views (don't show in menu)
-    admin.add_view(MarkdownEditView(posts_dir=posts_dir, locale=locale))
-    admin.add_view(MarkdownCreateView(posts_dir=posts_dir, locale=locale))
+    admin.add_view(
+        MarkdownEditView(posts_dir=posts_dir, locale=locale, schema=frontmatter_schema)
+    )
+    admin.add_view(
+        MarkdownCreateView(
+            posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
+        )
+    )
 
     return admin
 
@@ -220,6 +236,7 @@ def add_admin_to_app(
     locales: list[str] | None = None,
     default_locale: str | None = None,
     enable_role_management: bool = False,
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> dict[str, Admin]:
     """Add starlette-admin panel to FastAPI application.
 
@@ -238,6 +255,10 @@ def add_admin_to_app(
       locales: List of available locales (default: ['en', 'ru'])
       default_locale: Default locale for /admin redirect (default: 'en')
       enable_role_management: Enable role management views (default: False)
+      frontmatter_schema: Custom schema of the post frontmatter (default: the
+        built-in fields). The post list, the post form and the dashboard are built
+        from it. Saving goes through the REST API, so pass the same schema to
+        `add_blog_to_fastapi(include_api=True, ...)`.
 
     Returns:
       Dictionary mapping locale codes to Admin instances
@@ -401,6 +422,7 @@ def add_admin_to_app(
         default_locale=default_locale,
         enable_role_management=enable_role_management,
         admin_username=admin_username,
+        frontmatter_schema=frontmatter_schema,
     )
 
     default_admin.mount_to(app)
@@ -430,6 +452,7 @@ def add_admin_to_app(
             default_locale=default_locale,
             enable_role_management=enable_role_management,
             admin_username=admin_username,
+            frontmatter_schema=frontmatter_schema,
         )
 
         admin.mount_to(app)

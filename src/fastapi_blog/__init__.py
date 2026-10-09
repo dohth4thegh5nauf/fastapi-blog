@@ -26,8 +26,13 @@ def setup_fastapi_blog(
     admin_password: str | None = None,
     secret_key: str | None = None,
     enable_role_management: bool = False,
+    frontmatter_schema: FrontmatterSchema | None = None,
 ) -> dict[str, Admin]:
-    """Configure the blog and admin panel for a FastAPI application."""
+    """Configure the blog and admin panel for a FastAPI application.
+
+    `frontmatter_schema` (optional) sets the post fields for the blog, the REST API
+    and the admin panel at once. Without it the built-in fields are used.
+    """
     # Get credentials from env if not provided
     if admin_username is None:
         admin_username = os.getenv("FASTAPI_BLOG_ADMIN_LOGIN", "admin")
@@ -42,6 +47,7 @@ def setup_fastapi_blog(
         default_locale=default_locale,
         admin_username=admin_username,
         admin_password=admin_password,
+        frontmatter_schema=frontmatter_schema,
     )
     return add_admin_to_app(
         app,
@@ -51,4 +57,5 @@ def setup_fastapi_blog(
         admin_password=admin_password,
         secret_key=secret_key,
         enable_role_management=enable_role_management,
+        frontmatter_schema=frontmatter_schema,
     )

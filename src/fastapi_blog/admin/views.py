@@ -1,5 +1,7 @@
 """Custom ModelView classes for admin models."""
 
+from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Any
 
 from starlette.requests import Request
@@ -7,6 +9,8 @@ from starlette.responses import Response
 from starlette.templating import Jinja2Templates
 from starlette_admin import CustomView
 from starlette_admin.contrib.sqla import ModelView
+
+from ..models import FrontmatterSchema
 
 
 # Lazy import to avoid initialization errors
@@ -136,6 +140,53 @@ class PostModelView(ModelView):
     }
 
 
+def _as_datetime(value: Any) -> datetime | None:
+    """Convert a frontmatter date (datetime, date or ISO string) to a datetime."""
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def load_posts_for_home(posts_dir: str, schema: FrontmatterSchema) -> list[Any]:
+    """Load posts for the dashboard using the roles of a custom schema.
+
+    Args:
+        posts_dir: Directory with the markdown files.
+        schema: Frontmatter schema of the blog.
+
+    Returns:
+        Simple objects with `slug`, `title`, `date` (datetime or `None`),
+        `published` and `tags` (list of strings), newest first.
+
+    """
+    from .markdown_crud import MarkdownFileManager
+
+    posts = []
+    for post in MarkdownFileManager(posts_dir, schema).list_posts():
+        if isinstance(post.tags, list | tuple):
+            tags = [str(tag) for tag in post.tags]
+        else:
+            tags = [str(post.tags)] if post.tags else []
+        posts.append(
+            SimpleNamespace(
+                slug=post.slug,
+                title=post.title,
+                date=_as_datetime(post.date),
+                published=post.published,
+                tags=tags,
+            )
+        )
+    posts.sort(key=lambda p: p.date.isoformat() if p.date else "", reverse=True)
+    return posts
+
+
 class HomeView(CustomView):
     """Custom home view with blog statistics and recent posts.
 
@@ -146,11 +197,16 @@ class HomeView(CustomView):
     """
 
     def __init__(
-        self, label: str = "Home", icon: str = "fa fa-home", locale: str = "en"
+        self,
+        label: str = "Home",
+        icon: str = "fa fa-home",
+        locale: str = "en",
+        schema: FrontmatterSchema | None = None,
     ):
-        """Initialize home view with locale."""
+        """Initialize home view with locale and frontmatter schema."""
         super().__init__(label=label, icon=icon)
         self.locale = locale
+        self.schema = schema
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
         """Render custom home page with blog statistics."""
@@ -163,7 +219,10 @@ class HomeView(CustomView):
 
         # Get all posts (with error handling for malformed posts)
         try:
-            all_posts = MarkdownPost.list_all()
+            if self.schema is None:
+                all_posts = MarkdownPost.list_all()
+            else:
+                all_posts = load_posts_for_home(posts_dir, self.schema)
         except Exception:
             # If loading fails, return empty state
             all_posts = []

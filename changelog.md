@@ -25,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     `FrontmatterSchema.payload_model()`
   - `add_editor_to_app(ui=True, frontmatter_schema=...)` warns: the deprecated UI
     keeps the built-in fields
+  - Step 4: the admin panel builds the post form, the post list and the dashboard
+    from the schema: `frontmatter_schema` parameter of `add_admin_to_app()` and
+    `setup_fastapi_blog()` (which passes it to the blog, the REST API and the admin)
+  - New `admin/form_fields.py`: input kinds, form values and labels per field type
+  - The post list hides the date, status and tags columns when the matching roles
+    are not bound; the dashboard shows posts without a date
   - See `docs/FRONTMATTER_SCHEMA.md`
 - **i18n for blog routes**: Blog public interface now supports internationalization
   - Added `blog` namespace to translation files (en.yaml, ru.yaml)

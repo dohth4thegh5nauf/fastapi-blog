@@ -11,6 +11,13 @@ from starlette.responses import Response
 from starlette.templating import Jinja2Templates
 from starlette_admin.views import CustomView
 
+from ..models import DEFAULT_SCHEMA, FrontmatterSchema
+from .form_fields import (
+    build_form_fields,
+    form_fields_meta,
+    get_field_value,
+)
+
 
 # Simple identity function - labels will be set dynamically per locale
 def _(message: str) -> str:
@@ -37,26 +44,44 @@ def get_posts_directory() -> str:
 
 
 class MarkdownPost:
-    """Represents a markdown post with frontmatter."""
+    """Represents a markdown post with frontmatter.
 
-    def __init__(self, slug: str, frontmatter: dict[str, Any], content: str):
-        """Initialize markdown post with slug, frontmatter, and content."""
+    `title`, `date`, `published` and `tags` are read from the fields that have
+    the matching role in the schema, whatever those fields are called.
+    """
+
+    def __init__(
+        self,
+        slug: str,
+        frontmatter: dict[str, Any],
+        content: str,
+        schema: FrontmatterSchema | None = None,
+    ):
+        """Initialize markdown post with slug, frontmatter, content and schema."""
         self.slug = slug
         self.frontmatter = frontmatter
         self.content = content
-        self.title = frontmatter.get("title", slug)
-        self.date = frontmatter.get("date", "")
-        self.published = frontmatter.get("published", False)
-        self.tags = frontmatter.get("tags", [])
+        self.schema = schema or DEFAULT_SCHEMA
+        self.title = self._role_value("title", slug)
+        self.date = self._role_value("date", "")
+        self.published = bool(self._role_value("published", False))
+        self.tags = self._role_value("tags", [])
+
+    def _role_value(self, role: str, default: Any) -> Any:
+        spec = self.schema.field_for_role(role)
+        return get_field_value(self.frontmatter, spec, default)
 
 
 class MarkdownFileManager:
     """Manager for reading/writing markdown files."""
 
-    def __init__(self, posts_dir: str = "posts"):
-        """Initialize file manager with posts directory."""
+    def __init__(
+        self, posts_dir: str = "posts", schema: FrontmatterSchema | None = None
+    ):
+        """Initialize file manager with posts directory and frontmatter schema."""
         self.posts_dir = Path(posts_dir)
         self.posts_dir.mkdir(exist_ok=True)
+        self.schema = schema
 
     def list_posts(self) -> list[MarkdownPost]:
         """List all markdown posts."""
@@ -107,7 +132,7 @@ class MarkdownFileManager:
             frontmatter = {}
             body = content
 
-        return MarkdownPost(slug, frontmatter, body)
+        return MarkdownPost(slug, frontmatter, body, self.schema)
 
     def save_post(self, slug: str, frontmatter: dict[str, Any], content: str) -> None:
         """Save a post to file."""
@@ -130,8 +155,13 @@ class MarkdownFileManager:
 class MarkdownListView(CustomView):
     """List view for markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
-        """Initialize list view with posts directory and locale."""
+    def __init__(
+        self,
+        posts_dir: str = "posts",
+        locale: str = "en",
+        schema: FrontmatterSchema | None = None,
+    ):
+        """Initialize list view with posts directory, locale and schema."""
         super().__init__(
             label=_("Posts"),
             icon="fa fa-file-text",
@@ -139,7 +169,8 @@ class MarkdownListView(CustomView):
             template_path="markdown_list.html",
             name="posts:list",
         )
-        self.manager = MarkdownFileManager(posts_dir)
+        self.schema = schema or DEFAULT_SCHEMA
+        self.manager = MarkdownFileManager(posts_dir, self.schema)
         self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
@@ -218,6 +249,11 @@ class MarkdownListView(CustomView):
             context={
                 "title": self.title(request),
                 "posts": posts_data,
+                "columns": {
+                    "date": self.schema.field_for_role("date") is not None,
+                    "published": self.schema.field_for_role("published") is not None,
+                    "tags": self.schema.field_for_role("tags") is not None,
+                },
                 "base_url": request.scope["root_path"],
                 "t": t,  # Add translations
             },
@@ -235,8 +271,13 @@ class MarkdownListView(CustomView):
 class MarkdownEditView(CustomView):
     """Edit view for markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
-        """Initialize edit view with posts directory and locale."""
+    def __init__(
+        self,
+        posts_dir: str = "posts",
+        locale: str = "en",
+        schema: FrontmatterSchema | None = None,
+    ):
+        """Initialize edit view with posts directory, locale and schema."""
         super().__init__(
             label=_("Edit Post"),
             path="/posts/edit/{slug}",
@@ -244,7 +285,8 @@ class MarkdownEditView(CustomView):
             name="posts:edit",
             add_to_menu=False,  # Don't show in menu
         )
-        self.manager = MarkdownFileManager(posts_dir)
+        self.schema = schema or DEFAULT_SCHEMA
+        self.manager = MarkdownFileManager(posts_dir, self.schema)
         self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
@@ -276,6 +318,8 @@ class MarkdownEditView(CustomView):
         translations = load_translations(self.locale)
         t = translations["post"]
 
+        form_fields = build_form_fields(self.schema, post.frontmatter, t)
+
         return templates.TemplateResponse(
             request=request,
             name=self.template_path,
@@ -287,6 +331,8 @@ class MarkdownEditView(CustomView):
                     "content": post.content,
                     "frontmatter": post.frontmatter,
                 },
+                "form_fields": form_fields,
+                "form_fields_meta": form_fields_meta(form_fields),
                 "base_url": request.scope["root_path"],
                 "t": t,
             },
@@ -296,8 +342,13 @@ class MarkdownEditView(CustomView):
 class MarkdownCreateView(CustomView):
     """Create view for new markdown posts."""
 
-    def __init__(self, posts_dir: str = "posts", locale: str = "en"):
-        """Initialize create view with posts directory and locale."""
+    def __init__(
+        self,
+        posts_dir: str = "posts",
+        locale: str = "en",
+        schema: FrontmatterSchema | None = None,
+    ):
+        """Initialize create view with posts directory, locale and schema."""
         super().__init__(
             label=_("New Post"),
             path="/posts/new",
@@ -305,7 +356,8 @@ class MarkdownCreateView(CustomView):
             name="posts:new",
             add_to_menu=False,
         )
-        self.manager = MarkdownFileManager(posts_dir)
+        self.schema = schema or DEFAULT_SCHEMA
+        self.manager = MarkdownFileManager(posts_dir, self.schema)
         self.locale = locale
 
     async def render(self, request: Request, templates: Jinja2Templates) -> Response:
@@ -316,6 +368,8 @@ class MarkdownCreateView(CustomView):
         translations = load_translations(self.locale)
         t = translations["post"]
 
+        form_fields = build_form_fields(self.schema, {}, t, is_new=True)
+
         return templates.TemplateResponse(
             request=request,
             name=self.template_path,
@@ -325,12 +379,10 @@ class MarkdownCreateView(CustomView):
                     "slug": "",
                     "title": "",
                     "content": "",
-                    "frontmatter": {
-                        "published": False,
-                        "tags": [],
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                    },
+                    "frontmatter": {},
                 },
+                "form_fields": form_fields,
+                "form_fields_meta": form_fields_meta(form_fields),
                 "is_new": True,
                 "base_url": request.scope["root_path"],
                 "t": t,

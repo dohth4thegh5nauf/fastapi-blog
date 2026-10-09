@@ -40,35 +40,23 @@
               <small class="form-hint">{{ t.slug_hint }}</small>
             </div>
             
-            <div class="mb-3">
-              <label class="form-label required" for="title">{{ t.title }}</label>
-              <input type="text" class="form-control" id="title" name="title" value="{{ post.frontmatter.title or post.title }}" required>
-            </div>
-            
             <div class="row">
-              <div class="col-md-6 mb-3">
-                <label class="form-label" for="date">{{ t.date }}</label>
-                <input type="date" class="form-control" id="date" name="date" value="{{ post.frontmatter.date }}">
-              </div>
-              
-              <div class="col-md-6 mb-3">
-                <label class="form-label" for="published">{{ t.published }}</label>
-                <select class="form-select" id="published" name="published">
-                  <option value="true" {% if post.frontmatter.published %}selected{% endif %}>{{ t.yes }}</option>
-                  <option value="false" {% if not post.frontmatter.published %}selected{% endif %}>{{ t.no }}</option>
+              {% for f in form_fields %}
+              <div class="{{ f.col }} mb-3">
+                <label class="form-label{% if f.required %} required{% endif %}" for="field-{{ f.name }}">{{ f.label }}</label>
+                {% if f.kind == 'bool' %}
+                <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}">
+                  <option value="true" {% if f.value == 'true' %}selected{% endif %}>{{ t.yes }}</option>
+                  <option value="false" {% if f.value != 'true' %}selected{% endif %}>{{ t.no }}</option>
                 </select>
+                {% elif f.kind in ('textarea', 'json') %}
+                <textarea class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" rows="{{ 4 if f.kind == 'json' else 2 }}"{% if f.html_required %} required{% endif %}>{{ f.value }}</textarea>
+                {% else %}
+                <input type="{% if f.kind == 'date' %}date{% elif f.kind == 'datetime' %}datetime-local{% elif f.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.kind == 'number' %} step="any"{% endif %}{% if f.max_length and f.kind == 'text' %} maxlength="{{ f.max_length }}"{% endif %}{% if f.html_required %} required{% endif %}>
+                {% endif %}
+                {% if f.hint %}<small class="form-hint">{{ f.hint }}</small>{% endif %}
               </div>
-            </div>
-            
-            <div class="mb-3">
-              <label class="form-label" for="tags">{{ t.tags }}</label>
-              <input type="text" class="form-control" id="tags" name="tags" value="{% if post.frontmatter.tags %}{{ post.frontmatter.tags | join(', ') }}{% endif %}">
-              <small class="form-hint">{{ t.tags_hint }}</small>
-            </div>
-            
-            <div class="mb-3">
-              <label class="form-label" for="description">{{ t.description }}</label>
-              <textarea class="form-control" id="description" name="description" rows="2">{{ post.frontmatter.description or '' }}</textarea>
+              {% endfor %}
             </div>
             
             <div class="mb-3">
@@ -91,26 +79,44 @@
 </div>
 
 <script>
+const formFields = {{ form_fields_meta | tojson }};
+
 document.getElementById('post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   
   const formData = new FormData(e.target);
   
-  // Parse tags
-  const tagsStr = formData.get('tags');
-  const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(t => t) : [];
-  
-  // Build frontmatter
-  const frontmatter = {
-    title: formData.get('title'),
-    date: formData.get('date'),
-    published: formData.get('published') === 'true',
-    tags: tags,
-  };
-  
-  const description = formData.get('description');
-  if (description) {
-    frontmatter.description = description;
+  // Build frontmatter from the schema fields, under their external keys
+  const frontmatter = {};
+  for (const field of formFields) {
+    const raw = document.getElementById(`field-${field.name}`).value;
+    const items = raw.split(',').map(t => t.trim()).filter(t => t);
+    let value;
+    if (field.kind === 'bool') {
+      value = raw === 'true';
+    } else if (field.kind === 'list') {
+      value = items;
+    } else if (field.kind === 'int_list') {
+      value = items.map(Number).filter(n => !Number.isNaN(n));
+    } else if (field.kind === 'number') {
+      value = raw === '' ? undefined : Number(raw);
+    } else if (field.kind === 'json') {
+      if (raw.trim() === '') {
+        value = undefined;
+      } else {
+        try {
+          value = JSON.parse(raw);
+        } catch (err) {
+          alert(`Error: ${field.name}: ${err.message}`);
+          return;
+        }
+      }
+    } else {
+      value = raw === '' ? undefined : raw;
+    }
+    if (value !== undefined) {
+      frontmatter[field.key] = value;
+    }
   }
   
   // Build request

@@ -1,8 +1,7 @@
 # Configurable Frontmatter Schema
 
-> **Status:** step 3 of 4. The public blog (`/blog`) and the REST API
-> (`/api/posts`) use the schema. The admin panel still uses the built-in fields; it
-> will be switched in the next step (see "Roadmap").
+> **Status:** step 4 of 4, all parts are implemented. The public blog (`/blog`), the
+> REST API (`/api/posts`) and the admin panel (`/admin`) use the schema.
 
 ## Why
 
@@ -98,6 +97,21 @@ frontmatter_schema=...)`. When `frontmatter_schema` is given, `strict_frontmatte
 is ignored: set `extra` on the schema instead. Files that don't match the schema
 are skipped with a warning, as before.
 
+## One schema for everything
+
+`setup_fastapi_blog()` passes the schema to the blog, the REST API and the admin:
+
+```python
+from fastapi_blog import FrontmatterSchema, setup_fastapi_blog
+
+schema = FrontmatterSchema.from_file("schema.yaml")
+setup_fastapi_blog(app, include_api=True, frontmatter_schema=schema)
+```
+
+The same parameter exists on `add_blog_to_fastapi()`, `add_admin_to_app()`,
+`get_api_router()` and `add_editor_to_app()` if you set the parts up one by one.
+Use the same schema everywhere, otherwise the parts disagree about the files.
+
 ## Using a schema in the REST API
 
 ```python
@@ -119,6 +133,44 @@ get_api_router(frontmatter_schema=schema)
 - `strict_frontmatter` is ignored when a schema is given.
 - `add_editor_to_app(ui=True)` (deprecated UI) doesn't support a schema: it emits a
   `UserWarning` and keeps the built-in fields.
+
+## Using a schema in the admin panel
+
+```python
+add_admin_to_app(app, frontmatter_schema=schema)
+```
+
+The markdown posts section of the admin is built from the schema:
+
+- **Form** (new and edit post): one input per schema field, in schema order. The
+  input depends on the field type:
+
+  | Type | Input |
+  | --- | --- |
+  | `str` | text line (a text area for the `description` role or `max_length` > 200) |
+  | `int`, `float` | number |
+  | `bool` | Yes/No select |
+  | `date` (or `str` with the `date` role) | date picker |
+  | `datetime` | date and time picker (the time zone is dropped) |
+  | `list[str]`, `list[int]` | comma-separated text |
+  | `dict`, `any` | JSON text area |
+
+  Labels of fields with a role are translated (`Title`, `Date`, ...). Other fields
+  use their `description`, or their name. Required `str`, number and date fields
+  are required in the browser as well.
+- **Saving** goes through the REST API (`POST /api/posts/save`) with the schema
+  keys (aliases), so the API must be enabled with the same schema:
+  `add_blog_to_fastapi(include_api=True, frontmatter_schema=schema)`.
+  Empty inputs are not sent, so the API applies the field defaults or reports a
+  missing required field.
+- **Post list**: the title and slug columns are always there. The date, status and
+  tags columns are shown only if the `date`, `published` and `tags` roles are bound.
+- **Dashboard**: counts, latest posts and top tags use the roles. A post with an
+  empty date is listed without a date.
+
+The admin reads files leniently: a post that doesn't match the schema (an old
+format, a missing required field) is still listed, with the slug as its title, so it
+can be opened and fixed.
 
 ## Roles
 
@@ -158,12 +210,17 @@ Pages (`pages/*.md`) are not part of the schema yet.
 `frontmatter_model(strict, schema=None)` still returns the old classes when no
 schema is passed. Without `frontmatter_schema` the blog behaves exactly as before.
 
-## Known limits (until step 4)
+## Known limits
 
-- The admin panel (`/admin`) still edits posts with the built-in fields, so it can't
-  open or save posts of a custom schema.
+- The admin form saves through `/api/posts/save` (the URL is fixed in the template),
+  so it needs the REST API at the default prefix.
+- The admin reads the posts directory from the `POSTS_DIR` environment variable
+  (default `posts` in the working directory), not from `posts_dirname`.
 - `published` is a plain flag: a `draft: true` flag (the opposite meaning) needs
   its own role, which is not available yet.
+- `PostModelView` (the SQL `Post` model) and the user/role views don't use the
+  schema: they are unrelated to the markdown files.
+- Pages (`pages/*.md`) are not part of the schema.
 
 ## Roadmap
 
@@ -173,5 +230,5 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
 3. **Done:** the REST API (`editor.py`) validates and serializes with the schema;
    `frontmatter_schema` parameter of `get_api_router`, `add_editor_to_app`
    and `add_blog_to_fastapi`.
-4. Admin forms and `MarkdownPost` are built from the schema; a `frontmatter_schema`
-   parameter is added to `setup_fastapi_blog` and `add_admin_to_app`.
+4. **Done:** the admin forms, list and dashboard are built from the schema;
+   `frontmatter_schema` parameter of `add_admin_to_app` and `setup_fastapi_blog`.
