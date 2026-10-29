@@ -169,11 +169,11 @@ changelog.json
 /log
 !/log/.keep
 /log
-!/log/.keep
+!/log/.gitkeep
 /run
-!/run/.keep
+!/run/.gitkeep
 /tmp
-!/tmp/.keep
+!/tmp/.gitkeep
 
 *.baktests/examples/data/
 tests/examples/data/

@@ -16,20 +16,22 @@ document can match the format of another service (for example `pubDate` instead 
 from fastapi_blog import FieldSpec, FrontmatterSchema
 
 schema = FrontmatterSchema(
-    fields=(
-        FieldSpec("title", required=True, max_length=200, role="title"),
-        FieldSpec("pub_date", alias="pubDate", required=True, role="date"),
-        FieldSpec("draft", type="bool", default=True),
-        FieldSpec("tags", type="list[str]", role="tags"),
-        FieldSpec("author"),
-    ),
-    extra="allow",
+  fields=(
+    FieldSpec('title', required=True, max_length=200, role='title'),
+    FieldSpec('pub_date', alias='pubDate', required=True, role='date'),
+    FieldSpec('draft', type='bool', default=True),
+    FieldSpec('tags', type='list[str]', role='tags'),
+    FieldSpec('author'),
+  ),
+  extra='allow',
 )
 
 Model = schema.model()  # a Pydantic model, built once and cached
-post = Model(**{"title": "Hi", "pubDate": "2024-01-01"})
-schema.dump(post)                 # {'title': 'Hi', 'pub_date': '2024-01-01', ...}
-schema.dump(post, by_alias=True)  # {'title': 'Hi', 'pubDate': '2024-01-01', ...}
+post = Model(**{'title': 'Hi', 'pubDate': '2024-01-01'})
+schema.dump(post)  # {'title': 'Hi', 'pub_date': '2024-01-01', ...}
+schema.dump(
+  post, by_alias=True
+)  # {'title': 'Hi', 'pubDate': '2024-01-01', ...}
 ```
 
 ## Describing a schema in a file
@@ -57,7 +59,7 @@ fields:
 ```
 
 ```python
-schema = FrontmatterSchema.from_file("schema.yaml")
+schema = FrontmatterSchema.from_file('schema.yaml')
 ```
 
 `fields` can also be a list of `{name: ..., ...}` items.
@@ -104,7 +106,7 @@ are skipped with a warning, as before.
 ```python
 from fastapi_blog import FrontmatterSchema, setup_fastapi_blog
 
-schema = FrontmatterSchema.from_file("schema.yaml")
+schema = FrontmatterSchema.from_file('schema.yaml')
 setup_fastapi_blog(app, include_api=True, frontmatter_schema=schema)
 ```
 
@@ -115,7 +117,9 @@ Use the same schema everywhere, otherwise the parts disagree about the files.
 ## Using a schema in the REST API
 
 ```python
-fastapi_blog.add_blog_to_fastapi(app, include_api=True, frontmatter_schema=schema)
+fastapi_blog.add_blog_to_fastapi(
+  app, include_api=True, frontmatter_schema=schema
+)
 # or, with the editor helper:
 add_editor_to_app(app, ui=False, frontmatter_schema=schema)
 # or, with the router itself:

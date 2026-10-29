@@ -5,6 +5,29 @@ from fastapi import FastAPI
 import fastapi_blog
 
 
+def _all_paths(app: FastAPI) -> list[str]:
+  """Flatten `app.routes`, descending into `include_router()`'d routers.
+
+  FastAPI represents an `include_router()`'d router as a lazily-resolved
+  `_IncludedRouter` with no `path` of its own; its routes live on
+  `original_router.routes`, and the prefix it was included with lives on
+  `include_context.prefix` rather than on the nested routes' own `path`.
+  """
+  paths: list[str] = []
+  stack: list[tuple[object, str]] = [(route, '') for route in app.routes]
+  while stack:
+    route, prefix = stack.pop()
+    path = getattr(route, 'path', None)
+    if path is not None:
+      paths.append(prefix + path)
+    original_router = getattr(route, 'original_router', None)
+    if original_router is not None:
+      include_context = getattr(route, 'include_context', None)
+      child_prefix = prefix + getattr(include_context, 'prefix', '')
+      stack.extend((r, child_prefix) for r in original_router.routes)
+  return paths
+
+
 def test_setup_fastapi_blog_basic():
   """Test that setup_fastapi_blog() configures both blog and admin."""
   app = FastAPI()
@@ -28,7 +51,7 @@ def test_setup_fastapi_blog_basic():
   assert 'en' in admins
 
   # Verify routes are registered
-  routes = [route.path for route in app.routes]
+  routes = _all_paths(app)
 
   # Blog routes should be present
   assert any('/blog' in path for path in routes), 'Blog routes not found'
@@ -54,7 +77,7 @@ def test_setup_fastapi_blog_with_api():
   assert admins is not None
 
   # Verify API routes are registered
-  routes = [route.path for route in app.routes]
+  routes = _all_paths(app)
   assert any('/api/posts' in path for path in routes), 'API routes not found'
 
 
@@ -77,7 +100,7 @@ def test_setup_fastapi_blog_multiple_locales():
 
   # Verify both admin instances are mounted
   # default_locale="ru" means: /admin for Russian, /en/admin for English
-  routes = [route.path for route in app.routes]
+  routes = _all_paths(app)
   assert any('/admin' in path and '/en/admin' not in path for path in routes), (
     'Default (Russian) admin not found'
   )
@@ -138,8 +161,8 @@ def test_setup_fastapi_blog_is_convenience_wrapper():
   )
 
   # Both should result in same number of routes
-  routes1 = [route.path for route in app1.routes]
-  routes2 = [route.path for route in app2.routes]
+  routes1 = _all_paths(app1)
+  routes2 = _all_paths(app2)
 
   # Filter out openapi/redoc routes (may differ in order)
   blog_admin_routes1 = [r for r in routes1 if '/blog' in r or '/admin' in r]

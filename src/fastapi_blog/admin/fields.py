@@ -7,7 +7,6 @@ from typing import Any
 
 from starlette.datastructures import FormData
 from starlette.requests import Request
-from starlette_admin._types import RequestAction
 from starlette_admin.fields import BaseField, TextAreaField
 
 
@@ -40,15 +39,12 @@ class MarkdownField(TextAreaField):
     super().__init__(name, label=label, **kwargs)
     self.rows = rows
 
-  async def serialize_value(
-    self, request: Request, value: Any, action: RequestAction
-  ) -> Any:
+  async def serialize_value(self, request: Request, value: Any) -> Any:
     """Serialize markdown content for display.
 
     Args:
         request: Starlette request
         value: Field value
-        action: Current action (list, detail, edit, create)
 
     Returns:
         Serialized value
@@ -57,6 +53,7 @@ class MarkdownField(TextAreaField):
     if not value:
       return value
 
+    action = request.state.action
     if action == 'list':
       # Show truncated preview in list view
       preview = str(value)[:100]
@@ -98,15 +95,12 @@ class TagsField(BaseField):
     super().__init__(name, label=label, **kwargs)
     self.placeholder = placeholder
 
-  async def parse_form_data(
-    self, request: Request, form_data: FormData, action: RequestAction
-  ) -> Any:
+  async def parse_form_data(self, request: Request, form_data: FormData) -> Any:
     """Parse tags from form data.
 
     Args:
         request: Starlette request
         form_data: Form data
-        action: Request action
 
     Returns:
         List of tags
@@ -118,20 +112,18 @@ class TagsField(BaseField):
       return [tag.strip() for tag in value.split(',') if tag.strip()]
     return value or []
 
-  async def serialize_value(
-    self, request: Request, value: Any, action: RequestAction
-  ) -> Any:
+  async def serialize_value(self, request: Request, value: Any) -> Any:
     """Serialize tags for display.
 
     Args:
         request: Starlette request
         value: Field value (list or string)
-        action: Current action
 
     Returns:
         Serialized value
 
     """
+    action = request.state.action
     if value is None:
       return [] if action in ('list', 'detail') else ''
 
@@ -177,15 +169,12 @@ class SlugField(BaseField):
     self.placeholder = placeholder
     self.max_length = max_length
 
-  async def parse_form_data(
-    self, request: Request, form_data: FormData, action: RequestAction
-  ) -> Any:
+  async def parse_form_data(self, request: Request, form_data: FormData) -> Any:
     """Parse and validate slug from form data.
 
     Args:
         request: Starlette request
         form_data: Form data
-        action: Request action
 
     Returns:
         Validated slug

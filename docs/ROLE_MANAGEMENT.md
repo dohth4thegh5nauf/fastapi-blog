@@ -131,19 +131,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_blog.admin.database import get_db
 from fastapi_blog.admin.models_role import UserWithRoles
 
+
 @app.get('/admin/dashboard')
 async def admin_dashboard(db: AsyncSession = Depends(get_db)):
   # Get current user (simplified example)
   user = await get_current_user(db)
-  
+
   # Check if user has admin role
   if user.has_role('admin'):
     return {'message': 'Welcome, admin!'}
-  
+
   # Check if user has any of the specified roles
   if user.has_any_role('admin', 'editor'):
     return {'message': 'Welcome, editor!'}
-  
+
   return {'error': 'Access denied'}
 ```
 
@@ -154,24 +155,24 @@ from starlette.requests import Request
 from starlette_admin.contrib.sqla import ModelView
 from fastapi_blog.admin.models_role import UserWithRoles
 
+
 class MyModelView(ModelView):
-  
   def can_create(self, request: Request) -> bool:
     """Only admins and editors can create."""
     user_email = request.session.get('user')
     if not user_email:
       return False
-    
+
     # Get user from database
     user = get_user_by_email(user_email)  # Implement this
     return user.has_any_role('admin', 'editor')
-  
+
   def can_delete(self, request: Request) -> bool:
     """Only admins can delete."""
     user_email = request.session.get('user')
     if not user_email:
       return False
-    
+
     user = get_user_by_email(user_email)
     return user.has_role('admin')
 ```
@@ -195,13 +196,14 @@ Provides CRUD interface for managing roles.
 ```python
 from fastapi_blog.admin import RoleModelView
 
+
 class CustomRoleView(RoleModelView):
   # Customize fields
   fields = ['id', 'name', 'description', 'is_active']
-  
+
   # Customize labels
   label = 'Custom Roles'
-  
+
   # Override permissions
   def can_create(self, request: Request) -> bool:
     return True  # Allow all authenticated users
@@ -224,11 +226,12 @@ Provides CRUD interface for managing users with roles.
 ```python
 from fastapi_blog.admin import UserWithRolesModelView
 
+
 class CustomUserView(UserWithRolesModelView):
   # Exclude sensitive fields
   exclude_fields_from_list = ['hashed_password']
   exclude_fields_from_detail = ['hashed_password']
-  
+
   # Custom permissions
   def can_edit(self, request: Request) -> bool:
     # Users can edit their own profile
@@ -273,10 +276,15 @@ for locale, admin in admins.items():
 
 ```python
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi_blog.admin.models_role import Role, UserWithRoles, create_default_roles
+from fastapi_blog.admin.models_role import (
+  Role,
+  UserWithRoles,
+  create_default_roles,
+)
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
 
 async def create_user_with_roles(
   session: AsyncSession,
@@ -286,32 +294,31 @@ async def create_user_with_roles(
 ):
   """Create a user and assign roles."""
   from sqlalchemy import select
-  
+
   # Create user
   user = UserWithRoles(
     email=email,
     hashed_password=pwd_context.hash(password),
     is_active=True,
   )
-  
+
   # Get roles
-  result = await session.execute(
-    select(Role).where(Role.name.in_(role_names))
-  )
+  result = await session.execute(select(Role).where(Role.name.in_(role_names)))
   roles = result.scalars().all()
-  
+
   # Assign roles
   user.roles = roles
-  
+
   session.add(user)
   await session.commit()
-  
+
   return user
+
 
 # Usage
 async with session_factory() as session:
   await create_default_roles(session)
-  
+
   # Create admin user
   admin_user = await create_user_with_roles(
     session,
@@ -319,7 +326,7 @@ async with session_factory() as session:
     password='SecurePass123!',
     role_names=['admin'],
   )
-  
+
   # Create editor user
   editor_user = await create_user_with_roles(
     session,
@@ -379,22 +386,27 @@ alembic upgrade head
 ```python
 from sqlalchemy import select
 from fastapi_blog.admin.models import User
-from fastapi_blog.admin.models_role import UserWithRoles, Role, create_default_roles
+from fastapi_blog.admin.models_role import (
+  UserWithRoles,
+  Role,
+  create_default_roles,
+)
+
 
 async def migrate_users_to_roles(session: AsyncSession):
   """Migrate existing users to UserWithRoles."""
-  
+
   # Create default roles
   await create_default_roles(session)
-  
+
   # Get admin role
   result = await session.execute(select(Role).where(Role.name == 'admin'))
   admin_role = result.scalar_one()
-  
+
   # Get all existing users
   result = await session.execute(select(User))
   users = result.scalars().all()
-  
+
   # Migrate each user
   for user in users:
     new_user = UserWithRoles(
@@ -404,13 +416,13 @@ async def migrate_users_to_roles(session: AsyncSession):
       created_at=user.created_at,
       updated_at=user.updated_at,
     )
-    
+
     # Assign admin role to admin users
     if user.is_admin:
       new_user.roles = [admin_role]
-    
+
     session.add(new_user)
-  
+
   await session.commit()
 ```
 

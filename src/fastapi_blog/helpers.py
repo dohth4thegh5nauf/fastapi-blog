@@ -8,10 +8,10 @@ from typing import Any
 
 import markdown as md  # type: ignore[import-untyped]
 import nh3
-import yaml
 from pydantic import ValidationError
 from pymdownx import emoji  # type: ignore
 
+from . import store
 from .models import (
   DEFAULT_SCHEMA,
   LOOSE_DEFAULT_SCHEMA,
@@ -213,19 +213,9 @@ def _read_posts(
   posts: list[dict] = []
   for post in pathlib.Path('.').glob(f'{posts_dirname}/*.md'):
     try:
-      raw = post.read_text().split('---')[1]
-    except IndexError:
-      logger.warning('Skipping %s: missing YAML frontmatter', post)
-      continue
-
-    try:
-      data = yaml.safe_load(raw)
-    except yaml.YAMLError as exc:
-      logger.warning('Skipping %s: invalid YAML (%s)', post, exc)
-      continue
-
-    if not isinstance(data, dict):
-      logger.warning('Skipping %s: frontmatter is not a mapping', post)
+      data, _ = store.read_document(post)
+    except ValueError as exc:
+      logger.warning('Skipping %s: %s', post, exc)
       continue
 
     try:
@@ -243,9 +233,7 @@ def _read_posts(
 def load_content_from_markdown_file(
   path: pathlib.Path, sanitize: bool = False
 ) -> dict[str, str | dict]:
-  raw: str = path.read_text()
-  metadata = yaml.safe_load(raw.split('---')[1])
-  markdown_text = '\n---\n'.join(raw.split('---')[2:])
+  metadata, markdown_text = store.read_document(path)
   page: dict[str, str | dict] = {
     'metadata': metadata,
     'markdown': markdown_text,

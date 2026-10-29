@@ -15,9 +15,9 @@ class RoleModelView(ModelView):
   """
 
   # Basic configuration
-  identity = 'role'
-  name = 'Role'
-  label = 'Roles'
+  key = 'role'
+  display_name = 'Role'
+  menu_label = 'Roles'
   icon = 'fa fa-shield'
 
   # Custom templates with theme and language switchers
@@ -39,7 +39,7 @@ class RoleModelView(ModelView):
     self.locale = locale
     self.admin_username = admin_username  # Store for access checks
     self.translator = Translator(locale)
-    self.label = self.translator.role.role_label
+    self.menu_label = self.translator.role.role_label
 
   # Fields to display (using Any to avoid mypy errors with starlette-admin)
   fields: list = [
@@ -123,9 +123,9 @@ class UserWithRolesModelView(ModelView):
   """
 
   # Basic configuration
-  identity = 'user_with_roles'
-  name = 'User'
-  label = 'Users with Roles'
+  key = 'user_with_roles'
+  display_name = 'User'
+  menu_label = 'Users with Roles'
   icon = 'fa fa-users'
 
   # Custom templates with theme and language switchers
@@ -147,7 +147,7 @@ class UserWithRolesModelView(ModelView):
     self.locale = locale
     self.admin_username = admin_username  # Store for access checks
     self.translator = Translator(locale)
-    self.label = self.translator.role.user_roles_label
+    self.menu_label = self.translator.role.user_roles_label
 
   # Fields to display (using Any to avoid mypy errors with starlette-admin)
   fields: list = [

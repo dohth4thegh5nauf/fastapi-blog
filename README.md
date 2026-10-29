@@ -84,8 +84,8 @@ The admin panel is a **web application** (like WordPress Admin or Django Admin),
 
 ```python
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    include_api=True,  # ← This adds REST API to /docs
+  app,
+  include_api=True,  # ← This adds REST API to /docs
 )
 ```
 
@@ -103,24 +103,25 @@ app = FastAPI()
 
 # Single function configures everything
 fastapi_blog.setup_fastapi_blog(
-    app,
-    posts_dirname="posts",
-    include_api=False,  # Set True for REST API
-    locales=["en", "ru"],  # Multiple languages
-    default_locale="en",
-    admin_username="admin",
-    admin_password="change-me-in-production",
-    secret_key="your-secret-key-here",
-    enable_role_management=False,  # Set True for RBAC
+  app,
+  posts_dirname='posts',
+  include_api=False,  # Set True for REST API
+  locales=['en', 'ru'],  # Multiple languages
+  default_locale='en',
+  admin_username='admin',
+  admin_password='change-me-in-production',
+  secret_key='your-secret-key-here',
+  enable_role_management=False,  # Set True for RBAC
 )
 
-@app.get("/")
+
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Visit /blog for posts, /admin for management",
-        "blog": "http://localhost:8000/blog",
-        "admin": "http://localhost:8000/admin",
-    }
+  return {
+    'message': 'Visit /blog for posts, /admin for management',
+    'blog': 'http://localhost:8000/blog',
+    'admin': 'http://localhost:8000/admin',
+  }
 ```
 
 That's it! Now you have:
@@ -138,18 +139,19 @@ import fastapi_blog
 app = FastAPI()
 
 # Add blog functionality
-fastapi_blog.add_blog_to_fastapi(app, prefix="blog")
+fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 
 # Add admin panel
 fastapi_blog.add_admin_to_app(app)
 
-@app.get("/")
+
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Visit /blog for posts, /admin for management",
-        "blog": "http://localhost:8000/blog",
-        "admin": "http://localhost:8000/admin",
-    }
+  return {
+    'message': 'Visit /blog for posts, /admin for management',
+    'blog': 'http://localhost:8000/blog',
+    'admin': 'http://localhost:8000/admin',
+  }
 ```
 
 That's it! Now you have:
@@ -167,11 +169,11 @@ app = FastAPI()
 
 # Add blog with REST API enabled
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    prefix="blog",
-    include_api=True,  # ← Enable REST API
-    api_prefix="/api/posts",
-    api_require_auth=True,
+  app,
+  prefix='blog',
+  include_api=True,  # ← Enable REST API
+  api_prefix='/api/posts',
+  api_require_auth=True,
 )
 
 # Add admin panel for authentication (needs the `admin` extra)
@@ -196,18 +198,18 @@ app = FastAPI()
 
 
 def check_token(request: Request) -> dict:
-    if request.headers.get("X-Token") != "change-me":
-        raise HTTPException(status_code=403)
-    return {"username": "service"}
+  if request.headers.get('X-Token') != 'change-me':
+    raise HTTPException(status_code=403)
+  return {'username': 'service'}
 
 
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    include_api=True,
-    # either Basic credentials ...
-    # admin_username="writer", admin_password="a-long-secret",
-    # ... or a dependency of your own
-    api_auth_dependency=check_token,
+  app,
+  include_api=True,
+  # either Basic credentials ...
+  # admin_username="writer", admin_password="a-long-secret",
+  # ... or a dependency of your own
+  api_auth_dependency=check_token,
 )
 ```
 
@@ -301,14 +303,15 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 app = add_blog_to_fastapi(app)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount('/static', StaticFiles(directory='static'), name='static')
 
-@app.get("/")
+
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000/blog",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/blog',
+  }
 ```
 
 ### Replacing the default templates
@@ -323,25 +326,25 @@ from fastapi.staticfiles import StaticFiles
 
 
 django_style_jinja2_loader = jinja2.ChoiceLoader(
-    [
-        jinja2.FileSystemLoader("templates"),
-        jinja2.PackageLoader("fastapi_blog", "templates"),
-    ]
+  [
+    jinja2.FileSystemLoader('templates'),
+    jinja2.PackageLoader('fastapi_blog', 'templates'),
+  ]
 )
 
 app = FastAPI()
 app = fastapi_blog.add_blog_to_fastapi(
-    app, prefix=prefix, jinja2_loader=django_style_jinja2_loader
+  app, prefix=prefix, jinja2_loader=django_style_jinja2_loader
 )
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount('/static', StaticFiles(directory='static'), name='static')
 
 
-@app.get("/")
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": f"http://localhost:8000/blog",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': f'http://localhost:8000/blog',
+  }
 ```
 
 
@@ -355,17 +358,15 @@ from fastapi import FastAPI
 
 
 app = FastAPI()
-app = fastapi_blog.add_blog_to_fastapi(
-    app, prefix="change"
-)
+app = fastapi_blog.add_blog_to_fastapi(app, prefix='change')
 
 
-@app.get("/api")
+@app.get('/api')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000/change",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/change',
+  }
 ```
 
 ## Blog at root URL
@@ -380,12 +381,13 @@ from fastapi import FastAPI
 app = FastAPI()
 
 
-@app.get("/api")
+@app.get('/api')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000',
+  }
+
 
 # Because the prefix is None, the call to add_blog_to_fastapi
 # needs to happen after the other view functions are defined.
@@ -401,21 +403,21 @@ from fastapi import FastAPI
 
 
 favorite_post_ids = {
-    "code-code-code",
-    "thirty-minute-rule",
-    "2023-11-three-years-at-kraken-tech",
+  'code-code-code',
+  'thirty-minute-rule',
+  '2023-11-three-years-at-kraken-tech',
 }
 
 app = FastAPI()
 app = fastapi_blog.add_blog_to_fastapi(app, favorite_post_ids=favorite_post_ids)
 
 
-@app.get("/")
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000/blog",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/blog',
+  }
 ```
 
 ### Add page not in the blog list of posts
@@ -529,7 +531,7 @@ fastapi-blog/
 
 1. Update the version in `pyproject.toml` and `fastapi_blog/__init__.py`
 
-2. Update changelog.md
+2. Update `CHANGELOG.md`
 
 3. Build the distribution locally:
 

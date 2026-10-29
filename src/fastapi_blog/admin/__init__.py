@@ -16,9 +16,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette_admin.contrib.sqla import Admin
 from starlette_admin.i18n import I18nConfig
 
+from ..models import FrontmatterSchema
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
-from ..models import FrontmatterSchema
 from .fields import MarkdownField, SlugField, TagsField
 from .models import Post, Role, User, UserWithRoles
 from .views_role import RoleModelView, UserWithRolesModelView
@@ -90,6 +90,7 @@ def _create_admin_for_locale(
   templates_dir: str,
   available_locales: list[str],
   default_locale: str,
+  secret_key: str,
   enable_role_management: bool = False,
   admin_username: str = 'admin',
   frontmatter_schema: FrontmatterSchema | None = None,
@@ -105,6 +106,7 @@ def _create_admin_for_locale(
       templates_dir: Path to custom templates directory
       available_locales: List of all available locales for language switcher
       default_locale: Default locale for the application
+      secret_key: Signs starlette-admin's own CSRF/flash cookies
       enable_role_management: Whether to automatically add role management views
       admin_username: Root admin username for role management access control
       frontmatter_schema: Custom frontmatter schema for the markdown posts
@@ -136,6 +138,7 @@ def _create_admin_for_locale(
     base_url=base_url,
     route_name=f'admin_{locale}',  # Unique route name for each locale
     auth_provider=auth_provider,
+    secret_key=secret_key,  # Signs starlette-admin's own CSRF/flash cookies
     templates_dir=templates_dir,
     i18n_config=i18n_config,
     debug=os.getenv('DEBUG', 'false').lower() == 'true',
@@ -158,8 +161,8 @@ def _create_admin_for_locale(
 
   # Add User view with translated labels
   user_view = UserModelView(User, icon='fa fa-users')
-  user_view.label = user_label
-  user_view.name = user_name_for_button
+  user_view.menu_label = user_label
+  user_view.display_name = user_name_for_button
   admin.add_view(user_view)
 
   # Add role management views if enabled
@@ -187,7 +190,7 @@ def _create_admin_for_locale(
     # DropDown automatically hides when all nested views are inaccessible
     admin.add_view(
       DropDown(
-        label=role_category,
+        menu_label=role_category,
         icon='fa fa-shield',
         views=[role_view, user_roles_view],
       )
@@ -207,7 +210,7 @@ def _create_admin_for_locale(
   posts_list_view = MarkdownListView(
     posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
   )
-  posts_list_view.label = posts_label
+  posts_list_view.menu_label = posts_label
   admin.add_view(posts_list_view)
 
   # Add edit and create views (don't show in menu)
@@ -269,35 +272,35 @@ def add_admin_to_app(
   Example:
     ```python
     from fastapi import (
-        FastAPI,
+      FastAPI,
     )
     from fastapi_blog.admin import (
-        add_admin_to_app,
+      add_admin_to_app,
     )
 
     app = FastAPI()
 
     # English and Russian with EN as default
     admins = add_admin_to_app(
-        app,
-        title="My Blog Admin",
-        admin_password="SuperSecret123!",
-        locales=[
-            "en",
-            "ru",
-        ],
-        default_locale="en",  # /admin → /admin/en
+      app,
+      title='My Blog Admin',
+      admin_password='SuperSecret123!',
+      locales=[
+        'en',
+        'ru',
+      ],
+      default_locale='en',  # /admin → /admin/en
     )
 
     # Russian by default
     admins = add_admin_to_app(
-        app,
-        title="Админ-панель блога",
-        locales=[
-            "en",
-            "ru",
-        ],
-        default_locale="ru",  # /admin → /admin/ru
+      app,
+      title='Админ-панель блога',
+      locales=[
+        'en',
+        'ru',
+      ],
+      default_locale='ru',  # /admin → /admin/ru
     )
     ```
 
@@ -422,6 +425,7 @@ def add_admin_to_app(
     templates_dir=templates_dir,
     available_locales=locales,
     default_locale=default_locale,
+    secret_key=secret_key,
     enable_role_management=enable_role_management,
     admin_username=admin_username,
     frontmatter_schema=frontmatter_schema,
@@ -452,6 +456,7 @@ def add_admin_to_app(
       templates_dir=templates_dir,
       available_locales=locales,
       default_locale=default_locale,
+      secret_key=secret_key,
       enable_role_management=enable_role_management,
       admin_username=admin_username,
       frontmatter_schema=frontmatter_schema,

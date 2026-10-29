@@ -43,6 +43,7 @@ EXTERNAL_SCHEMA = FrontmatterSchema(
 
 class FakeRequest:
   def __init__(self, **path_params):
+    """Store path params the same way Starlette's Request does."""
     self.path_params = path_params
     self.scope = {'root_path': '/admin'}
 
@@ -55,7 +56,8 @@ class FakeTemplates:
 
 
 def render(view, **path_params):
-  return asyncio.run(view.render(FakeRequest(**path_params), FakeTemplates()))
+  view.templates = FakeTemplates()
+  return asyncio.run(view.index(FakeRequest(**path_params)))
 
 
 @pytest.fixture

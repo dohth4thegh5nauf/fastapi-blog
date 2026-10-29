@@ -317,6 +317,7 @@ Change passwords and secret keys periodically, especially after:
 **Check:**
 ```python
 import os
+
 print(os.getenv('FASTAPI_BLOG_INCLUDE_API'))  # Should print your value
 ```
 

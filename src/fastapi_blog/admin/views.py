@@ -6,9 +6,9 @@ from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.templating import Jinja2Templates
 from starlette_admin import CustomView
 from starlette_admin.contrib.sqla import ModelView
+from starlette_admin.routing import route
 
 from ..models import FrontmatterSchema
 
@@ -204,13 +204,12 @@ class HomeView(CustomView):
     schema: FrontmatterSchema | None = None,
   ):
     """Initialize home view with locale and frontmatter schema."""
-    super().__init__(label=label, icon=icon)
+    super().__init__(menu_label=label, icon=icon)
     self.locale = locale
     self.schema = schema
 
-  async def render(
-    self, request: Request, templates: Jinja2Templates
-  ) -> Response:
+  @route('')
+  async def index(self, request: Request) -> Response:
     """Render custom home page with blog statistics."""
     from .markdown_crud import get_posts_directory
     from .markdown_model import MarkdownPost
@@ -233,19 +232,14 @@ class HomeView(CustomView):
     published_posts = [p for p in all_posts if p.published]
     draft_posts = [p for p in all_posts if not p.published]
 
-    # Get latest posts (sorted by date, descending)
-    # Handle timezone-aware and naive datetime comparison
-    try:
-      latest_posts = sorted(
-        published_posts, key=lambda p: p.date, reverse=True
-      )[:10]
-    except TypeError:
-      # If datetime comparison fails, sort by string representation
-      latest_posts = sorted(
-        published_posts,
-        key=lambda p: p.date.isoformat() if p.date else '',
-        reverse=True,
-      )[:10]
+    # Get latest posts (sorted by date, descending). ISO strings compare the
+    # same way the dates do, stay comparable across naive/aware datetimes,
+    # and sort undated posts (empty string) last.
+    latest_posts = sorted(
+      published_posts,
+      key=lambda p: p.date.isoformat() if p.date else '',
+      reverse=True,
+    )[:10]
 
     # Collect all tags
     all_tags: dict[str, int] = {}
@@ -270,10 +264,11 @@ class HomeView(CustomView):
     translations = load_translations(self.locale)
     t = translations['home']
 
-    return templates.TemplateResponse(
-      request,
-      'home.html',
-      {
+    assert self.templates is not None
+    return self.templates.TemplateResponse(
+      request=request,
+      name='home.html',
+      context={
         'posts': latest_posts,
         'stats': stats,
         'top_tags': top_tags,

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from . import helpers
+from . import helpers, store
 from .i18n import Translator
 from .models import FrontmatterSchema
 
@@ -179,10 +179,8 @@ def get_blog_router(
         detail=f"Post '{post_id}' not found",
       )
     post = dict(matches[0])
-    content = (
-      pathlib.Path(f'{posts_dirname}/{post_id}.md').read_text().split('---')[2]
-    )
-    post['content'] = helpers.markdown(content, sanitize=sanitize_html)
+    _, body = store.read_document(pathlib.Path(f'{posts_dirname}/{post_id}.md'))
+    post['content'] = helpers.markdown(body, sanitize=sanitize_html)
 
     context = {'post': post}
     return templates.TemplateResponse(

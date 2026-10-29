@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Dependency upgrade
+
+Every dependency floor bumped to its current latest release: `fastapi`
+0.116→0.162, `markdown` 3.9→3.11, `nh3` 0.2→0.3, `pydantic` 2.9→2.14,
+`pymdown-extensions` 10→12, `uvicorn` 0.35→0.54, `sqlalchemy` 2.0→2.1,
+`aiosqlite`/`itsdangerous`/`python-multipart` to latest patch, `pyld` 2→3,
+`ruff` 0.13→0.17, `pytest` 8→9, `mypy` 1→2, `coverage`, `setuptools`.
+`pyyaml`/`jinja2`/`jinja2-time`/`httpx` were already current.
+
+#### `starlette-admin` 0.16 → 1.0.3 (the one major-breaking bump)
+
+- `auth_provider.py`/`rbac_auth_provider.py`: ported to the new
+  `AuthProvider` contract — `is_authenticated`/`get_admin_user` merged into a
+  single `authenticate(request) -> AdminUser | None`; `login`/`logout` no
+  longer take/return a `Response`; `render_login` keeps our YAML-translated
+  login page but matches the new `(request, templates)` signature
+- `Admin(...)` now needs an explicit `secret_key` for its own CSRF/flash
+  cookies (previously only `SessionMiddleware` needed one); wired through
+  from `add_admin_to_app`'s already-validated `secret_key`
+- `views.py`/`views_role.py`/`markdown_crud.py`: `CustomView.render()` →
+  `@route('') async def index()`; constructor kwargs renamed
+  (`label`→`menu_label`, `name`→`route_name`, `template_path` removed);
+  `ModelView`/`BaseView` attributes renamed (`label`→`menu_label` for the
+  sidebar, `name`→`display_name` for the singular form title,
+  `identity`→`key`); `DropDown(label=...)` → `DropDown(menu_label=...)`
+- `admin/fields.py` (`MarkdownField`, `TagsField`, `SlugField`): the
+  `action` parameter dropped from `serialize_value`/`parse_form_data`; read
+  `request.state.action` instead (these classes aren't used by this
+  project's own views yet, only exported for consumers)
+- **The 4 customized `list.html`/`detail.html`/`edit.html`/`create.html`
+  templates (Role/User management pages only) now extend the built-in
+  `@starlette-admin/*.html` directly**, instead of our themed
+  `layouts/custom_base.html`. 1.0 replaced the DataTables-based rendering
+  these were built against with a server-rendered system built from a new
+  set of partials/macros; re-theming that wasn't practical to do blind, so
+  these 4 pages lost the project's custom dark theme/language switcher (they
+  use the stock light theme now) in exchange for actually working — verified
+  end-to-end in a real browser: login, create/list/detail/edit a user, role
+  list. The blog's own post editor pages (`home.html`, `markdown_list.html`,
+  `markdown_edit.html`) are untouched and keep the custom theme
+- `passlib[bcrypt]`'s self-test crashes on `bcrypt>=4.1` (`ValueError:
+  password cannot be longer than 72 bytes`) — a known passlib/bcrypt
+  incompatibility (passlib is unmaintained since 2020). Pinned
+  `bcrypt<4.1` in the `admin` extra
+- New regression tests: `tests/test_admin_modelview_pages.py` (logs in for
+  real, exercises create→list→detail→edit on the Role/User pages — the
+  gap that let the empty-table regression through unnoticed); updated
+  `tests/test_admin_theme.py` to assert the new extends-stock-template
+  design instead of the old custom-theme one
+
 ### Phase A: packages, imports, cache
 
 #### Changed
@@ -52,6 +102,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Already deprecated and still present: `add_editor_to_app(ui=True)`. Planned for the
   next phases: the `POSTS_DIR` environment variable, the default `admin` /
   `Admin123!` credentials
+
+### Phase B: document storage (in progress)
+
+#### Added
+- `fastapi_blog.store`: shared frontmatter parsing (`parse_document`),
+  serialization, atomic writes (`atomic_write_text`, temp file + `os.replace`),
+  slug/path-escape checks (`safe_document_path`) and an etag primitive
+  (`compute_etag`) for later `If-Match` support
+
+#### Fixed
+- The blog post page, `helpers.list_posts`, the deprecated editor API and both
+  admin post models (`markdown_model.MarkdownPost`, `markdown_crud.MarkdownPost`)
+  used to split the file on every `---`, so a Markdown horizontal rule or table
+  (`|---|---|`) in the body silently truncated the rendered post. All five now
+  parse frontmatter the same way, only at the file's first `---`/`...` boundary
+- All file reads/writes across these modules are explicit UTF-8; writes from the
+  editor API and the admin post models are atomic (temp file + `os.replace`)
+- `admin.markdown_model.MarkdownPost` no longer invents `datetime.now()` for a
+  post with no date; a missing date stays `None` (the admin list/sort already
+  handled `None` dates for mixed-timezone posts)
+
+#### Still open for this phase
+- No `Collection`/`DocumentStore` abstraction yet (4.1, 4.6): the four read/write
+  call sites above now share parsing/writing primitives but aren't a single
+  service, and `posts`/`pages` aren't yet modeled as two collections
+- No `etag`/`If-Match` concurrency on the REST API or the admin save path yet
+  (4.7); `store.compute_etag` exists but nothing calls it yet
+- `markdown_crud.MarkdownPost` already defaulted an absent date to `''` (not
+  `datetime.now()`); only `admin.markdown_model.MarkdownPost` invented a date,
+  and that's what this pass fixed
 
 ## [Unreleased]
 

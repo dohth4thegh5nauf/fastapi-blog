@@ -82,23 +82,23 @@ def add_blog_to_fastapi(
   Example:
       ```python
       from fastapi import (
-          FastAPI,
+        FastAPI,
       )
       from fastapi_blog import (
-          add_blog_to_fastapi,
+        add_blog_to_fastapi,
       )
 
       app = FastAPI()
 
       # Basic blog
       add_blog_to_fastapi(
-          app
+        app
       )
 
       # With REST API enabled
       add_blog_to_fastapi(
-          app,
-          include_api=True,
+        app,
+        include_api=True,
       )
       ```
 

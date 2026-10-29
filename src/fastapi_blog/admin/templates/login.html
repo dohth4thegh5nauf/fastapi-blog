@@ -185,6 +185,7 @@ window.languageSwitcher = {
         </div>
     {% endif %}
     <form class="card card-md" action="{{ request.url }}" method="POST">
+        {{ csrf_input(request) }}
         <div class="card-body">
             <h2 class="card-title text-center mb-4">{{ _("Login to your account") }}</h2>
             {% if error %}

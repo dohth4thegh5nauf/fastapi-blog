@@ -5,12 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.templating import Jinja2Templates
+from starlette_admin.routing import route
 from starlette_admin.views import CustomView
 
+from .. import store
 from ..models import DEFAULT_SCHEMA, FrontmatterSchema
 from .form_fields import (
   build_form_fields,
@@ -112,25 +112,12 @@ class MarkdownFileManager:
     if not file_path.exists():
       return None
 
-    content = file_path.read_text(encoding='utf-8')
-
-    # Parse frontmatter
-    if content.startswith('---'):
-      parts = content.split('---', 2)
-      if len(parts) >= 3:
-        frontmatter_text = parts[1]
-        body = parts[2].strip()
-        try:
-          frontmatter = yaml.safe_load(frontmatter_text) or {}
-        except Exception as e:
-          print(f'Error parsing frontmatter for {slug}: {e}')
-          frontmatter = {}
-      else:
-        frontmatter = {}
-        body = content
-    else:
-      frontmatter = {}
-      body = content
+    try:
+      frontmatter, body = store.read_document(file_path)
+    except ValueError as e:
+      print(f'Error parsing frontmatter for {slug}: {e}')
+      frontmatter, body = {}, file_path.read_text(encoding='utf-8')
+    body = body.strip()
 
     return MarkdownPost(slug, frontmatter, body, self.schema)
 
@@ -138,14 +125,8 @@ class MarkdownFileManager:
     self, slug: str, frontmatter: dict[str, Any], content: str
   ) -> None:
     """Save a post to file."""
-    # Construct markdown with frontmatter
-    frontmatter_yaml = yaml.dump(
-      frontmatter, allow_unicode=True, sort_keys=False
-    )
-    markdown = f'---\n{frontmatter_yaml}---\n\n{content}'
-
     file_path = self.posts_dir / f'{slug}.md'
-    file_path.write_text(markdown, encoding='utf-8')
+    store.write_document(file_path, frontmatter, f'\n{content}')
 
   def delete_post(self, slug: str) -> bool:
     """Delete a post."""
@@ -167,19 +148,17 @@ class MarkdownListView(CustomView):
   ):
     """Initialize list view with posts directory, locale and schema."""
     super().__init__(
-      label=_('Posts'),
+      menu_label=_('Posts'),
       icon='fa fa-file-text',
       path='/posts/list',
-      template_path='markdown_list.html',
-      name='posts:list',
+      route_name='posts:list',
     )
     self.schema = schema or DEFAULT_SCHEMA
     self.manager = MarkdownFileManager(posts_dir, self.schema)
     self.locale = locale
 
-  async def render(
-    self, request: Request, templates: Jinja2Templates
-  ) -> Response:
+  @route('')
+  async def index(self, request: Request) -> Response:
     """Render list of posts."""
     posts = self.manager.list_posts()
 
@@ -249,9 +228,10 @@ class MarkdownListView(CustomView):
     # Get translations for current locale (default to English)
     t = translations.get(locale, translations['en'])
 
-    return templates.TemplateResponse(
+    assert self.templates is not None
+    return self.templates.TemplateResponse(
       request=request,
-      name=self.template_path,
+      name='markdown_list.html',
       context={
         'title': self.title(request),
         'posts': posts_data,
@@ -285,23 +265,22 @@ class MarkdownEditView(CustomView):
   ):
     """Initialize edit view with posts directory, locale and schema."""
     super().__init__(
-      label=_('Edit Post'),
+      menu_label=_('Edit Post'),
       path='/posts/edit/{slug}',
-      template_path='markdown_edit.html',
-      name='posts:edit',
+      route_name='posts:edit',
       add_to_menu=False,  # Don't show in menu
     )
     self.schema = schema or DEFAULT_SCHEMA
     self.manager = MarkdownFileManager(posts_dir, self.schema)
     self.locale = locale
 
-  async def render(
-    self, request: Request, templates: Jinja2Templates
-  ) -> Response:
+  @route('')
+  async def index(self, request: Request) -> Response:
     """Render edit form."""
+    assert self.templates is not None
     slug = request.path_params.get('slug')
     if not slug:
-      return templates.TemplateResponse(
+      return self.templates.TemplateResponse(
         request=request,
         name='error.html',
         context={'error': 'Missing slug parameter'},
@@ -310,7 +289,7 @@ class MarkdownEditView(CustomView):
     post = self.manager.load_post(slug)
 
     if not post:
-      return templates.TemplateResponse(
+      return self.templates.TemplateResponse(
         request=request,
         name='admin/404.html',
         context={
@@ -328,9 +307,9 @@ class MarkdownEditView(CustomView):
 
     form_fields = build_form_fields(self.schema, post.frontmatter, t)
 
-    return templates.TemplateResponse(
+    return self.templates.TemplateResponse(
       request=request,
-      name=self.template_path,
+      name='markdown_edit.html',
       context={
         'title': f'{t["edit_title"]}: {post.title}',
         'post': {
@@ -358,20 +337,19 @@ class MarkdownCreateView(CustomView):
   ):
     """Initialize create view with posts directory, locale and schema."""
     super().__init__(
-      label=_('New Post'),
+      menu_label=_('New Post'),
       path='/posts/new',
-      template_path='markdown_edit.html',
-      name='posts:new',
+      route_name='posts:new',
       add_to_menu=False,
     )
     self.schema = schema or DEFAULT_SCHEMA
     self.manager = MarkdownFileManager(posts_dir, self.schema)
     self.locale = locale
 
-  async def render(
-    self, request: Request, templates: Jinja2Templates
-  ) -> Response:
+  @route('')
+  async def index(self, request: Request) -> Response:
     """Render create form."""
+    assert self.templates is not None
     # Get translations for this view's locale
     from ..i18n import load_translations
 
@@ -380,9 +358,9 @@ class MarkdownCreateView(CustomView):
 
     form_fields = build_form_fields(self.schema, {}, t, is_new=True)
 
-    return templates.TemplateResponse(
+    return self.templates.TemplateResponse(
       request=request,
-      name=self.template_path,
+      name='markdown_edit.html',
       context={
         'title': t['create_new'],
         'post': {

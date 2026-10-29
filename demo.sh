@@ -4,6 +4,14 @@
 set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Every example below uses the admin panel, which needs the `admin` extra
+# (starlette-admin, sqlalchemy, passlib, ...). `uv sync` alone only
+# installs the base dependencies, so pull in every extra here.
+if command -v uv >/dev/null 2>&1; then
+  ( cd "$REPO_ROOT" && uv sync --all-extras --quiet )
+fi
+
 cd "$REPO_ROOT/tests/examples"
 
 # Activate virtual environment if it exists

@@ -120,33 +120,33 @@ async def get_current_user(
   Example:
       ```python
       from fastapi import (
-          Depends,
-          FastAPI,
+        Depends,
+        FastAPI,
       )
       from fastapi_blog.auth import (
-          get_current_user,
+        get_current_user,
       )
 
       app = FastAPI()
 
 
       @app.get(
-          "/protected"
+        '/protected'
       )
       async def protected(
-          user: str
-          | None = Depends(
-              get_current_user
-          ),
+        user: str
+        | None = Depends(
+          get_current_user
+        ),
       ):
-          if not user:
-              raise HTTPException(
-                  401,
-                  "Authentication required",
-              )
-          return {
-              "user": user
-          }
+        if not user:
+          raise HTTPException(
+            401,
+            'Authentication required',
+          )
+        return {
+          'user': user
+        }
       ```
 
   """

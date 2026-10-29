@@ -201,15 +201,15 @@ from fastapi import FastAPI
 app = FastAPI()
 
 fastapi_blog.setup_fastapi_blog(
-    app,
-    posts_dirname="posts",
-    include_api=False,
-    locales=["en", "ru"],
-    default_locale="en",
-    admin_username="admin",
-    admin_password="secure_password",
-    secret_key="your-secret-key",
-    enable_role_management=False,
+  app,
+  posts_dirname='posts',
+  include_api=False,
+  locales=['en', 'ru'],
+  default_locale='en',
+  admin_username='admin',
+  admin_password='secure_password',
+  secret_key='your-secret-key',
+  enable_role_management=False,
 )
 ```
 
@@ -218,19 +218,19 @@ fastapi_blog.setup_fastapi_blog(
 ```python
 # Добавить блог
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    prefix="blog",
-    locales=["en", "ru"],
-    include_api=True,  # REST API для постов
+  app,
+  prefix='blog',
+  locales=['en', 'ru'],
+  include_api=True,  # REST API для постов
 )
 
 # Добавить админ-панель
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="secure_password",
-    secret_key="your-secret-key",
-    enable_role_management=True,  # RBAC
+  app,
+  admin_username='admin',
+  admin_password='secure_password',
+  secret_key='your-secret-key',
+  enable_role_management=True,  # RBAC
 )
 ```
 
@@ -295,13 +295,13 @@ src/fastapi_blog/
 
 ```python
 class User:
-    id: int
-    email: str (unique)
-    hashed_password: str
-    is_active: bool
-    is_admin: bool
-    created_at: datetime
-    updated_at: datetime | None
+  id: int
+  email: str(unique)
+  hashed_password: str
+  is_active: bool
+  is_admin: bool
+  created_at: datetime
+  updated_at: datetime | None
 ```
 
 #### UserWithRoles (расширенная модель с RBAC)
@@ -318,29 +318,29 @@ class UserWithRoles(User):
 
 ```python
 class Role:
-    id: int
-    name: str (unique)
-    description: str | None
-    is_active: bool
-    users: list[UserWithRoles]
-    created_at: datetime
-    updated_at: datetime | None
+  id: int
+  name: str(unique)
+  description: str | None
+  is_active: bool
+  users: list[UserWithRoles]
+  created_at: datetime
+  updated_at: datetime | None
 ```
 
 #### Post (опциональная модель поста в БД)
 
 ```python
 class Post:
-    id: int
-    slug: str (unique)
-    title: str
-    content: str
-    description: str | None
-    tags: list
-    published: bool
-    publish_date: datetime | None
-    created_at: datetime
-    updated_at: datetime | None
+  id: int
+  slug: str(unique)
+  title: str
+  content: str
+  description: str | None
+  tags: list
+  published: bool
+  publish_date: datetime | None
+  created_at: datetime
+  updated_at: datetime | None
 ```
 
 ### Поддерживаемые БД
@@ -359,10 +359,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 engine = create_async_engine(database_url)
 AsyncSessionLocal = async_sessionmaker(engine)
 
+
 # Dependency injection
 async def get_db() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
+  async with AsyncSessionLocal() as session:
+    yield session
 ```
 
 ---
@@ -376,9 +377,10 @@ async def get_db() -> AsyncSession:
 ```python
 from fastapi_blog.auth import require_current_user
 
-@app.get("/protected")
+
+@app.get('/protected')
 async def protected(user: User = Depends(require_current_user)):
-    return {"message": f"Hello, {user.email}"}
+  return {'message': f'Hello, {user.email}'}
 ```
 
 ### Поддерживаемые методы
@@ -397,18 +399,18 @@ async def protected(user: User = Depends(require_current_user)):
 ```python
 # Включить RBAC
 fastapi_blog.add_admin_to_app(
-    app,
-    enable_role_management=True,
+  app,
+  enable_role_management=True,
 )
 
 # Проверка ролей
 if user.has_role('admin'):
-    # Полный доступ
-    pass
+  # Полный доступ
+  pass
 
 if user.has_any_role('admin', 'editor'):
-    # Доступ для админов и редакторов
-    pass
+  # Доступ для админов и редакторов
+  pass
 ```
 
 #### Роли по умолчанию
@@ -463,13 +465,13 @@ print("Hello, World!")
 from fastapi_blog import helpers
 
 # Загрузить посты
-posts = helpers.list_posts(posts_dirname="posts", strict=True)
+posts = helpers.list_posts(posts_dirname='posts', strict=True)
 
 # Конвертировать markdown в HTML
 html = helpers.markdown(content, sanitize=True)
 
 # Загрузить контент из файла
-content = helpers.load_content_from_markdown_file("posts/example.md")
+content = helpers.load_content_from_markdown_file('posts/example.md')
 ```
 
 ---

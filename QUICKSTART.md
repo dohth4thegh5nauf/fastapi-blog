@@ -64,8 +64,8 @@ FastAPI `/docs` (Swagger) documents **REST APIs**, not web UIs.
 **To enable REST API:**
 ```python
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    include_api=True,  # ← Adds /api/posts to /docs
+  app,
+  include_api=True,  # ← Adds /api/posts to /docs
 )
 ```
 
@@ -195,14 +195,14 @@ import fastapi_blog
 app = FastAPI()
 
 # Add blog functionality
-fastapi_blog.add_blog_to_fastapi(app, prefix="blog")
+fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 
 # Add admin panel
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="change-me",
-    secret_key="your-secret-key",
+  app,
+  admin_username='admin',
+  admin_password='change-me',
+  secret_key='your-secret-key',
 )
 ```
 
@@ -223,18 +223,18 @@ app = FastAPI()
 
 # Add blog with REST API enabled
 fastapi_blog.add_blog_to_fastapi(
-    app,
-    prefix="blog",
-    include_api=True,  # ← Enable REST API
-    api_prefix="/api/posts",
+  app,
+  prefix='blog',
+  include_api=True,  # ← Enable REST API
+  api_prefix='/api/posts',
 )
 
 # Add admin for authentication
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="change-me",
-    secret_key="your-secret-key",
+  app,
+  admin_username='admin',
+  admin_password='change-me',
+  secret_key='your-secret-key',
 )
 ```
 
@@ -309,11 +309,11 @@ Enable role-based access control (RBAC):
 
 ```python
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="secure_password",
-    secret_key="your-secret-key",
-    enable_role_management=True,  # ← Enable RBAC
+  app,
+  admin_username='admin',
+  admin_password='secure_password',
+  secret_key='your-secret-key',
+  enable_role_management=True,  # ← Enable RBAC
 )
 ```
 
@@ -331,10 +331,10 @@ Enable multi-language support:
 
 ```python
 fastapi_blog.add_admin_to_app(
-    app,
-    i18n_enabled=True,
-    i18n_default_locale="ru",  # Default language
-    i18n_locales=["en", "ru"],  # Available languages
+  app,
+  i18n_enabled=True,
+  i18n_default_locale='ru',  # Default language
+  i18n_locales=['en', 'ru'],  # Available languages
 )
 ```
 

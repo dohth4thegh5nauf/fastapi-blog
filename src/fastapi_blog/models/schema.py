@@ -167,14 +167,29 @@ class FrontmatterSchema:
   Example:
       ```python
       schema = FrontmatterSchema(
-          fields=(
-              FieldSpec("title", required=True, role="title"),
-              FieldSpec("pub_date", alias="pubDate", required=True, role="date"),
-              FieldSpec("draft", type="bool", default=True),
+        fields=(
+          FieldSpec(
+            'title',
+            required=True,
+            role='title',
           ),
-          extra="allow",
+          FieldSpec(
+            'pub_date',
+            alias='pubDate',
+            required=True,
+            role='date',
+          ),
+          FieldSpec(
+            'draft',
+            type='bool',
+            default=True,
+          ),
+        ),
+        extra='allow',
       )
-      Model = schema.model()
+      Model = (
+        schema.model()
+      )
       ```
 
   """

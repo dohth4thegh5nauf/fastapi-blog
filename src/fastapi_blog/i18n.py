@@ -24,13 +24,15 @@ def load_translations(locale: str) -> dict[str, Any]:
 
   Example:
     ```python
-    translations = load_translations(
-        "ru"
+    translations = (
+      load_translations(
+        'ru'
+      )
     )
     home_label = (
-        translations[
-            "nav"
-        ]["home"]
+      translations[
+        'nav'
+      ]['home']
     )  # 'Главная'
     ```
 
@@ -97,12 +99,12 @@ class Translator:
 
   Example:
     ```python
-    t = Translator("ru")
+    t = Translator('ru')
     print(
-        t.nav.home
+      t.nav.home
     )  # 'Главная'
     print(
-        t.user.plural
+      t.user.plural
     )  # 'Пользователи'
     ```
 
@@ -167,16 +169,16 @@ class TranslationSection:
   Example:
     ```python
     section = TranslationSection(
-        {
-            "home": "Home",
-            "users": "Users",
-        }
+      {
+        'home': 'Home',
+        'users': 'Users',
+      }
     )
     print(
-        section.home
+      section.home
     )  # 'Home'
     print(
-        section.users
+      section.users
     )  # 'Users'
     ```
 

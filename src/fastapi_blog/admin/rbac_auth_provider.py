@@ -107,8 +107,7 @@ class RBACAuthProvider(AuthProvider):
     password: str,
     remember_me: bool,
     request: Request,
-    response: Response,
-  ) -> Response:
+  ) -> Response | None:
     """Authenticate user with database credentials.
 
     Args:
@@ -116,7 +115,6 @@ class RBACAuthProvider(AuthProvider):
         password: Plain text password
         remember_me: Whether to extend session
         request: Starlette request
-        response: Starlette response
 
     Returns:
         Redirect response on success
@@ -165,22 +163,20 @@ class RBACAuthProvider(AuthProvider):
     # Redirect to admin panel
     return RedirectResponse(url=self.redirect_after_login, status_code=303)
 
-  async def is_authenticated(self, request: Request) -> bool:
-    """Check if request is authenticated.
-
-    Sets request.state.user with user info and permissions.
+  async def authenticate(self, request: Request) -> AdminUser | None:
+    """Authenticate the request and populate `request.state.user`.
 
     Args:
         request: Starlette request
 
     Returns:
-        True if authenticated, False otherwise
+        `AdminUser` if authenticated, `None` otherwise
 
     """
     user_email = request.session.get('user')
 
     if user_email is None:
-      return False
+      return None
 
     # Load user info from database
     user = await self._get_user_by_email(user_email)
@@ -188,7 +184,7 @@ class RBACAuthProvider(AuthProvider):
     if user is None:
       # User deleted from database - clear session
       request.session.clear()
-      return False
+      return None
 
     # Store user info in request state for later use
     role = request.session.get('role', self.default_role)
@@ -200,43 +196,20 @@ class RBACAuthProvider(AuthProvider):
       'permissions': Role.get_permissions(role),
     }
 
-    return True
+    return AdminUser(username=user.email, photo_url=None)
 
-  def get_admin_user(self, request: Request) -> AdminUser | None:
-    """Get admin user from request state.
-
-    Args:
-        request: Starlette request
-
-    Returns:
-        AdminUser object or None
-
-    """
-    if not hasattr(request.state, 'user'):
-      return None
-
-    user_info = request.state.user
-    return AdminUser(
-      username=user_info['email'],
-      photo_url=None,  # Can add avatar support later
-    )
-
-  async def logout(self, request: Request, response: Response) -> Response:
+  async def logout(self, request: Request) -> Response | None:
     """Logout user by clearing session.
 
     Args:
         request: Starlette request
-        response: Starlette response
 
     Returns:
-        Redirect response to login page
+        `None`, falling back to the default redirect to the admin index
 
     """
     request.session.clear()
-    # Use relative path to avoid route name conflicts with multi-locale admin instances
-    # Each locale has its own route_name (e.g., admin_en, admin_ru)
-    login_url = str(request.url).rsplit('/', 1)[0] + '/login'
-    return Response(status_code=302, headers={'Location': login_url})
+    return None
 
 
 def has_permission(request: Request, resource: str, action: str) -> bool:

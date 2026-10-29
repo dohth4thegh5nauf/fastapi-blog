@@ -63,7 +63,7 @@ def test_role_views_registered_when_enabled(app_with_roles):
         expected_label = (
           'Access Control' if locale == 'en' else 'Управление доступом'
         )
-        if view.label == expected_label:
+        if view.menu_label == expected_label:
           role_dropdown = view
           break
 
@@ -196,10 +196,10 @@ def test_role_views_use_translations(app_with_roles):
           user_roles_view_en = subview
 
   assert role_view_en is not None
-  assert role_view_en.label == 'Roles'
+  assert role_view_en.menu_label == 'Roles'
 
   assert user_roles_view_en is not None
-  assert user_roles_view_en.label == 'User Roles'
+  assert user_roles_view_en.menu_label == 'User Roles'
 
   # Check Russian admin
   ru_admin = admins.get('ru')
@@ -216,10 +216,10 @@ def test_role_views_use_translations(app_with_roles):
           user_roles_view_ru = subview
 
   assert role_view_ru is not None
-  assert role_view_ru.label == 'Роли'
+  assert role_view_ru.menu_label == 'Роли'
 
   assert user_roles_view_ru is not None
-  assert user_roles_view_ru.label == 'Роли пользователей'
+  assert user_roles_view_ru.menu_label == 'Роли пользователей'
 
 
 def test_role_management_disabled_by_default():
@@ -247,7 +247,7 @@ def test_role_management_disabled_by_default():
         expected_label = (
           'Access Control' if locale == 'en' else 'Управление доступом'
         )
-        if view.label == expected_label:
+        if view.menu_label == expected_label:
           role_dropdown_found = True
           break
 
@@ -268,12 +268,12 @@ def test_role_dropdown_has_correct_label(app_with_roles):
 
   en_dropdown = None
   for view in en_admin._views:
-    if isinstance(view, DropDown) and view.label == 'Access Control':
+    if isinstance(view, DropDown) and view.menu_label == 'Access Control':
       en_dropdown = view
       break
 
   assert en_dropdown is not None
-  assert en_dropdown.label == 'Access Control'
+  assert en_dropdown.menu_label == 'Access Control'
   assert en_dropdown.icon == 'fa fa-shield'
 
   # Check Russian admin
@@ -282,12 +282,12 @@ def test_role_dropdown_has_correct_label(app_with_roles):
 
   ru_dropdown = None
   for view in ru_admin._views:
-    if isinstance(view, DropDown) and view.label == 'Управление доступом':
+    if isinstance(view, DropDown) and view.menu_label == 'Управление доступом':
       ru_dropdown = view
       break
 
   assert ru_dropdown is not None
-  assert ru_dropdown.label == 'Управление доступом'
+  assert ru_dropdown.menu_label == 'Управление доступом'
   assert ru_dropdown.icon == 'fa fa-shield'
 
 
@@ -345,7 +345,7 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
   # Find role management dropdown
   role_dropdown = None
   for view in admin._views:
-    if isinstance(view, DropDown) and view.label in [
+    if isinstance(view, DropDown) and view.menu_label in [
       'Access Control',
       'Управление доступом',
     ]:

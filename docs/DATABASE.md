@@ -24,11 +24,11 @@ import fastapi_blog
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="secure_password",
-    secret_key="your-secret-key",
-    # database_url not specified = uses default SQLite
+  app,
+  admin_username='admin',
+  admin_password='secure_password',
+  secret_key='your-secret-key',
+  # database_url not specified = uses default SQLite
 )
 ```
 
@@ -172,16 +172,16 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 # For SQLite
 engine = create_async_engine(
-    "sqlite+aiosqlite:///./blog.db",
-    echo=True,  # Enable SQL logging
-    pool_pre_ping=True,  # Check connection health
+  'sqlite+aiosqlite:///./blog.db',
+  echo=True,  # Enable SQL logging
+  pool_pre_ping=True,  # Check connection health
 )
 
 # For PostgreSQL
 engine = create_async_engine(
-    "postgresql+asyncpg://user:pass@localhost/blog",
-    echo=False,
-    pool_pre_ping=True,
+  'postgresql+asyncpg://user:pass@localhost/blog',
+  echo=False,
+  pool_pre_ping=True,
 )
 ```
 
@@ -193,15 +193,15 @@ Sessions are managed via `async_sessionmaker`:
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
+  engine,
+  class_=AsyncSession,
+  expire_on_commit=False,
 )
 
 # Usage
 async with AsyncSessionLocal() as session:
-    # Your queries here
-    await session.commit()
+  # Your queries here
+  await session.commit()
 ```
 
 ### Dependency Injection
@@ -211,11 +211,12 @@ For custom endpoints:
 ```python
 from fastapi_blog.admin.database import get_db
 
-@app.get("/my-endpoint")
+
+@app.get('/my-endpoint')
 async def my_endpoint(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User))
-    users = result.scalars().all()
-    return users
+  result = await db.execute(select(User))
+  users = result.scalars().all()
+  return users
 ```
 
 ---
@@ -331,9 +332,10 @@ target_metadata = Base.metadata
 # For async:
 from sqlalchemy.ext.asyncio import create_async_engine
 
+
 def run_migrations_online():
-    connectable = create_async_engine(config.get_main_option("sqlalchemy.url"))
-    # ... rest of async migration logic
+  connectable = create_async_engine(config.get_main_option('sqlalchemy.url'))
+  # ... rest of async migration logic
 ```
 
 **4. Create migration**:
@@ -363,10 +365,10 @@ fastapi_blog.add_admin_to_app(
 
 ```python
 create_async_engine(
-    database_url,
-    pool_size=5,          # Default
-    max_overflow=10,      # Default
-    pool_pre_ping=True,   # Check connection health
+  database_url,
+  pool_size=5,  # Default
+  max_overflow=10,  # Default
+  pool_pre_ping=True,  # Check connection health
 )
 ```
 
@@ -381,11 +383,11 @@ from fastapi_blog.admin.database import create_engine_and_session
 from sqlalchemy.ext.asyncio import create_async_engine
 
 engine = create_async_engine(
-    "postgresql+asyncpg://...",
-    pool_size=20,
-    max_overflow=40,
-    pool_timeout=30,
-    pool_recycle=3600,
+  'postgresql+asyncpg://...',
+  pool_size=20,
+  max_overflow=40,
+  pool_timeout=30,
+  pool_recycle=3600,
 )
 
 # Then manually configure admin with this engine
@@ -403,13 +405,13 @@ Passwords are hashed using **bcrypt** via `passlib`:
 ```python
 from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 # Hash password
-hashed = pwd_context.hash("my_password")
+hashed = pwd_context.hash('my_password')
 
 # Verify
-is_valid = pwd_context.verify("my_password", hashed)
+is_valid = pwd_context.verify('my_password', hashed)
 ```
 
 **Validation**:
@@ -442,7 +444,7 @@ mkdir -p ./data
 
 Or specify an absolute path:
 ```python
-database_url="sqlite+aiosqlite:////absolute/path/to/blog.db"
+database_url = 'sqlite+aiosqlite:////absolute/path/to/blog.db'
 ```
 
 ### Connection Pool Timeout
@@ -453,9 +455,9 @@ database_url="sqlite+aiosqlite:////absolute/path/to/blog.db"
 ```python
 # Create custom engine with larger pool
 engine = create_async_engine(
-    database_url,
-    pool_size=20,
-    max_overflow=40,
+  database_url,
+  pool_size=20,
+  max_overflow=40,
 )
 ```
 
@@ -536,8 +538,8 @@ DeclarativeBase for all models.
 
 ```python
 # Don't hardcode credentials
-database_url=os.getenv("DATABASE_URL")
-secret_key=os.getenv("SECRET_KEY")
+database_url = os.getenv('DATABASE_URL')
+secret_key = os.getenv('SECRET_KEY')
 ```
 
 ### 2. Use PostgreSQL for Production
@@ -581,6 +583,7 @@ alembic upgrade head
 Enable logging in development:
 ```python
 import logging
+
 logging.basicConfig()
 logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 ```
@@ -598,10 +601,10 @@ import fastapi_blog
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="admin",
-    admin_password="change_me",
-    secret_key="secret",
+  app,
+  admin_username='admin',
+  admin_password='change_me',
+  secret_key='secret',
 )
 ```
 
@@ -615,12 +618,12 @@ import fastapi_blog
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
-    app,
-    database_url=os.getenv("DATABASE_URL"),
-    admin_username=os.getenv("ADMIN_USERNAME"),
-    admin_password=os.getenv("ADMIN_PASSWORD"),
-    secret_key=os.getenv("SECRET_KEY"),
-    init_database=False,  # Use Alembic
+  app,
+  database_url=os.getenv('DATABASE_URL'),
+  admin_username=os.getenv('ADMIN_USERNAME'),
+  admin_password=os.getenv('ADMIN_PASSWORD'),
+  secret_key=os.getenv('SECRET_KEY'),
+  init_database=False,  # Use Alembic
 )
 ```
 
@@ -633,11 +636,12 @@ from sqlalchemy import select
 from fastapi_blog.admin.database import get_db
 from fastapi_blog.admin.models import User
 
-@app.get("/api/users")
+
+@app.get('/api/users')
 async def list_users(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.is_active == True))
-    users = result.scalars().all()
-    return [{"id": u.id, "email": u.email} for u in users]
+  result = await db.execute(select(User).where(User.is_active == True))
+  users = result.scalars().all()
+  return [{'id': u.id, 'email': u.email} for u in users]
 ```
 
 ---

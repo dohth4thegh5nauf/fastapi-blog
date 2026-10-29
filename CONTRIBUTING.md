@@ -42,22 +42,22 @@ We use:
 
 ```python
 def add_admin_to_app(
-    app: FastAPI,
-    *,
-    admin_username: str | None = None,
-    admin_password: str | None = None,
+  app: FastAPI,
+  *,
+  admin_username: str | None = None,
+  admin_password: str | None = None,
 ) -> dict[str, Admin]:
-    """Add admin panel to FastAPI application.
-    
-    Args:
-        app: FastAPI application instance
-        admin_username: Admin username (default: from env)
-        admin_password: Admin password (default: from env)
-    
-    Returns:
-        Dictionary mapping locale codes to Admin instances
-    """
-    ...
+  """Add admin panel to FastAPI application.
+
+  Args:
+      app: FastAPI application instance
+      admin_username: Admin username (default: from env)
+      admin_password: Admin password (default: from env)
+
+  Returns:
+      Dictionary mapping locale codes to Admin instances
+  """
+  ...
 ```
 
 ## 🔄 Pull Request Process
@@ -122,19 +122,20 @@ user:
 ```python
 from starlette_admin import ModelView
 
+
 class MyCustomView(ModelView):
-    """Custom admin view."""
-    
-    # Configuration
-    label = "My Model"
-    icon = "fa fa-star"
-    
-    # Fields
-    fields = ["id", "name", "created_at"]
-    
-    # Access control
-    def is_accessible(self, request: Request) -> bool:
-        return request.session.get("user") == "admin"
+  """Custom admin view."""
+
+  # Configuration
+  label = 'My Model'
+  icon = 'fa fa-star'
+
+  # Fields
+  fields = ['id', 'name', 'created_at']
+
+  # Access control
+  def is_accessible(self, request: Request) -> bool:
+    return request.session.get('user') == 'admin'
 ```
 
 ## 📦 Adding Dependencies

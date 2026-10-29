@@ -4,7 +4,6 @@ from collections.abc import Callable
 from typing import Any
 
 import jinja2
-import yaml
 from fastapi import (
   APIRouter,
   Depends,
@@ -17,7 +16,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from . import helpers
+from . import helpers, store
 from .auth import add_startup_check, check_api_auth_config
 from .models import (
   SLUG_PATTERN,
@@ -101,27 +100,18 @@ def _serialize(payload: Any, schema: FrontmatterSchema | None = None) -> str:
   else:
     # Write the keys other services expect (aliases), not internal names
     fm_dump = schema.dump(payload.frontmatter, by_alias=True)
-  fm_yaml = yaml.safe_dump(fm_dump, sort_keys=False, allow_unicode=True)
-  return f'---\n{fm_yaml}---\n\n{payload.content.rstrip()}\n'
+  return store.serialize_document(fm_dump, f'\n{payload.content.rstrip()}\n')
 
 
 def _parse_file(path: pathlib.Path) -> dict[str, Any]:
-  raw = path.read_text()
-  parts = raw.split('---')
-  if len(parts) < 3:
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail=f'Post file is malformed: {path.name}',
-    )
   try:
-    frontmatter = yaml.safe_load(parts[1]) or {}
-  except yaml.YAMLError as exc:
+    frontmatter, content = store.read_document(path)
+  except ValueError as exc:
     raise HTTPException(
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail=f'Invalid YAML in {path.name}: {exc}',
+      detail=f'{path.name}: {exc}',
     ) from exc
-  content = '---'.join(parts[2:]).lstrip('\n')
-  return {'frontmatter': frontmatter, 'content': content}
+  return {'frontmatter': frontmatter, 'content': content.lstrip('\n')}
 
 
 def get_api_router(
@@ -165,19 +155,19 @@ def get_api_router(
   Example:
       ```python
       from fastapi import (
-          FastAPI,
+        FastAPI,
       )
       from fastapi_blog.editor import (
-          get_api_router,
+        get_api_router,
       )
 
       app = FastAPI()
       api_router = get_api_router(
-          require_auth=True
+        require_auth=True
       )
       app.include_router(
-          api_router,
-          prefix="/api/posts",
+        api_router,
+        prefix='/api/posts',
       )
       ```
 
@@ -238,7 +228,7 @@ def get_api_router(
         detail=f"Post '{slug}' already exists",
       )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_serialize(payload, frontmatter_schema))
+    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
     helpers.clear_posts_cache()
     return {'slug': slug, 'status': 'created'}
 
@@ -254,7 +244,7 @@ def get_api_router(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Post '{slug}' not found",
       )
-    path.write_text(_serialize(payload, frontmatter_schema))
+    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
     helpers.clear_posts_cache()
     return {'slug': slug, 'status': 'updated'}
 
@@ -304,7 +294,7 @@ def get_api_router(
     if is_new:
       path.parent.mkdir(parents=True, exist_ok=True)
 
-    path.write_text(_serialize(payload, frontmatter_schema))
+    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
     helpers.clear_posts_cache()
 
     return JSONResponse(
@@ -360,25 +350,25 @@ def add_editor_to_app(
   Example:
       ```python
       from fastapi import (
-          FastAPI,
+        FastAPI,
       )
       from fastapi_blog import (
-          add_editor_to_app,
+        add_editor_to_app,
       )
 
       app = FastAPI()
       # REST API only (recommended)
       add_editor_to_app(
-          app, ui=False
+        app, ui=False
       )
 
       # Or use new admin panel instead (extra `admin`)
       from fastapi_blog import (
-          add_admin_to_app,
+        add_admin_to_app,
       )
 
       add_admin_to_app(
-          app
+        app
       )
       ```
 

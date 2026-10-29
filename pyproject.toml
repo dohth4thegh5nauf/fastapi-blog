@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77.0.0"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -24,45 +24,49 @@ classifiers = [
 ]
 license-files = ["LICENSE.md"]
 dependencies = [
-  "fastapi>=0.116.2",
+  "fastapi>=0.162.0",
   "jinja2>=3.1.6",
   "jinja2-time>=0.2.0",
-  "markdown>=3.9",
-  "nh3>=0.2.18",
-  "pydantic>=2.9",
-  "pyyaml>=6.0.2",
-  "pymdown-extensions>=10.16.1",
-  "uvicorn>=0.35.0",
+  "markdown>=3.11.2",
+  "nh3>=0.3.7",
+  "pydantic>=2.14.1",
+  "pyyaml>=6.0.3",
+  "pymdown-extensions>=12.3",
+  "uvicorn>=0.54.0",
 ]
 
 [project.optional-dependencies]
 # Admin panel (web UI) and session-based authentication
 admin = [
-  "starlette-admin[i18n]>=0.16.0",
-  "sqlalchemy[asyncio]>=2.0.0",
-  "aiosqlite>=0.19.0",
-  "itsdangerous>=2.0.0",
+  "starlette-admin[i18n]>=1.0.3",
+  "sqlalchemy[asyncio]>=2.1.6",
+  "aiosqlite>=0.22.1",
+  "itsdangerous>=2.2.0",
   "passlib[bcrypt]>=1.7.4",
-  "python-multipart>=0.0.6",
+  # passlib 1.7.4 (unmaintained since 2020) crashes its bcrypt self-test on
+  # bcrypt>=4.1 (ValueError: password cannot be longer than 72 bytes); pin
+  # below that until passlib is fixed or replaced
+  "bcrypt<4.1",
+  "python-multipart>=0.0.32",
 ]
 # JSON-LD expansion and N-Quads output
 jsonld = [
-  "pyld>=2.0.4",
+  "pyld>=3.3.0",
 ]
 dev = [
   "httpx>=0.28.1",
-  "ruff>=0.13.0",
-  "pytest>=8.4.2",
-  "coverage>=7.10.6",
-  "mypy>=1.18.1",
-  "types-Markdown>=3.9.0",
-  "types-PyYAML>=6.0.12.20250915",
+  "ruff>=0.17.3",
+  "pytest>=9.2.0",
+  "coverage>=7.17.0",
+  "mypy>=2.4.1",
+  "types-Markdown>=3.10.2.20261007",
+  "types-PyYAML>=6.0.12.20260906",
 ]
 
 [project.urls]
 
 bugs = "https://github.com/pydanny/fastapi-blog/issues"
-changelog = "https://github.com/pydanny/fastapi-blog/blob/master/changelog.md"
+changelog = "https://github.com/pydanny/fastapi-blog/blob/master/CHANGELOG.md"
 homepage = "https://github.com/pydanny/fastapi-blog"
 
 [tool.setuptools]
@@ -91,67 +95,9 @@ exclude = [
 
 
 
-# Ruff
-# ----
-
-[tool.ruff]
-target-version = "py312"
-line-length = 88
-exclude = [
-    "+/*",  # Demo and reference code
-    "get-pip.py",  # External PyPA installer script
-]
-
-[tool.ruff.lint]
-select = [
-    # Pyflakes
-    "F",
-    # Pycodestyle
-    "E",
-    "W",
-    # isort
-    "I",
-    # pyupgrade
-    "UP",
-    # pydocstyle
-    "D",
-]
-ignore = [
-    "E501",  # line too long - ruff formatter takes care of this
-    "D100",  # Missing docstring in public module
-    "D101",  # Missing docstring in public class
-    "D102",  # Missing docstring in public method
-    "D103",  # Missing docstring in public function
-    "D104",  # Missing docstring in public package
-    "D105",  # Missing docstring in magic method
-    "D203",  # 1 blank line required before class docstring (conflicts with D211)
-    "D213",  # Multi-line docstring summary should start at the second line (conflicts with D212)
-]
-
-[tool.ruff.lint.per-file-ignores]
-# Allow unused imports in __init__ files as these are convenience imports
-"**/__init__.py" = [ "F401" ]
-
-[tool.ruff.lint.isort]
-lines-after-imports = 2
-section-order = [
-    "future",
-    "standard-library",
-    "third-party",
-    "first-party",
-    "project",
-    "local-folder",
-]
-
-[tool.ruff.lint.isort.sections]
-"project" = [
-    "src",
-    "tests",
-]
-
-[tool.ruff.format]
-docstring-code-format = true
-docstring-code-line-length = 20
+# Ruff config lives in `ruff.toml` at the repo root: a standalone `ruff.toml`
+# makes Ruff ignore any `[tool.ruff]` here, so keeping one here too would
+# just be dead configuration that looks enforced but isn't.
 
 
 [tool.coverage.run]

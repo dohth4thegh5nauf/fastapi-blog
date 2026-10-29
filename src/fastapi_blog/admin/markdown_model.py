@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
+from .. import store
 
 
 class MarkdownPost:
@@ -47,7 +47,7 @@ class MarkdownPost:
     self.slug = slug
     self.title = title
     self.content = content
-    self.date = date or datetime.now()
+    self.date = date
     self.published = published
     self.tags = tags or []
     self.extra_frontmatter = extra_frontmatter
@@ -107,15 +107,10 @@ class MarkdownPost:
         # Log error but continue with other posts
         print(f'Error loading {file_path}: {e}')
 
-    # Sort by date, newest first
-    # Handle mixed timezone-aware and naive datetimes
-    try:
-      posts.sort(key=lambda p: p.date, reverse=True)
-    except TypeError:
-      # Fallback: sort by ISO format string representation
-      posts.sort(
-        key=lambda p: p.date.isoformat() if p.date else '', reverse=True
-      )
+    # Sort by date, newest first. ISO strings compare the same way the dates
+    # do, stay comparable across naive/aware datetimes, and sort undated
+    # posts (empty string) last.
+    posts.sort(key=lambda p: p.date.isoformat() if p.date else '', reverse=True)
     return posts
 
   @classmethod
@@ -138,23 +133,11 @@ class MarkdownPost:
     if not file_path.exists():
       raise FileNotFoundError(f'Post not found: {slug}')
 
-    content = file_path.read_text(encoding='utf-8')
-
-    # Parse frontmatter and content
-    if content.startswith('---'):
-      parts = content.split('---', 2)
-      if len(parts) >= 3:
-        try:
-          frontmatter = yaml.safe_load(parts[1]) or {}
-        except yaml.YAMLError as e:
-          raise ValueError(f'Invalid YAML frontmatter in {slug}: {e}')
-
-        body = parts[2].strip()
-      else:
-        raise ValueError(f'Invalid markdown format in {slug}')
-    else:
-      frontmatter = {}
-      body = content
+    try:
+      frontmatter, body = store.read_document(file_path)
+    except ValueError as e:
+      raise ValueError(f'{slug}: {e}') from e
+    body = body.strip()
 
     # Extract known fields (remove from frontmatter to avoid conflicts)
     # Remove slug from frontmatter if present (slug comes from filename)
@@ -163,16 +146,17 @@ class MarkdownPost:
     title = frontmatter.pop('title', slug.replace('-', ' ').title())
     date_value = frontmatter.pop('date', None)
 
-    # Parse date
+    # Parse date; a missing or unparsable date stays `None` rather than
+    # being invented, since callers already treat `None` as "undated"
     if isinstance(date_value, datetime):
       date = date_value
     elif isinstance(date_value, str):
       try:
         date = datetime.fromisoformat(date_value)
       except ValueError:
-        date = datetime.now()
+        date = None
     else:
-      date = datetime.now()
+      date = None
 
     published = frontmatter.pop('published', False)
     tags = frontmatter.pop('tags', [])
@@ -200,14 +184,13 @@ class MarkdownPost:
         'Must contain only lowercase letters, numbers, and hyphens.'
       )
 
-    # Prepare frontmatter
-    frontmatter = {
-      'title': self.title,
-      'date': self.date.isoformat()
-      if isinstance(self.date, datetime)
-      else self.date,
-      'published': self.published,
-    }
+    # Prepare frontmatter. A missing date is left out rather than invented.
+    frontmatter: dict[str, Any] = {'title': self.title}
+    if self.date is not None:
+      frontmatter['date'] = (
+        self.date.isoformat() if isinstance(self.date, datetime) else self.date
+      )
+    frontmatter['published'] = self.published
 
     if self.tags:
       frontmatter['tags'] = self.tags
@@ -215,15 +198,9 @@ class MarkdownPost:
     # Add any extra frontmatter fields
     frontmatter.update(self.extra_frontmatter)
 
-    # Format markdown
-    frontmatter_yaml = yaml.dump(
-      frontmatter, allow_unicode=True, sort_keys=False, default_flow_style=False
-    )
-    markdown_content = f'---\n{frontmatter_yaml}---\n\n{self.content}'
-
     # Write to file
     file_path = self.get_file_path(self.slug)
-    file_path.write_text(markdown_content, encoding='utf-8')
+    store.write_document(file_path, frontmatter, f'\n{self.content}')
 
   def delete(self) -> None:
     """Delete post file."""
