@@ -265,7 +265,7 @@ class HomeView(CustomView):
     }
 
     # Load translations from YAML files
-    from .i18n import load_translations
+    from ..i18n import load_translations
 
     translations = load_translations(self.locale)
     t = translations['home']

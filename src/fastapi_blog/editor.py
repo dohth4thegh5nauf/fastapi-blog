@@ -1,6 +1,6 @@
 import pathlib
 import warnings
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from typing import Any
 
 import jinja2
@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers
+from .auth import add_startup_check, check_api_auth_config
 from .models import (
   SLUG_PATTERN,
   FrontmatterSchema,
@@ -30,10 +31,11 @@ async def require_authentication(request: Request) -> dict:
   """Require authentication via session cookie.
 
   This function is part of fastapi-blog and only checks session-based
-  authentication (starlette-admin SessionMiddleware).
+  authentication (needs a `SessionMiddleware`, for example the one added by
+  the `admin` extra).
 
-  For JWT authentication, the parent application should override this
-  dependency or add custom middleware.
+  For any other scheme, pass your own dependency as `auth_dependency` to
+  `get_api_router()`.
 
   Returns:
       dict with user info if authenticated
@@ -42,7 +44,7 @@ async def require_authentication(request: Request) -> dict:
       HTTPException 401 if not authenticated
 
   """
-  # Check session cookie (set by starlette-admin or SessionMiddleware)
+  # Check session cookie (set by the admin panel or any SessionMiddleware)
   # Only check session if SessionMiddleware is installed
   if 'session' in request.scope:
     user = request.session.get('user')
@@ -129,6 +131,7 @@ def get_api_router(
   admin_username: str | None = None,
   admin_password: str | None = None,
   frontmatter_schema: FrontmatterSchema | None = None,
+  auth_dependency: Callable[..., Any] | None = None,
 ) -> APIRouter:
   """Get REST API router for post management.
 
@@ -145,9 +148,19 @@ def get_api_router(
       frontmatter_schema: Custom frontmatter schema (optional). Requests are
           validated with it and posts are written with its keys (aliases).
           `strict` is ignored when it is given.
+      auth_dependency: Custom FastAPI dependency that authenticates a request.
+          It must raise `HTTPException` when access is denied. When given, it
+          replaces the session and Basic checks. Works without any session
+          support.
 
   Returns:
       APIRouter with REST API endpoints
+
+  Note:
+      With `require_auth=True` and no credentials or dependency, the router
+      only accepts requests that carry a session (it needs a
+      `SessionMiddleware`); other requests get 401. `add_blog_to_fastapi()` and
+      `add_editor_to_app()` also report this misconfiguration at startup.
 
   Example:
       ```python
@@ -174,9 +187,12 @@ def get_api_router(
   slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
 
   # Setup authentication dependency
-  auth_func: Callable[[Request], Coroutine[Any, Any, dict[Any, Any] | None]]
+  auth_func: Callable[..., Any]
   if require_auth:
-    if admin_username and admin_password:
+    if auth_dependency is not None:
+      # Custom dependency (any scheme, no session support needed)
+      auth_func = auth_dependency
+    elif admin_username and admin_password:
       # Use unified auth (session + Basic auth)
       from .auth import require_current_user
 
@@ -223,7 +239,7 @@ def get_api_router(
       )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_serialize(payload, frontmatter_schema))
-    helpers.list_posts.cache_clear()
+    helpers.clear_posts_cache()
     return {'slug': slug, 'status': 'created'}
 
   @api_router.put('/update/{slug}')
@@ -239,7 +255,7 @@ def get_api_router(
         detail=f"Post '{slug}' not found",
       )
     path.write_text(_serialize(payload, frontmatter_schema))
-    helpers.list_posts.cache_clear()
+    helpers.clear_posts_cache()
     return {'slug': slug, 'status': 'updated'}
 
   @api_router.delete('/delete/{slug}', status_code=status.HTTP_204_NO_CONTENT)
@@ -254,7 +270,7 @@ def get_api_router(
         detail=f"Post '{slug}' not found",
       )
     path.unlink()
-    helpers.list_posts.cache_clear()
+    helpers.clear_posts_cache()
 
   @api_router.post('/save')
   async def save_post(
@@ -289,7 +305,7 @@ def get_api_router(
       path.parent.mkdir(parents=True, exist_ok=True)
 
     path.write_text(_serialize(payload, frontmatter_schema))
-    helpers.list_posts.cache_clear()
+    helpers.clear_posts_cache()
 
     return JSONResponse(
       content={'slug': slug, 'status': 'created' if is_new else 'updated'},
@@ -308,6 +324,9 @@ def add_editor_to_app(
   ui_prefix: str = '/admin/editor',
   require_auth: bool = True,
   frontmatter_schema: FrontmatterSchema | None = None,
+  admin_username: str | None = None,
+  admin_password: str | None = None,
+  auth_dependency: Callable[..., Any] | None = None,
 ) -> FastAPI:
   """Add editor REST API and optional UI to FastAPI app.
 
@@ -326,9 +345,17 @@ def add_editor_to_app(
       require_auth: Require authentication for all endpoints (default: True)
       frontmatter_schema: Custom frontmatter schema for the REST API (optional).
           The deprecated UI doesn’t support it and keeps the built-in fields.
+      admin_username: Username for Basic auth (optional)
+      admin_password: Password for Basic auth (optional)
+      auth_dependency: Custom authentication dependency (optional), see
+          `get_api_router()`
 
   Returns:
       FastAPI application with editor routes added
+
+  Raises:
+      ConfigurationError: At app startup, if `require_auth=True` and there is
+          no credentials, no dependency and no `SessionMiddleware`.
 
   Example:
       ```python
@@ -345,8 +372,8 @@ def add_editor_to_app(
           app, ui=False
       )
 
-      # Or use new admin panel instead
-      from fastapi_blog.admin import (
+      # Or use new admin panel instead (extra `admin`)
+      from fastapi_blog import (
           add_admin_to_app,
       )
 
@@ -380,9 +407,22 @@ def add_editor_to_app(
     posts_dirname=posts_dirname,
     strict=strict,
     require_auth=require_auth,
+    admin_username=admin_username,
+    admin_password=admin_password,
     frontmatter_schema=frontmatter_schema,
+    auth_dependency=auth_dependency,
   )
   app.include_router(api_router, prefix=prefix)
+  add_startup_check(
+    app,
+    lambda: check_api_auth_config(
+      app,
+      require_auth=require_auth,
+      admin_username=admin_username,
+      admin_password=admin_password,
+      auth_dependency=auth_dependency,
+    ),
+  )
 
   # Add deprecated UI routes if requested
   if ui:

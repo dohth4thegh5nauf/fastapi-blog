@@ -1,0 +1,126 @@
+# English translations for admin panel
+
+# Locale metadata
+locale:
+  code: en
+  name: English
+
+# Authentication
+auth:
+  login_to_account: Login to your account
+  sign_in: Sign In
+  username: Username
+  password: Password
+  remember_me: Remember me
+  login: Login
+  logout: Logout
+  invalid_credentials: Invalid username or password
+
+# Navigation and menu items
+nav:
+  home: Home
+  users: Users
+  posts: Posts
+  settings: Settings
+
+# User management
+user:
+  singular: User
+  plural: Users
+  create: Create User
+  edit: Edit User
+  delete: Delete User
+
+# Post management
+post:
+  singular: Post
+  plural: Posts
+  create: Create Post
+  edit: Edit Post
+  delete: Delete Post
+  # Markdown post editor
+  create_new: Create New Post
+  create: Create
+  edit_title: Edit
+  slug: Slug
+  slug_hint: URL-friendly identifier (e.g., my-post-title)
+  title: Title
+  date: Date
+  published: Published
+  "yes": "Yes"
+  "no": "No"
+  tags: Tags
+  tags_hint: Comma-separated tags
+  description: Description
+  content: Content (Markdown)
+  content_hint: Write your content in Markdown format
+  save: Save Post
+  cancel: Cancel
+  admin: Admin
+  posts: Posts
+
+# Role management
+role:
+  singular: Role
+  plural: Roles
+  admin: Administrator
+  editor: Editor
+  viewer: Viewer
+  section_label: Access Control
+  role_label: Roles
+  user_roles_label: User Roles
+
+# Common actions
+action:
+  save: Save
+  cancel: Cancel
+  delete: Delete
+  edit: Edit
+  create: Create
+  back: Back
+  search: Search
+  filter: Filter
+  export: Export
+
+# Messages
+message:
+  saved: Successfully saved
+  deleted: Successfully deleted
+  error: An error occurred
+  no_data: No data available
+
+# Blog public interface
+blog:
+  recent_writings: Recent Writings
+  favorite_articles: Favorite Articles
+  articles: Articles
+  tags: Tags
+  tags_prefix: "Tags:"
+  about: About
+  not_found: "404"
+  all_rights_reserved: All rights reserved
+
+# Home page
+home:
+  title: Home
+  admin: Admin
+  total_posts: Total Posts
+  all_posts_in_system: All posts in the system
+  published: Published
+  live_on_blog: Live on the blog
+  drafts: Drafts
+  not_yet_published: Not yet published
+  total_tags: Total Tags
+  unique_categories: Unique categories
+  latest_posts: Latest Posts
+  top_tags: Top Tags
+  view: View
+  no_posts_yet: No posts yet
+  create_first_post: Create your first blog post to get started
+  create_post: Create Post
+  no_tags_yet: No tags yet
+  post: post
+  posts: posts
+  new_post: New Post
+  all_posts: All Posts
+  users: Users

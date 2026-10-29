@@ -174,7 +174,7 @@ fastapi_blog.add_blog_to_fastapi(
     api_require_auth=True,
 )
 
-# Add admin panel for authentication
+# Add admin panel for authentication (needs the `admin` extra)
 fastapi_blog.add_admin_to_app(app)
 ```
 
@@ -182,6 +182,42 @@ Now you have:
 - 📝 Blog at `/blog`
 - ⚙️ Admin panel at `/admin` (web UI)
 - 🔧 REST API at `/api/posts/*` (visible in `/docs`)
+
+### REST API without the admin panel (core install)
+
+The REST API is part of the core install and needs no extra. Authenticate it with
+Basic credentials, or with your own dependency:
+
+```python
+from fastapi import FastAPI, HTTPException, Request
+import fastapi_blog
+
+app = FastAPI()
+
+
+def check_token(request: Request) -> dict:
+    if request.headers.get("X-Token") != "change-me":
+        raise HTTPException(status_code=403)
+    return {"username": "service"}
+
+
+fastapi_blog.add_blog_to_fastapi(
+    app,
+    include_api=True,
+    # either Basic credentials ...
+    # admin_username="writer", admin_password="a-long-secret",
+    # ... or a dependency of your own
+    api_auth_dependency=check_token,
+)
+```
+
+With `api_require_auth=True` (the default) and no credentials, no dependency and no
+`SessionMiddleware`, the app fails at startup with `ConfigurationError` instead of
+serving an API nobody can use (or one that is open). Session auth needs a
+`SessionMiddleware`, which the `admin` extra provides.
+
+The post list is re-read whenever the files in the posts directory change, so you can
+edit files while the app runs.
 
 ### Basic Setup (Blog Only)
 
@@ -422,9 +458,17 @@ make run
 ### Option 2: Install from PyPI
 
 ```bash
+# Core: the blog and the optional REST API. Needs only files, no database
 pip install fastapi-blog
-# Then create your own FastAPI app using the examples in the documentation
+
+# Optional extras
+pip install "fastapi-blog[admin]"   # admin panel (starlette-admin, SQLAlchemy)
+pip install "fastapi-blog[jsonld]"  # JSON-LD expansion and N-Quads output
 ```
+
+The admin panel is loaded lazily: `import fastapi_blog` never imports it. Without
+the `admin` extra, `setup_fastapi_blog(app, admin=False)` still works, and
+`add_admin_to_app` raises an `ImportError` that names the extra to install.
 
 ### Option 3: Docker (Local Dockerfile)
 

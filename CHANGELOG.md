@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.9.0] - Unreleased
+
+### Phase A: packages, imports, cache
+
+#### Changed
+- **Core vs extras.** The core install needs only files: `fastapi`, `jinja2`,
+  `jinja2-time`, `markdown`, `nh3`, `pydantic`, `pyyaml`, `pymdown-extensions`,
+  `uvicorn`. New extras: `admin` (`starlette-admin[i18n]`, `sqlalchemy[asyncio]`,
+  `aiosqlite`, `itsdangerous`, `passlib[bcrypt]`, `python-multipart`) and `jsonld`
+  (`pyld`). Install with `pip install "fastapi-blog[admin]"`
+- **Lazy admin.** `import fastapi_blog` no longer imports the admin panel.
+  `Admin` and `add_admin_to_app` load on first access (PEP 562) and raise an
+  `ImportError` that names the extra when it is missing
+- `setup_fastapi_blog(..., admin=False)` adds only the blog (and the REST API) and
+  needs no extra. It makes up no default credentials in that mode
+- `list_posts` no longer uses `lru_cache`: the cached list is checked against the
+  directory signature (`(name, mtime_ns, size)` of the `*.md` files), so edits made
+  outside the app are visible without a restart. No TTL, thread-safe, no external
+  service. `helpers.clear_posts_cache()` (and `list_posts.cache_clear()`) still work
+- The translation helpers moved to `fastapi_blog.i18n` and the translation files to
+  `fastapi_blog/translations/` because the public blog uses them.
+  `fastapi_blog.admin.i18n` stays as an alias
+- Basic auth no longer needs a `SessionMiddleware`: `auth.get_current_user` only
+  reads the session when there is one. Credentials are compared with
+  `secrets.compare_digest`
+
+#### Added
+- `auth_dependency` parameter of `get_api_router()` and `add_editor_to_app()`, and
+  `api_auth_dependency` of `add_blog_to_fastapi()`: a custom dependency replaces
+  the built-in checks
+- `admin_username` and `admin_password` parameters of `add_editor_to_app()`
+- `ConfigurationError`: the app fails at startup when the REST API requires
+  authentication (`require_auth=True`) and has no credentials, no dependency and
+  no `SessionMiddleware`
+- CI matrix `core` / `all` extras; tests that need the admin extra are skipped in
+  the core run (`tests/conftest.py`)
+
+#### Removed
+- Dependencies `redis[hiredis]` and `pyjwt` (they were not used), and all mentions
+
+#### Fixed
+- Docstring of `add_blog_to_fastapi` said the admin panel ignores the schema; it
+  uses it when given the same schema (done for you by `setup_fastapi_blog`)
+
+#### Deprecated
+- Already deprecated and still present: `add_editor_to_app(ui=True)`. Planned for the
+  next phases: the `POSTS_DIR` environment variable, the default `admin` /
+  `Admin123!` credentials
+
 ## [Unreleased]
 
 ### Added

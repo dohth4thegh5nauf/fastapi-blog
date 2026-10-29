@@ -1,13 +1,99 @@
 """Unified authentication for FastAPI Blog.
 
 Provides a single dependency that supports both:
-- Session-based auth (admin panel cookie)
+- Session-based auth (admin panel cookie; needs a `SessionMiddleware`)
 - HTTP Basic Auth (REST API)
+
+Basic auth and custom dependencies work without any session support.
 """
 
 import base64
+import secrets
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
+
+
+class ConfigurationError(RuntimeError):
+  """Raised at startup when the blog is configured in an unsafe way."""
+
+
+def has_session_middleware(app: FastAPI) -> bool:
+  """Tell whether `SessionMiddleware` is added to the app.
+
+  The class is matched by name, so this works without importing the session
+  support (it needs the `admin` extra).
+
+  Args:
+      app: FastAPI application instance.
+
+  Returns:
+      `True` if a `SessionMiddleware` is registered.
+
+  """
+  return any(
+    getattr(m.cls, '__name__', '') == 'SessionMiddleware'
+    for m in app.user_middleware
+  )
+
+
+def check_api_auth_config(
+  app: FastAPI,
+  *,
+  require_auth: bool,
+  admin_username: str | None,
+  admin_password: str | None,
+  auth_dependency: Callable[..., Any] | None,
+) -> None:
+  """Fail at startup if the REST API would have no way to authenticate.
+
+  With `require_auth=True` the API needs credentials, a custom dependency or
+  a `SessionMiddleware`. Otherwise every write would be rejected (fail closed),
+  and that is almost certainly a mistake, so we report it when the app starts.
+
+  Args:
+      app: FastAPI application instance.
+      require_auth: Whether the API requires authentication.
+      admin_username: Basic auth username (optional).
+      admin_password: Basic auth password (optional).
+      auth_dependency: Custom authentication dependency (optional).
+
+  Raises:
+      ConfigurationError: If no authentication method is configured.
+
+  """
+  if not require_auth or auth_dependency is not None:
+    return
+  if admin_username and admin_password:
+    return
+  if has_session_middleware(app):
+    return
+  raise ConfigurationError(
+    'The REST API requires authentication, but none is configured. '
+    'Pass `admin_username` and `admin_password`, pass an auth dependency, '
+    'add a `SessionMiddleware` (extra `admin`) or set `require_auth=False`.'
+  )
+
+
+def add_startup_check(app: FastAPI, check: Callable[[], None]) -> None:
+  """Run `check` when the app starts, composing with the existing lifespan.
+
+  Args:
+      app: FastAPI application instance.
+      check: Callable that raises an exception if the configuration is bad.
+
+  """
+  original_lifespan = app.router.lifespan_context
+
+  @asynccontextmanager
+  async def lifespan(app_: Any):
+    check()
+    async with original_lifespan(app_) as state:
+      yield state
+
+  app.router.lifespan_context = lifespan
 
 
 async def get_current_user(
@@ -63,10 +149,11 @@ async def get_current_user(
       ```
 
   """
-  # First, check session cookie (admin panel)
-  user = request.session.get('user')
-  if user:
-    return user
+  # First, check session cookie (admin panel), if sessions are available
+  if 'session' in request.scope:
+    user = request.session.get('user')
+    if user:
+      return user
 
   # Second, check Authorization: Basic header (REST API)
   if admin_username and admin_password:
@@ -78,7 +165,14 @@ async def get_current_user(
         username, password = credentials.split(':', 1)
 
         # Verify credentials
-        if username == admin_username and password == admin_password:
+        # Compare both values in constant time (no early exit)
+        user_ok = secrets.compare_digest(
+          username.encode('utf-8'), admin_username.encode('utf-8')
+        )
+        password_ok = secrets.compare_digest(
+          password.encode('utf-8'), admin_password.encode('utf-8')
+        )
+        if user_ok and password_ok:
           return username
       except (ValueError, UnicodeDecodeError):
         # Invalid Basic auth format

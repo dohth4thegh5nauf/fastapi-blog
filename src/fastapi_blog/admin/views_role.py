@@ -4,7 +4,7 @@ from starlette.requests import Request
 from starlette_admin import action
 from starlette_admin.contrib.sqla import ModelView
 
-from .i18n import Translator
+from ..i18n import Translator
 
 
 class RoleModelView(ModelView):

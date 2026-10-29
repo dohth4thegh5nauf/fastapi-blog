@@ -321,7 +321,7 @@ class MarkdownEditView(CustomView):
       )
 
     # Get translations for this view's locale
-    from .i18n import load_translations
+    from ..i18n import load_translations
 
     translations = load_translations(self.locale)
     t = translations['post']
@@ -373,7 +373,7 @@ class MarkdownCreateView(CustomView):
   ) -> Response:
     """Render create form."""
     # Get translations for this view's locale
-    from .i18n import load_translations
+    from ..i18n import load_translations
 
     translations = load_translations(self.locale)
     t = translations['post']

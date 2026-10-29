@@ -1,18 +1,60 @@
+import importlib
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import jinja2
 from fastapi import FastAPI
-from fastapi.templating import Jinja2Templates
 
-from .admin import Admin, add_admin_to_app
+from .auth import ConfigurationError
 from .editor import add_editor_to_app, get_api_router
 from .main import add_blog_to_fastapi
 from .models import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema
 from .router import get_blog_router
 
 
-__version__ = '0.8.0'
+if TYPE_CHECKING:
+  from .admin import Admin, add_admin_to_app
+
+
+__version__ = '0.9.0'
+
+_ADMIN_EXTRA_HINT = (
+  'The admin panel needs the `admin` extra: pip install "fastapi-blog[admin]"'
+)
+
+# Names loaded on first access, so that `import fastapi_blog` doesn't import
+# anything from the admin panel (see `__getattr__`)
+_LAZY_ADMIN_NAMES = ('Admin', 'add_admin_to_app')
+
+
+def _import_admin() -> Any:
+  """Import `fastapi_blog.admin`, explaining how to install it if it's missing.
+
+  Returns:
+      The `fastapi_blog.admin` module.
+
+  Raises:
+      ImportError: If the `admin` extra isn't installed.
+
+  """
+  try:
+    return importlib.import_module('.admin', __name__)
+  except ModuleNotFoundError as exc:
+    # Only translate "a dependency is missing"; real bugs must stay visible
+    missing = (exc.name or '').split('.')[0]
+    if missing and missing != 'fastapi_blog':
+      raise ImportError(_ADMIN_EXTRA_HINT) from exc
+    raise
+
+
+def __getattr__(name: str) -> Any:
+  # PEP 562: load the admin panel only when someone asks for it
+  if name in _LAZY_ADMIN_NAMES:
+    return getattr(_import_admin(), name)
+  raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
+def __dir__() -> list[str]:
+  return sorted([*globals(), *_LAZY_ADMIN_NAMES])
 
 
 def setup_fastapi_blog(
@@ -27,17 +69,51 @@ def setup_fastapi_blog(
   secret_key: str | None = None,
   enable_role_management: bool = False,
   frontmatter_schema: FrontmatterSchema | None = None,
-) -> dict[str, Admin]:
-  """Configure the blog and admin panel for a FastAPI application.
+  admin: bool = True,
+) -> dict[str, 'Admin']:
+  """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
   `frontmatter_schema` (optional) sets the post fields for the blog, the REST API
   and the admin panel at once. Without it the built-in fields are used.
+
+  With `admin=False` only the blog (and the REST API, if `include_api=True`) is
+  added. The `admin` extra isn't needed then, and no default credentials are
+  made up: the REST API needs `admin_username` and `admin_password` (or the
+  matching environment variables), or a `SessionMiddleware`.
+
+  Args:
+      app: FastAPI application instance.
+      posts_dirname: Directory with the markdown posts.
+      include_api: Include the REST API for post management.
+      locales: Supported UI locales.
+      default_locale: Default UI locale.
+      admin_username: Admin username (default: `FASTAPI_BLOG_ADMIN_LOGIN`).
+      admin_password: Admin password (default: `FASTAPI_BLOG_ADMIN_PASSWORD`).
+      secret_key: Session secret key of the admin panel.
+      enable_role_management: Add the role management views to the admin panel.
+      frontmatter_schema: Custom schema of the post frontmatter.
+      admin: Add the admin panel (needs the `admin` extra). Default: `True`.
+
+  Returns:
+      Admin instances by locale, or an empty dict when `admin=False`.
+
+  Raises:
+      ImportError: If `admin=True` and the `admin` extra isn't installed.
+
   """
+  # Fail early (before any route is added) if the admin panel is unavailable
+  add_admin = _import_admin().add_admin_to_app if admin else None
+
   # Get credentials from env if not provided
   if admin_username is None:
-    admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN', 'admin')
+    admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN')
   if admin_password is None:
-    admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD', 'Admin123!')
+    admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
+  if admin:
+    # The admin panel keeps its previous defaults until they are removed
+    # in the security phase
+    admin_username = admin_username or 'admin'
+    admin_password = admin_password or 'Admin123!'
 
   add_blog_to_fastapi(
     app,
@@ -49,7 +125,9 @@ def setup_fastapi_blog(
     admin_password=admin_password,
     frontmatter_schema=frontmatter_schema,
   )
-  return add_admin_to_app(
+  if add_admin is None:
+    return {}
+  return add_admin(
     app,
     locales=locales,
     default_locale=default_locale,

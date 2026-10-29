@@ -13,7 +13,7 @@ from starlette.status import (
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.exceptions import FormValidationError, LoginFailed
 
-from .i18n import load_translations
+from ..i18n import load_translations
 
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ class SimpleAuthProvider(AuthProvider):
   """Simple authentication provider for admin panel.
 
   Uses hardcoded credentials for initial setup.
-  In production, integrate with JWT auth or database users.
+  In production, integrate with database users.
   """
 
   def __init__(

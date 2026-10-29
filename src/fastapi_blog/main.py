@@ -1,9 +1,12 @@
 import os
+from collections.abc import Callable
+from typing import Any
 
 import jinja2
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
+from .auth import add_startup_check, check_api_auth_config
 from .models import FrontmatterSchema
 from .router import get_blog_router
 
@@ -32,6 +35,7 @@ def add_blog_to_fastapi(
   admin_username: str | None = None,
   admin_password: str | None = None,
   frontmatter_schema: FrontmatterSchema | None = None,
+  api_auth_dependency: Callable[..., Any] | None = None,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -52,16 +56,25 @@ def add_blog_to_fastapi(
                    When True, adds REST endpoints visible in /docs.
                    Note: Admin panel (/admin) is separate - it's a web UI, not REST API.
       api_prefix: URL prefix for REST API (default: '/api/posts')
-      api_require_auth: Require authentication for API (default: True)
+      api_require_auth: Require authentication for API (default: True).
+                        The API then needs credentials (`admin_username` and
+                        `admin_password`), `api_auth_dependency` or a
+                        `SessionMiddleware`; otherwise the app fails at startup
+                        with `ConfigurationError`.
       locales: List of supported locales for blog UI (default: ['en'])
       default_locale: Default locale when Accept-Language not matched (default: 'en')
       admin_username: Admin username for REST API auth (optional)
       admin_password: Admin password for REST API auth (optional)
+      api_auth_dependency: Custom FastAPI dependency that authenticates REST API
+                           requests (optional). It must raise `HTTPException`
+                           when access is denied.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
                           (title, date, published, tags, description) tell the
                           blog which field is which. Default: the built-in fields.
                           Also used by the REST API when `include_api=True`.
-                          Note: the admin panel doesn’t use it yet.
+                          The admin panel (extra `admin`) uses it only if you
+                          pass the same schema to `add_admin_to_app()`;
+                          `setup_fastapi_blog()` does that for you.
 
   Returns:
       FastAPI application with blog routes added
@@ -254,7 +267,18 @@ def add_blog_to_fastapi(
       admin_username=admin_username,
       admin_password=admin_password,
       frontmatter_schema=frontmatter_schema,
+      auth_dependency=api_auth_dependency,
     )
     app.include_router(api_router, prefix=api_prefix, tags=['api'])
+    add_startup_check(
+      app,
+      lambda: check_api_auth_config(
+        app,
+        require_auth=api_require_auth,
+        admin_username=admin_username,
+        admin_password=admin_password,
+        auth_dependency=api_auth_dependency,
+      ),
+    )
 
   return app

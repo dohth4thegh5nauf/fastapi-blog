@@ -7,6 +7,7 @@
         strategy:
           matrix:
             python-version: ['3.12', '3.13']
+            extras: [core, all]
         steps:
           - uses: actions/checkout@v4
           - name: Set up Python ${{ matrix.python-version }}
@@ -17,10 +18,16 @@
             uses: astral-sh/setup-uv@v4
             with:
               version: "latest"
-          - name: Install dependencies
+          - name: Install dependencies (core)
+            if: matrix.extras == 'core'
             run: |
               uv pip install --system -e '.[dev]'
+          - name: Install dependencies (all extras)
+            if: matrix.extras == 'all'
+            run: |
+              uv pip install --system -e '.[dev,admin,jsonld]'
           - name: Lint with ruff
+            if: matrix.extras == 'all'
             run: |
                 # stop the build if there are linting errors
                 make lint             

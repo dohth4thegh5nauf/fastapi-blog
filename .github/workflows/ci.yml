@@ -12,6 +12,8 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
+        # `core`: no extras, admin tests are skipped; `all`: every extra
+        extras: ["core", "all"]
 
     steps:
     - uses: actions/checkout@v4
@@ -26,16 +28,24 @@ jobs:
       with:
         version: "latest"
     
-    - name: Install dependencies
+    - name: Install dependencies (core)
+      if: matrix.extras == 'core'
       run: |
         uv pip install --system -e '.[dev]'
+
+    - name: Install dependencies (all extras)
+      if: matrix.extras == 'all'
+      run: |
+        uv pip install --system -e '.[dev,admin,jsonld]'
     
     - name: Lint with ruff
+      if: matrix.extras == 'all'
       run: |
         ruff check .
         ruff format . --check
     
     - name: Type check with mypy
+      if: matrix.extras == 'all'
       run: |
         mypy .
     
@@ -46,6 +56,7 @@ jobs:
         coverage xml
     
     - name: Upload coverage to Codecov
+      if: matrix.extras == 'all'
       uses: codecov/codecov-action@v5
       with:
         files: ./coverage.xml

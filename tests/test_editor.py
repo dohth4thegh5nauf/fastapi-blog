@@ -1,7 +1,6 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.middleware.sessions import SessionMiddleware
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
 
@@ -38,6 +37,10 @@ def loose_client(app_dir):
 @pytest.fixture
 def auth_client(app_dir):
   """Client with authentication enabled."""
+  # Sessions need `itsdangerous` (extra `admin`)
+  pytest.importorskip('itsdangerous')
+  from starlette.middleware.sessions import SessionMiddleware
+
   app = FastAPI()
   app.add_middleware(SessionMiddleware, secret_key='test-secret-key')
   app = add_blog_to_fastapi(app, prefix='blog')

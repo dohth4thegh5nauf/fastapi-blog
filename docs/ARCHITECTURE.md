@@ -270,9 +270,8 @@ Docker Container
 **Challenge:** Session storage across multiple instances
 
 **Solution:**
-- Redis for shared session store
-- JWT tokens instead of sessions
 - Database-backed sessions
+- Signed cookies with the same secret key on every instance
 
 ### Performance Optimization
 

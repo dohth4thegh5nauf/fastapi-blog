@@ -537,7 +537,6 @@ starlette-admin >= 0.16.0
 sqlalchemy >= 2.0.0
 aiosqlite >= 0.19.0
 passlib[bcrypt] >= 1.7.4
-redis >= 5.0.0
 ```
 
 ### Разработка (dev)

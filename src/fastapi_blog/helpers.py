@@ -1,7 +1,9 @@
 import datetime
-import functools
 import logging
+import os
 import pathlib
+import threading
+from collections.abc import Callable
 from typing import Any
 
 import markdown as md  # type: ignore[import-untyped]
@@ -106,7 +108,64 @@ def _is_published(post: dict[str, Any], schema: FrontmatterSchema) -> bool:
   return bool(post.get('published'))
 
 
-@functools.lru_cache(maxsize=128)
+# Results of `list_posts` keyed by its arguments. Each entry keeps the
+# signature of the directory it was built from (see `_cached_by_signature`).
+_CACHE_LIMIT = 128
+_cache: dict[tuple, tuple[tuple, tuple[dict, ...]]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cached_by_signature(
+  key: tuple,
+  directory: pathlib.Path,
+  pattern: str,
+  compute: Callable[[], tuple[dict, ...]],
+) -> tuple[dict, ...]:
+  """Return `compute()` and reuse it until the directory changes.
+
+  The "signature" of a directory is the sorted tuple of `(name, mtime_ns,
+  size)` for the files that match `pattern`. When it differs from the stored
+  one, the result is recomputed. There is no TTL and no external service, so
+  edits made outside the app are picked up on the next call. This is the only
+  place that caches file reads; to add an external cache, wrap this function.
+
+  Args:
+      key: Hashable key of the call (the arguments that change the result).
+      directory: Directory with the files.
+      pattern: Glob pattern of the files that matter.
+      compute: Builds the result by reading the files.
+
+  Returns:
+      The (possibly cached) result.
+
+  """
+  signature: list[tuple[str, int, int]] = []
+  try:
+    for path in directory.glob(pattern):
+      try:
+        info = path.stat()
+      except OSError:
+        continue  # The file vanished between listing and stat
+      signature.append((path.name, info.st_mtime_ns, info.st_size))
+  except OSError:
+    pass
+  signature.sort()
+  full_key = (os.getcwd(), *key)
+  frozen = tuple(signature)
+  with _cache_lock:
+    cached = _cache.get(full_key)
+  if cached is not None and cached[0] == frozen:
+    return cached[1]
+  # The signature was taken before reading, so a change that happens while we
+  # read makes the next call see a different signature and recompute
+  result = compute()
+  with _cache_lock:
+    if len(_cache) >= _CACHE_LIMIT and full_key not in _cache:
+      _cache.clear()
+    _cache[full_key] = (frozen, result)
+  return result
+
+
 def list_posts(
   published: bool = True,
   posts_dirname: str = 'posts',
@@ -126,6 +185,29 @@ def list_posts(
       Tuple of post dicts (see `build_post`). Invalid files are skipped.
 
   """
+  return _cached_by_signature(
+    (published, posts_dirname, strict, schema),
+    pathlib.Path(posts_dirname),
+    '*.md',
+    lambda: _read_posts(published, posts_dirname, strict, schema),
+  )
+
+
+def clear_posts_cache() -> None:
+  """Forget all cached post lists (also `list_posts.cache_clear`)."""
+  with _cache_lock:
+    _cache.clear()
+
+
+list_posts.cache_clear = clear_posts_cache  # type: ignore[attr-defined]
+
+
+def _read_posts(
+  published: bool,
+  posts_dirname: str,
+  strict: bool,
+  schema: FrontmatterSchema | None,
+) -> tuple[dict, ...]:
   effective = resolve_schema(strict, schema)
   Model = frontmatter_model(strict, schema)
   posts: list[dict] = []

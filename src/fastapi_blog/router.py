@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers
-from .admin.i18n import Translator
+from .i18n import Translator
 from .models import FrontmatterSchema
 
 

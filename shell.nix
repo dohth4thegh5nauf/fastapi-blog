@@ -21,12 +21,9 @@ pkgs.mkShell {
       sqlalchemy
       aiosqlite
       itsdangerous
-      pyjwt
       passlib
       bcrypt
       python_multipart
-      redis
-      hiredis
       # Dev dependencies
       httpx
       ruff

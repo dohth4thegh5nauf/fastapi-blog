@@ -10,9 +10,9 @@ tag:
 install:
 	pip install uv
 	if [ -n "$$VIRTUAL_ENV" ] || [ -f "pyvenv.cfg" ]; then \
-		uv pip install -e '.[dev]'; \
+		uv pip install -e '.[dev,admin,jsonld]'; \
 	else \
-		uv pip install --system -e '.[dev]'; \
+		uv pip install --system -e '.[dev,admin,jsonld]'; \
 	fi
 
 all:

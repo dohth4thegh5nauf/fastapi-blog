@@ -1,0 +1,126 @@
+# Russian translations for admin panel
+
+# Locale metadata
+locale:
+  code: ru
+  name: Русский
+
+# Authentication
+auth:
+  login_to_account: Войти в аккаунт
+  sign_in: Войти
+  username: Имя пользователя
+  password: Пароль
+  remember_me: Запомнить меня
+  login: Вход
+  logout: Выход
+  invalid_credentials: Неверное имя пользователя или пароль
+
+# Navigation and menu items
+nav:
+  home: Главная
+  users: Пользователи
+  posts: Посты
+  settings: Настройки
+
+# User management
+user:
+  singular: Пользователь
+  plural: Пользователи
+  create: Создать пользователя
+  edit: Редактировать пользователя
+  delete: Удалить пользователя
+
+# Post management
+post:
+  singular: Пост
+  plural: Посты
+  create: Создать пост
+  edit: Редактировать пост
+  delete: Удалить пост
+  # Markdown post editor
+  create_new: Создать новый пост
+  create: Создать
+  edit_title: Редактировать
+  slug: URL
+  slug_hint: URL-идентификатор (например, my-post-title)
+  title: Заголовок
+  date: Дата
+  published: Опубликовано
+  "yes": Да
+  "no": Нет
+  tags: Теги
+  tags_hint: Теги через запятую
+  description: Описание
+  content: Содержание (Markdown)
+  content_hint: Напишите содержание в формате Markdown
+  save: Сохранить пост
+  cancel: Отмена
+  admin: Админ
+  posts: Посты
+
+# Role management
+role:
+  singular: Роль
+  plural: Роли
+  admin: Администратор
+  editor: Редактор
+  viewer: Наблюдатель
+  section_label: Управление доступом
+  role_label: Роли
+  user_roles_label: Роли пользователей
+
+# Common actions
+action:
+  save: Сохранить
+  cancel: Отмена
+  delete: Удалить
+  edit: Редактировать
+  create: Создать
+  back: Назад
+  search: Поиск
+  filter: Фильтр
+  export: Экспорт
+
+# Messages
+message:
+  saved: Успешно сохранено
+  deleted: Успешно удалено
+  error: Произошла ошибка
+  no_data: Нет данных
+
+# Публичный интерфейс блога
+blog:
+  recent_writings: Последние записи
+  favorite_articles: Избранные статьи
+  articles: Статьи
+  tags: Теги
+  tags_prefix: "Теги:"
+  about: О блоге
+  not_found: "404"
+  all_rights_reserved: Все права защищены
+
+# Home page
+home:
+  title: Главная
+  admin: Админ
+  total_posts: Всего постов
+  all_posts_in_system: Все посты в системе
+  published: Опубликовано
+  live_on_blog: Живые на блоге
+  drafts: Черновики
+  not_yet_published: Ещё не опубликовано
+  total_tags: Всего тегов
+  unique_categories: Уникальных категорий
+  latest_posts: Последние посты
+  top_tags: Популярные теги
+  view: Посмотреть
+  no_posts_yet: Пока нет постов
+  create_first_post: Создайте свой первый пост
+  create_post: Создать пост
+  no_tags_yet: Пока нет тегов
+  post: пост
+  posts: постов
+  new_post: Новый пост
+  all_posts: Все посты
+  users: Пользователи

@@ -33,7 +33,7 @@ except ImportError:
 
 
 # Import i18n utilities
-from .i18n import get_all_locale_names, load_translations
+from ..i18n import get_all_locale_names, load_translations
 
 # NOTE: Custom translation loading removed - now we create separate admin instances
 # for each locale instead of dynamically switching translations

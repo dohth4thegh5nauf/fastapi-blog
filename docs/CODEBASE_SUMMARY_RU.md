@@ -118,7 +118,7 @@ fastapi-blog/
 - Session-based authentication
 - SessionMiddleware + signed cookies
 - SimpleAuthProvider (hardcoded credentials для dev)
-- В production: интеграция с JWT или БД пользователей
+- В production: интеграция с БД пользователей
 
 **REST API (опционально):**
 - Требует тех же credentials что и admin
@@ -270,7 +270,7 @@ make all         # lint + mypy + test
 - Минусы: Требует переработки текущей архитектуры
 
 **Вариант B:** Исправить текущую multi-instance архитектуру
-- Добавить shared session store (Redis)
+- Добавить shared session store
 - Унифицировать login endpoint
 - Реализовать `rebase_url` фильтр как предложено в TODO.md
 
