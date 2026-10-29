@@ -47,25 +47,40 @@ def test_edit_template_extends_stock():
   assert '{% extends "@starlette-admin/edit.html" %}' in content
 
 
-def test_custom_base_extends_base():
-  """Verify custom_base.html extends base.html."""
-  content = _read('layouts/custom_base.html')
-  assert '{% extends "layouts/base.html" %}' in content, (
-    'custom_base.html must extend layouts/base.html'
-  )
+def test_home_and_markdown_pages_extend_the_unified_layout():
+  """home.html/markdown_list.html/markdown_edit.html share one layout.
+
+  They used to extend the project's own `layouts/custom_base.html` (a
+  separate dark-themed chain the built-in Role/User pages never saw). Now
+  they extend the same `layout.html` the built-in pages inherit through
+  (see `test_list_template_extends_stock` and friends above), so the theme
+  toggle and language switcher render identically everywhere.
+  """
+  for name in ('home.html', 'markdown_list.html', 'markdown_edit.html'):
+    content = _read(name)
+    assert '{% extends "layout.html" %}' in content, name
 
 
-def test_base_html_exists_in_layouts():
-  """Verify base.html exists in layouts directory."""
-  base = ADMIN_TEMPLATES / 'layouts' / 'base.html'
-  assert base.exists(), 'layouts/base.html must exist'
+def test_login_extends_the_stock_layout_directly():
+  """login.html's switchers/styling don't need `navbar_extra`.
+
+  It builds its own self-contained switchers (there is no logged-in navbar
+  to hook into), so it extends the framework's layout directly rather than
+  the shared `layout.html`.
+  """
+  content = _read('login.html')
+  assert '{% extends "@starlette-admin/layout.html" %}' in content
 
 
-def test_base_html_contains_theme_marker():
-  """Verify base.html contains theme switcher markers."""
-  base = (ADMIN_TEMPLATES / 'layouts' / 'base.html').read_text()
-  # base should contain theme-related markers
-  assert any(
-    marker in base
-    for marker in ['theme', 'dark', 'data-bs-theme', 'color-scheme']
-  ), 'base.html must contain theme marker'
+def test_layout_html_exists():
+  """Verify the unified layout.html exists."""
+  layout = ADMIN_TEMPLATES / 'layout.html'
+  assert layout.exists(), 'layout.html must exist'
+
+
+def test_layout_html_contains_theme_and_language_markers():
+  """Verify layout.html adds the theme toggle and language switcher."""
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert 'theme-toggle' in layout
+  assert 'navbar_extra' in layout
+  assert 'custom-language-item' in layout

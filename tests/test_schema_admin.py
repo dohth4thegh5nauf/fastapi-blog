@@ -183,7 +183,7 @@ def _render_template(name, **context):
   )
   loader = jinja2.ChoiceLoader(
     [
-      jinja2.DictLoader({'layouts/custom_base.html': layout}),
+      jinja2.DictLoader({'layout.html': layout}),
       jinja2.FileSystemLoader(str(ADMIN_TEMPLATES)),
     ]
   )

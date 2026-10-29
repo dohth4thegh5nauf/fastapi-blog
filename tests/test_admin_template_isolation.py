@@ -109,16 +109,16 @@ def test_admin_templates_directory_structure():
   assert admin_templates.exists(), 'Admin templates directory should exist'
   assert admin_templates.is_dir(), 'Admin templates should be a directory'
 
-  # Check for required subdirectories
-  layouts_dir = admin_templates / 'layouts'
+  # Check for required subdirectory and the unified layout
   partials_dir = admin_templates / 'partials'
+  layout_html = admin_templates / 'layout.html'
 
-  assert layouts_dir.exists(), 'layouts/ directory should exist'
   assert partials_dir.exists(), 'partials/ directory should exist'
-
-  # Verify base.html exists in layouts
-  base_html = layouts_dir / 'base.html'
-  assert base_html.exists(), 'base.html should exist in layouts/'
+  assert layout_html.exists(), (
+    'layout.html should exist (shadows the bare "layout.html" name so both '
+    "the built-in ModelView pages and this project's own pages share one "
+    'theme/language switcher, see admin/templates/layout.html)'
+  )
 
   # Verify public templates are separate
   public_templates = pkg_path / 'templates'

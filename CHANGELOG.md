@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Admin UI: one theme/language switcher everywhere
+
+The dependency upgrade (below) left the admin inconsistent: the built-in
+Role/User pages got the stock light theme with no theme or language
+switcher, while this project's own pages (dashboard, posts) kept a
+hand-rolled dark theme with their own switcher that didn't reach the stock
+pages at all.
+
+- `admin/templates/layout.html` (new): shadows the bare `"layout.html"` name
+  that every page — both `@starlette-admin/list.html`/`detail.html`/
+  `edit.html`/`create.html` and this project's own `home.html`/
+  `markdown_list.html`/`markdown_edit.html` — extends (directly or
+  transitively). Adds the theme toggle and language switcher once, through
+  the framework's own `navbar_extra` extension point (see
+  `@starlette-admin/templates/layout.html`), instead of duplicating
+  DOM-injection JS per page. Removes the old hand-rolled dark-mode CSS
+  (hardcoded hex colors) in favor of Tabler's own `data-bs-theme="dark"`
+  support, which every page already loads
+- Deleted `admin/templates/layouts/base.html` and `layouts/custom_base.html`
+  (superseded by `layout.html`); `login.html` now extends
+  `@starlette-admin/layout.html` directly — it builds its own self-contained
+  switchers since there's no authenticated navbar to hook into
+- Fixed two bugs found testing this in a real browser: `render_login` was
+  missing the stock "already authenticated → redirect" check (dropped
+  during the 1.0 port), so a logged-in user opening `/admin/login` saw the
+  form rendered underneath the real navbar, visually overlapping with
+  login's own switchers; and `login.html`'s logo check used
+  `login_logo_url`/`logo_url` as plain values, but 1.0 made both callables
+  (`(request) -> str | None`), so the unused-by-default logo silently
+  requested a URL that was the Python function's `repr()`
+- `MarkdownListView`'s route moved: `/admin/posts/list` → `/admin/posts`
+- `pyproject.toml`: added `[tool.pytest.ini_options] testpaths = ["tests"]`.
+  Without it, pytest also collected `+/` (reference material per
+  `AGENTS.md`, already excluded from ruff/mypy) and failed on its
+  cookiecutter template files, which aren't valid Python
+
 ### Dependency upgrade
 
 Every dependency floor bumped to its current latest release: `fastapi`

@@ -150,7 +150,7 @@ class MarkdownListView(CustomView):
     super().__init__(
       menu_label=_('Posts'),
       icon='fa fa-file-text',
-      path='/posts/list',
+      path='/posts',
       route_name='posts:list',
     )
     self.schema = schema or DEFAULT_SCHEMA

@@ -1,4 +1,4 @@
-{% extends "layouts/base.html" %}
+{% extends "@starlette-admin/layout.html" %}
 {% block header %}{% endblock %}
 {% block sidebar %}{% endblock %}
 
@@ -177,10 +177,10 @@ window.languageSwitcher = {
 
 <!-- Original login form -->
 <div class="container-tight">
-    {% if login_logo_url or logo_url %}
+    {% if login_logo_url(request) or logo_url(request) %}
         <div class="text-center mb-4">
             <a href="." class="navbar-brand navbar-brand-autodark">
-                <img src="{{ login_logo_url or logo_url }}" height="36" alt="" />
+                <img src="{{ login_logo_url(request) or logo_url(request) }}" height="36" alt="" />
             </a>
         </div>
     {% endif %}

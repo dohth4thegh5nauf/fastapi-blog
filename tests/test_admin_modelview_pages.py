@@ -84,3 +84,36 @@ def test_create_then_list_then_detail_then_edit(client):
   edit_page = client.get('/admin/user/edit', params={'pk': 1})
   assert edit_page.status_code == 200
   assert 'reader@example.org' in edit_page.text
+
+
+def test_already_authenticated_user_visiting_login_is_redirected(client):
+  """A custom `render_login` must still redirect an authenticated visitor.
+
+  Regression test: the ported `render_login` (see `admin/auth_provider.py`)
+  initially dropped this check, so a logged-in user hitting `/admin/login`
+  saw the login form rendered underneath the framework's own authenticated
+  navbar — two independent UIs overlapping on screen. Found via a manual
+  Chrome walkthrough.
+  """
+  response = client.get('/admin/login', follow_redirects=False)
+  assert response.status_code == 303
+
+
+def test_posts_route_moved_to_admin_posts(client):
+  """`/admin/posts/list` moved to `/admin/posts` (no trailing `/list`)."""
+  assert client.get('/admin/posts').status_code == 200
+  assert client.get('/admin/posts/list').status_code == 404
+
+
+def test_theme_and_language_switcher_present_on_every_page_type(client):
+  """The theme toggle renders identically on stock and project pages.
+
+  Regression test: before `admin/templates/layout.html` existed, the
+  theme/language switcher only reached this project's own pages
+  (`home.html`, `markdown_list.html`, `markdown_edit.html`) through
+  `layouts/custom_base.html`; the built-in Role/User pages had no switcher
+  at all and used the stock light theme unconditionally.
+  """
+  for path in ('/admin/', '/admin/posts', '/admin/user/list'):
+    response = client.get(path)
+    assert 'id="theme-toggle"' in response.text, path

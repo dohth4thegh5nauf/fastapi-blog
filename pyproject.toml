@@ -100,5 +100,11 @@ exclude = [
 # just be dead configuration that looks enforced but isn't.
 
 
+[tool.pytest.ini_options]
+# Scope collection to our own tests: `+/` holds reference material (see
+# AGENTS.md) that must stay out of every check, and it isn't even valid
+# Python (cookiecutter templates with `{{ }}` placeholders).
+testpaths = ["tests"]
+
 [tool.coverage.run]
 source = ["src"]

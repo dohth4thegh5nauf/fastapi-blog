@@ -88,6 +88,13 @@ class SimpleAuthProvider(AuthProvider):
     Mirrors `AuthProvider.render_login`, but passes our own `_` translation
     function (YAML files, not gettext .po/.mo) in the template context.
     """
+    fallback = index_url(request)
+    next_url = safe_redirect_url(
+      request.query_params.get('next') or fallback, request, fallback
+    )
+    if getattr(request.state, 'admin_user', None) is not None:
+      return RedirectResponse(next_url, status_code=HTTP_303_SEE_OTHER)
+
     _ = _yaml_translator(self.locale)
     if request.method == 'GET':
       return templates.TemplateResponse(
@@ -95,10 +102,6 @@ class SimpleAuthProvider(AuthProvider):
       )
 
     form = await request.form()
-    fallback = index_url(request)
-    next_url = safe_redirect_url(
-      request.query_params.get('next') or fallback, request, fallback
-    )
     try:
       result = await self.login(
         str(form.get('username') or ''),
