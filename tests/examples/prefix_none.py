@@ -6,12 +6,12 @@ import fastapi_blog
 app = FastAPI()
 
 
-@app.get("/api")
+@app.get('/api')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000',
+  }
 
 
 # Because the prefix is None, the call to add_blog_to_fastapi

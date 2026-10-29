@@ -1,0 +1,2 @@
+# Auto detect text files and perform LF normalization. The `eol=lf` option is used specifically for Makefiles and shell scripts.
+* text=auto eol=lf

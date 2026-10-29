@@ -4,12 +4,12 @@ import fastapi_blog
 
 
 app = FastAPI()
-app = fastapi_blog.add_blog_to_fastapi(app, prefix="change")
+app = fastapi_blog.add_blog_to_fastapi(app, prefix='change')
 
 
-@app.get("/")
+@app.get('/')
 async def index() -> dict:
-    return {
-        "message": "Check out the blog at the URL",
-        "url": "http://localhost:8000/change",
-    }
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/change',
+  }

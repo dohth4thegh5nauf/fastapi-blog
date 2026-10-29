@@ -1,0 +1,113 @@
+# Ruff configuration for MATRYOSHKA
+# See: https://docs.astral.sh/ruff/configuration/
+
+# Basic settings
+line-length = 80  # Old school TTY like # Also: https://github.com/astral-sh/ruff/issues/22791
+indent-width = 2
+
+target-version = 'py312'  # Target Python version
+exclude = [  # Directories to exclude
+  '.git',
+  '__pycache__',
+  'venv',
+  'ENV',
+  'env',
+  '.venv',
+  '.pytest_cache',
+  '.mypy_cache',
+  'build',
+  'dist',
+  '*.egg-info',
+  '+/**',
+  'tmp/**',
+  'log/**',
+  '.bzr',
+  '.direnv',
+  '.eggs',
+  '.git-rewrite',
+  '.hg',
+  '.ipynb_checkpoints',
+  '.nox',
+  '.pants.d',
+  '.pyenv',
+  '.pytype',
+  '.ruff_cache',
+  '.svn',
+  '.tox',
+  '.vscode',
+  '__pypackages__',
+  '_build',
+  'buck-out',
+  'node_modules',
+  'site-packages'
+]
+src = ['src']
+
+[lint]
+# Non-ASCII identifiers. Ruff ships these as preview rules, hence the flag:
+# without `preview` the selectors below are accepted and silently do nothing —
+# the worst kind of configuration, one that looks enforced.
+#
+# Prose about the product belongs in docstrings; identifiers are an interface,
+# and interfaces stay in the language the tooling speaks. A Cyrillic name means
+# `pytest -k` needs a Russian keyboard layout to select a test, an ASCII grep
+# never finds it — and that is how one searches unfamiliar code — and a non-UTF8
+# terminal turns tracebacks into noise.
+preview = true
+# Only the rules named below, and nothing else preview brings along.
+#
+# `preview = true` on its own also switches on the preview versions of every
+# family already selected above (`E`, `N`, `W`…). Measured: lead-router went
+# from a clean lint to 80 errors, not one of them the rule we came for. This
+# flag makes preview apply only to rules selected by their exact code.
+explicit-preview-rules = true
+extend-select = [
+  'PLC2401',  # non-ascii-name
+  'PLC2403',  # non-ascii-import-name
+]
+select = [  # Enable specific rule sets
+  'E',   # Pycodestyle errors
+  'W',   # Pycodestyle warnings
+  'F',   # Pyflakes
+  'I',   # Add import sorting (isort)
+  'N',   # PEP8-naming
+  'UP',  # Pyupgrade
+  'B',   # Flake8-bugbear
+  'C4',  # Flake8-comprehensions
+  'PT',  # Flake8-pytest-style
+  'SIM'  # Flake8-simplify
+]
+ignore = [  # Ignore specific rules for 2-space indentation
+  'E111',  # Indentation is not a multiple of 4
+  'E114',  # Indentation is not a multiple of 4 (comment)
+  'E117',  # Over-indented
+  'E501',  # Line too long (handled by line-length)
+  'W191',  # Indentation contains tabs # NEVER!!!
+  # 'E266',  # Too many leading '#' for comment
+  # 'E262',  # Inline comment should start with `# `
+  'E701',  # Multiple statements on one line (colon). WARNING: Please note that if you use ruff format, the formatter will still expand such a record into a multi-line one.
+  'N806',  # Non-lowercase variable names in functions
+  'N803'   # Argument names should be lowercase
+]
+dummy-variable-rgx = '^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$'  # Allow unused variables when underscore-prefixed
+
+[format]
+indent-style = 'space'  # Use indents with spaces, not tabs (Like Black)
+quote-style = 'single'  # Use single quotes
+skip-magic-trailing-comma = false  # Rspect magic trailing commas (Like Black)
+line-ending = 'lf'  # Line endings
+
+[lint.isort]
+known-first-party = ['fastapi_blog']
+force-sort-within-sections = true
+force-single-line = false
+lines-after-imports = 2
+
+[lint.per-file-ignores]
+'tests/**/*.py' = [
+  'N802',   # Allow uppercase in fixture names (raw_X, raw_y - ML convention)
+  'PT009',  # Allow unittest-style assert methods (assertEqual etc.)
+  'PT018',  # Allow composite assert (assert a and b)
+  'PT027'   # Allow try/except instead of pytest.raises
+]
+'__init__.py' = ['F401']  # Allow unused imports (re-exports)

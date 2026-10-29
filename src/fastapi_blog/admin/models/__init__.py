@@ -5,9 +5,9 @@ from .role import Role, UserWithRoles
 
 
 __all__ = [
-    "Base",
-    "User",
-    "Post",
-    "Role",
-    "UserWithRoles",
+  'Base',
+  'User',
+  'Post',
+  'Role',
+  'UserWithRoles',
 ]
