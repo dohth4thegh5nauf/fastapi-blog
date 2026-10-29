@@ -23,8 +23,8 @@ class ConfigurationError(RuntimeError):
 def has_session_middleware(app: FastAPI) -> bool:
   """Tell whether `SessionMiddleware` is added to the app.
 
-  The class is matched by name, so this works without importing the session
-  support (it needs the `admin` extra).
+  The class (or a subclass of it) is matched by name, so this works without
+  importing the session support (it needs the `admin` extra).
 
   Args:
       app: FastAPI application instance.
@@ -34,8 +34,9 @@ def has_session_middleware(app: FastAPI) -> bool:
 
   """
   return any(
-    getattr(m.cls, '__name__', '') == 'SessionMiddleware'
+    base.__name__ == 'SessionMiddleware'
     for m in app.user_middleware
+    for base in getattr(m.cls, '__mro__', ())
   )
 
 

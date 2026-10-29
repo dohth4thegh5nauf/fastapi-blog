@@ -141,4 +141,4 @@ def test_version_matches_pyproject():
   project = tomllib.loads((ROOT / 'pyproject.toml').read_text('utf-8'))[
     'project'
   ]
-  assert fastapi_blog.__version__ == project['version'] == '0.9.0'
+  assert fastapi_blog.__version__ == project['version']
