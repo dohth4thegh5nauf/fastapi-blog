@@ -17,7 +17,42 @@ client = TestClient(app)
 def test_blog_index():
   response = client.get('/blog')
   assert response.status_code == 200
-  assert '<title>Daniel Roy Greenfeld</title>' in response.content.decode()
+  # `<title>` used to be hardcoded to the original fork author's name on
+  # every page (TODO 5.9.6): `title`/`metadata` were never actually set in
+  # any route's template context, so `layouts/base.html`'s fallback chain
+  # always landed on its last, hardcoded branch.
+  assert '<title>Daniel Roy Greenfeld</title>' not in response.content.decode()
+  assert '<title>Recent Writings</title>' in response.content.decode()
+
+
+def test_html_tag_has_a_lang_attribute():
+  """TODO 5.9.6: `<html>` had no `lang` at all."""
+  response = client.get('/blog')
+  assert '<html lang="en">' in response.content.decode()
+
+
+def test_no_fork_author_branding_remains_in_the_base_template():
+  """The package must not ship the original fork author's own branding.
+
+  TODO 5.9.6/П3: personal name, photo and social links aren't universal.
+  """
+  html = client.get('/blog').content.decode()
+  assert 'Daniel Roy Greenfeld' not in html
+  assert 'danielfeldroy' not in html
+  assert 'pydanny' not in html
+
+
+def test_post_page_has_its_own_title_and_description():
+  app = fastapi_blog.add_blog_to_fastapi(
+    FastAPI(),
+    posts_dirname='tests/examples/posts',
+    strict_frontmatter=False,
+    jinja2_loader=jinja2.FileSystemLoader('src/fastapi_blog/templates'),
+  )
+  with TestClient(app) as c:
+    html = c.get('/blog/posts/no-tags').content.decode()
+  assert '<title>No Tags</title>' in html
+  assert '<meta name="description" content="A post with no tags">' in html
 
 
 def test_blog_post_rejects_path_traversal_post_id():

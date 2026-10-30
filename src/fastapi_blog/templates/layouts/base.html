@@ -1,13 +1,11 @@
-<html>
+<html lang="{{ lang|default(locale, true) }}">
 <head>
-    {% if metadata %}
-        <title>{{ metadata.title|default("Daniel Roy Greenfeld") }}</title>
-    {% elif title %}
-        <title>{{ title }}</title>
-    {% else %}
-        <title>Daniel Roy Greenfeld</title>
+    <title>{{ title|default('', true) }}</title>
+
+    {% if description %}
+    <meta name="description" content="{{ description }}">
     {% endif %}
-    
+
     {# SEO: Canonical URL #}
     {% if canonical_url %}
     <link rel="canonical" href="{{ canonical_url }}">
@@ -84,16 +82,7 @@ h4 {
 </head>
 <body>
     <header>
-        <a href="{{ locale_url_for('blog_index') }}">
-    <image
-        priority
-        src="/static/images/profile.webp'"
-        height="144"
-        width="144"
-        alt="Daniel Roy Greenfeld"
-        class="borderCircle"
-        /></a>
-    <h1><a href="{{ locale_url_for('blog_index') }}">Daniel Roy Greenfeld</a></h1>
+    <h1><a href="{{ locale_url_for('blog_index') }}">{{ site_name|default('', true) }}</a></h1>
     <p>
       <a href="{{ locale_url_for('blog_page', page_id='about') }}">
         {{ t.blog.about }}
@@ -158,12 +147,7 @@ h4 {
         {% block content required %}{% endblock content %}
     </main>
     <footer>
-        <p>
-          <a href="https://fosstodon.org/@danielfeldroy">Mastodon</a> |
-          <a href="https://www.linkedin.com/in/danielfeldroy/">LinkedIn</a> |
-          <a href="https://twitter.com/pydanny">Twitter</a> |
-        </p>
-        <p>{{ t.blog.all_rights_reserved }} {% now 'utc', '%Y' %}, Daniel Roy Greenfeld</p>
-    </footer>    
+        <p>{{ t.blog.all_rights_reserved }} {% now 'utc', '%Y' %} {{ site_name|default('', true) }}</p>
+    </footer>
 </body>
 </html>

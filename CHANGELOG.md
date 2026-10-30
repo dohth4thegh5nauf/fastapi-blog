@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Fixed existing behavior: real page titles, `lang`, `description`, no fork-author branding (TODO 5.9.6, MUST)
+
+`layouts/base.html`'s `<title>` fallback chain checked a top-level
+`metadata` context variable that no route ever actually set (every
+template that has one sets `page.metadata` instead), so it always fell
+through to its last, hardcoded branch — every single page of every blog
+built with this package rendered `<title>Daniel Roy Greenfeld</title>`
+(the original fork author's name), regardless of which post or page was
+being viewed. `index.html` independently pinned its own `{% set title =
+"Daniel Roy Greenfeld" %}` on top of that. Fixed properly rather than just
+swapping the fallback text: every route (`blog_index`, `blog_post`,
+`blog_posts`, `blog_tags`, `blog_tag`, `blog_page`, the 404 page) now sets
+a real `title` (and `description`, where the schema/page has one) in its
+own template context, and `layouts/base.html` just prints it — no more
+dead `metadata` branch.
+
+Also fixed while in the same file, as the same class of bug (hardcoded
+content that isn't universal, П3): `<html>` had no `lang` attribute at
+all (now `{{ lang|default(locale, true) }}` — ready for the `lang` role,
+TODO 5.9.1, once it exists); the role `description`'s value was parsed but
+never rendered as `<meta name="description">`; the header/footer shipped
+the original fork author's own photo (via a malformed `<image>` tag — not
+even valid HTML — pointing at a file that was never part of this
+package), name, and Mastodon/LinkedIn/Twitter links, none of which belong
+in a universal package. Replaced with `{{ site_name|default('', true) }}`
+(empty for now; wired up for TODO 5.9.2's `SeoConfig.site_name` once that
+exists) and removed the social links outright.
+
+Not done from TODO 5.9: the rest is SHOULD/MAY (`seo_title`/`canonical`/
+`robots`/etc. roles, `SeoConfig`, Open Graph/Twitter/structured-data
+output, sitemap/robots.txt/redirects, `check` findings) — 5.9.6 itself,
+the one MUST item that was pure bug-fixing, is what's done here.
+
 ### `schema --json-schema` and the `status` role (TODO 5.7)
 
 - `python -m fastapi_blog schema --json-schema` prints the frontmatter's

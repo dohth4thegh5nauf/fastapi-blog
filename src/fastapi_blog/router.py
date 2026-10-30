@@ -162,11 +162,12 @@ def get_blog_router(
       filter(lambda x: x['slug'] in favorite_post_ids, posts)
     )
 
-    context = {'recent_3': recent_3, 'favorite_posts': favorite_posts}
+    context = _add_i18n_context(
+      request, {'recent_3': recent_3, 'favorite_posts': favorite_posts}
+    )
+    context['title'] = context['t'].blog.recent_writings
     return templates.TemplateResponse(
-      request=request,
-      name='index.html',
-      context=_add_i18n_context(request, context),
+      request=request, name='index.html', context=context
     )
 
   @router.get('/posts/{post_id}', name=f'blog_post{name_suffix}')
@@ -192,7 +193,11 @@ def get_blog_router(
     _, body = store.read_document(post_path)
     post['content'] = helpers.markdown(body, sanitize=sanitize_html)
 
-    context = {'post': post}
+    context = {
+      'post': post,
+      'title': post.get('title'),
+      'description': post.get('description'),
+    }
     return templates.TemplateResponse(
       request=request,
       name='post.html',
@@ -203,11 +208,10 @@ def get_blog_router(
   async def blog_posts(request: Request, response_class=HTMLResponse):
     posts = _list_posts()
 
-    context = {'posts': posts}
+    context = _add_i18n_context(request, {'posts': posts})
+    context['title'] = context['t'].blog.articles
     return templates.TemplateResponse(
-      request=request,
-      name='posts.html',
-      context=_add_i18n_context(request, context),
+      request=request, name='posts.html', context=context
     )
 
   @router.get('/tags', name=f'blog_tags{name_suffix}')
@@ -228,11 +232,10 @@ def get_blog_router(
       sorted(unsorted_tags.items(), key=lambda x: x[1], reverse=True)
     )
 
-    context = {'tags': tags}
+    context = _add_i18n_context(request, {'tags': tags})
+    context['title'] = context['t'].blog.tags
     return templates.TemplateResponse(
-      request=request,
-      name='tags.html',
-      context=_add_i18n_context(request, context),
+      request=request, name='tags.html', context=context
     )
 
   @router.get('/tags/{tag_id}', name=f'blog_tag{name_suffix}')
@@ -241,11 +244,10 @@ def get_blog_router(
   ):
     posts = [x for x in _list_posts() if tag_id in (x.get('tags') or [])]
 
-    context = {'tag_id': tag_id, 'posts': posts}
+    context = _add_i18n_context(request, {'tag_id': tag_id, 'posts': posts})
+    context['title'] = f'{context["t"].blog.tags_prefix} {tag_id}'
     return templates.TemplateResponse(
-      request=request,
-      name='tag.html',
-      context=_add_i18n_context(request, context),
+      request=request, name='tag.html', context=context
     )
 
   if jsonld_routes:
@@ -313,16 +315,26 @@ def get_blog_router(
         path, sanitize=sanitize_html
       )
     except FileNotFoundError:
-      context: dict[str, Any] = {}
+      context = _add_i18n_context(request, {})
+      context['title'] = context['t'].blog.not_found
       return templates.TemplateResponse(
         request=request,
         name='404.html',
         status_code=404,
-        context=_add_i18n_context(request, context),
+        context=context,
       )
     page['slug'] = page_id
+    metadata = page.get('metadata')
+    page_title = metadata.get('title') if isinstance(metadata, dict) else None
+    page_description = (
+      metadata.get('description') if isinstance(metadata, dict) else None
+    )
 
-    context = {'page': page}
+    context = {
+      'page': page,
+      'title': page_title,
+      'description': page_description,
+    }
     return templates.TemplateResponse(
       request=request,
       name='page.html',
