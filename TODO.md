@@ -4,21 +4,19 @@
 
 ## 0. Статус выполнения и стек (на 2026-10-29)
 
-Фаза A выполнена, фаза B выполнена почти полностью (остаток — см. 4.5/4.6 в таблице), фаза C начата (5.1 частично), фазы D и E не начаты. Статус составлен по `CHANGELOG.md`, `src/` и `tests/` присланного архива (версия 0.9.0 в работе). Разделы 1–8 описывают то, что ещё предстоит сделать, и остаются в силе, если ниже не сказано иное.
+Фаза A выполнена; фаза B выполнена почти полностью (остаток — 4.5 и 4.6); фаза C: 5.1 частично, 5.2–5.4 выполнено; фазы D и E не начаты; SEO-расширение (5.9) добавлено в ТЗ и не начато. Статус составлен по `CHANGELOG.md`, `src/` и `tests/` последнего присланного архива (версия 0.9.0 в работе, 418 тестов). Разделы 1–8 описывают то, что ещё предстоит сделать, и остаются в силе, если ниже не сказано иное.
 
 | Раздел | Статус | Сделано и осталось |
 | --- | --- | --- |
-| 3 (фаза A) | Выполнено | Ядро без extras `admin` и `jsonld`; ленивая админка (PEP 562), `setup_fastapi_blog(admin=False)`; кэш `list_posts` по подписи каталога; `redis` и `pyjwt` удалены; Basic-авторизация без `SessionMiddleware`, `secrets.compare_digest`; `ConfigurationError` при старте без учётных данных; параметры `auth_dependency`; CI-матрица `core` и `all`; тесты `test_core_isolation.py`, `test_core_cache.py` |
-| Стек (вне ТЗ) | Выполнено | Подняты минимальные версии всех зависимостей; порт `starlette-admin` с 0.16 на 1.0.3 (новый контракт `AuthProvider.authenticate`, `Admin(secret_key=...)`, переименованные атрибуты представлений, страницы ролей и пользователей на стандартной теме); `bcrypt<4.1` закреплён из-за `passlib`; тест `test_admin_modelview_pages.py` |
-| 4.2, 4.3 | Выполнено | `store.parse_document`, `serialize_document`, `atomic_write_text`, `read_document`, `write_document`, UTF-8 везде; пять мест чтения и записи используют `store`; `tests/test_store.py` |
-| 4.1 | Выполнено | `store.Collection`/`store.DocumentStore` (`list`/`read`/`write`/`delete`/`exists`); не несёт `FrontmatterSchema` (сознательное отклонение от буквальной сигнатуры в п.4.6 — валидация и `on_create`/`read_only` остаются в `FrontmatterSchema.dump_for_write`, вызывается до `DocumentStore.write`). `admin/markdown_crud.py` (`MarkdownFileManager`) и `editor.py` (REST API) переведены на него. Было две реализации `MarkdownPost` — `admin/markdown_model.py` удалён, `HomeView` всегда идёт через `load_posts_for_home`/`DocumentStore` |
-| 4.4 | Выполнено | `safe_document_path`/`DocumentStore` подключены везде, где путь строится из slug: `editor.py` (REST API), публичный маршрут `/posts/{post_id}`, `markdown_crud.MarkdownFileManager`. Общий `SLUG_RE` экспортирован из `fastapi_blog.models`; тесты на обход пути в `test_markdown_crud.py`, `test_router.py`, `test_store.py` |
-| 4.5 | Частично | `datetime.now()` убран; `FieldSpec.on_create` (`today`/`now`/`uuid`) и `read_only` сделаны и подключены в REST API (`editor.py` через `FrontmatterSchema.dump_for_write`); не подключены в админке (`markdown_crud.py` пишет без валидации по схеме); порядок ключей и неизвестные ключи при перезаписи не сделаны (нужен merge-based write поверх `DocumentStore`) |
-| 4.6 | Частично | `Collection(name, dir, slug_pattern=..., extension=..., depth=0, create=True, delete=True)` сделан (без `schema`, см. 4.1); `create`/`delete`/`extension` работают и покрыты тестами. `depth > 0` (вложенные коллекции) явно не реализован (`NotImplementedError`); `{dirname}`/`{filename}` в шаблонах slug — тоже (нужен ещё 6.4). `posts_dirname`/`pages_dirname` как сахар над двумя `Collection` не сделаны: публичный API блога/админки всё ещё принимает `posts_dirname: str`. `POSTS_DIR` читается с `DeprecationWarning`; теперь действительно доходит до админки (`add_admin_to_app(posts_dirname=...)`, было независимо от блога — нашли и исправили попутно) |
-| 4.7 | Выполнено | `DocumentStore.read` возвращает `etag`; `write`/`delete` принимают `if_match`, дают `ConflictError` (412 при несовпадении, 409 если документа нет); REST API отдаёт `ETag` и принимает `If-Match` (`require_if_match: bool = False` в `get_api_router`/`add_editor_to_app`, 428 без заголовка при `True`). Блокировка — `threading.Lock` на процесс, межпроцессную не делали (по ТЗ) |
-| 5.1 (часть) | Частично | `FieldSpec`: `choices` (скаляр или `{value, label}`, для списков — по элементу), `pattern`/`item_pattern` (regex или `[regex, сообщение]`, `re.fullmatch`), `min`/`max`, `min_items`/`max_items` (независимо друг от друга и от `min_length`/`max_length`), `label` (→ `title` в Pydantic-модели), `hint`/`hidden` (через `json_schema_extra`). `read_only`/`on_create` — см. 4.5. Не сделано: `type: link`, `type: object`, `type: file`/`image` (каждый — отдельная, более крупная фича) |
-| 5.2–5.4 (часть) | Частично | `fastapi_blog.jsonld`: `document_to_jsonld`/`collection_to_jsonld` (чистые функции проекции, `@context`/`@id`/`@type`/поля в порядке схемы, ISO-даты, детерминированная сортировка `@graph`). `FrontmatterSchema.jsonld` (`JsonLdConfig`) + секция `jsonld:` в файле схемы. `id_template` — простая `str.format()`-подстановка, не полный язык шаблонов из 6.4 |
-| 5.4 (остальное), 5.5–5.8 | Не начато | HTTP-маршруты (`GET {prefix}/{slug}.jsonld`), CLI `export`, загрузка `context` из локального файла (нужен extra `jsonld`), контроль «потерянных терминов», `--json-schema`; extra `jsonld` объявлен, код его пока не использует (нужен только для `--format expanded`/`nquads`) |
+| 3 (фаза A) | Выполнено | Ядро без extras `admin` и `jsonld`; ленивая админка (PEP 562), `setup_fastapi_blog(admin=False)`; кэш `list_posts` по подписи каталога; `redis` и `pyjwt` удалены; Basic-авторизация без `SessionMiddleware`, `secrets.compare_digest`; `ConfigurationError`; параметры `auth_dependency`; CI-матрица `core` и `all` |
+| Стек (вне ТЗ) | Выполнено | Подняты минимальные версии всех зависимостей; порт `starlette-admin` с 0.16 на 1.0.3; единая тема и переключатель языка на всех страницах админки (`admin/templates/layout.html`, собственный `login.html` удалён); `bcrypt<4.1` закреплён из-за `passlib`; `pytest` собирает только `tests/` |
+| 4.1, 4.2, 4.3, 4.4, 4.7 | Выполнено | `store.Collection` и `store.DocumentStore` (`list`, `read`, `write`, `delete`, `exists`, `etag`, `If-Match`, `ConflictError` 412/409, REST API отдаёт `ETag`, параметр `require_if_match` даёт 428); `Collection` намеренно не несёт `FrontmatterSchema`: валидация остаётся в `FrontmatterSchema.dump_for_write`; единый разбор и атомарная запись UTF-8; `safe_document_path` подключён везде, где путь строится из slug; вторая реализация `MarkdownPost` удалена |
+| 4.5 | Частично | `datetime.now()` убран; `on_create` (`today`, `now`, `uuid`) и `read_only` работают в REST API; админка пишет без валидации по схеме, поэтому в ней они не действуют; порядок ключей и неизвестные ключи при перезаписи не сохраняются (нужна запись со слиянием поверх `DocumentStore`) |
+| 4.6 | Частично | `Collection(..., extension, depth=0, create, delete)`: `create`, `delete`, `extension` работают; `depth` больше 0 — `NotImplementedError`; нет тегов `{dirname}` и `{filename}` и сахара `posts_dirname`/`pages_dirname` над двумя `Collection` (публичный API принимает `posts_dirname: str`); `POSTS_DIR` читается с `DeprecationWarning`; `posts_dirname` теперь доходит и до админки |
+| 5.1 (часть) | Частично | `choices`, `pattern` и `item_pattern` (в том числе с сообщением), `min` и `max`, `min_items` и `max_items`, `label`, `hint`, `hidden`; не сделано: `link`, `object`, `file`, `image` |
+| 5.2–5.4 | Выполнено | `fastapi_blog.jsonld`: `document_to_jsonld` и `collection_to_jsonld` (чистые функции, детерминированный `@graph`); `FrontmatterSchema.jsonld` и секция `jsonld:` файла схемы; `id_template` пока на `str.format`. HTTP: `add_blog_to_fastapi(jsonld_routes=True)` добавляет `GET {prefix}/{slug}.jsonld` и `GET {prefix}/index.jsonld` (`application/ld+json`, только опубликованные посты); по умолчанию выключено |
+| 5.5–5.8 | Не начато | CLI `export`, контекст из локального файла (нужен extra `jsonld`), контроль потерянных терминов, `--json-schema`; extra `jsonld` объявлен, код его пока не использует |
+| 5.9 (SEO) | Не начато | В коде есть только вычисляемый `canonical` (тег `link` и заголовок `Link`) и `hreflang`; не выводятся `description`, Open Graph, `robots`, структурированные данные страницы; нет sitemap и `robots.txt`; в `layouts/base.html` заголовок по умолчанию зашит как имя автора исходного проекта, у `<html>` нет `lang` |
 | 6 (фаза D) | Не начато | Нет CLI `check` и `export`, внешних проверок, языка шаблонов, нумерации |
 | 7 (фаза E) | Не начато | См. раздел 2: права, учётные данные по умолчанию, `passlib`, превью |
 
@@ -40,14 +38,13 @@
 
 ## 2. Состояние кода (по 0.9.0, после фазы A и части фазы B)
 
-- Нет `Collection` и `DocumentStore`; `store.compute_etag` и `store.safe_document_path` не вызываются из кода; публичный маршрут в `router.py` собирает путь к файлу строкой `f'{posts_dirname}/{post_id}.md'`.
-- Две реализации `MarkdownPost` (`admin/markdown_model.py`, `admin/markdown_crud.py`); `markdown_crud.py` читает переменную `POSTS_DIR`; в `MarkdownPost` каталог хранится в атрибуте класса. По `CHANGELOG.md` способ сохранения из формы админки (HTTP-вызов собственного API) не менялся: проверить.
-- Нет `etag` и `If-Match`, нет блокировки записи.
-- Схема (`models/schema.py`): типы `str`, `int`, `float`, `bool`, `datetime`, `date`, `list[str]`, `list[int]`, `dict`, `any`; роли `title`, `date`, `published`, `tags`, `description`; нет перечислений, шаблонов с сообщением, ссылок, вложенных полей, `hidden`, `read_only`, `on_create`; страницы (`pages/`) вне схемы. JSON-LD, `check`, внешние проверки и язык шаблонов не реализованы.
+- Админка пишет посты через `markdown_crud.MarkdownFileManager` без валидации по схеме: `on_create`, `read_only`, `choices` и `pattern` в ней не действуют. Способ сохранения из формы (HTTP-вызов собственного API) по `CHANGELOG.md` не менялся: проверить.
+- `Collection` с `depth` больше 0 не реализована; публичный API принимает `posts_dirname: str`, а не `Collection`; страницы (`pages/`) вне схемы.
+- Схема: нет типов `link`, `object`, `file`, `image`; JSON-LD есть только как чистые функции (нет маршрутов, CLI `export`, контекста из файла, контроля потерянных терминов); нет `check`, внешних проверок и языка шаблонов.
 - Права: `has_permission` определён в `admin/rbac_auth_provider.py`, но не применяется к API и представлениям; после порта на starlette-admin 1.0.3 это не перепроверялось, нужен тест.
 - Учётные данные `admin` / `Admin123!` подставляются в `__init__.py`, `admin/__init__.py` и `admin/auth_provider.py`; слабый секрет сессии даёт предупреждение, а не ошибку.
 - `passlib` не поддерживается с 2020 года, из-за него закреплён `bcrypt<4.1`.
-- Страницы ролей и пользователей работают на стандартной светлой теме starlette-admin 1.0 (собственная тема потеряна при порте).
+- SEO: роль `description` не выводится в `<meta>`; нет Open Graph, `robots`, структурированных данных страницы, sitemap и `robots.txt`; канонический адрес вычисляется только по запросу; в `layouts/base.html` зашит заголовок по умолчанию с именем автора исходного проекта, у `<html>` нет `lang` (см. 5.9).
 
 ## 3. Пакеты, импорты, кэш (фаза A, выполнена)
 
@@ -73,7 +70,7 @@
 
 ## 4. Хранилище документов (фаза B, в работе)
 
-**Состояние на 0.9.0.** Сделано: 4.1 (`Collection`/`DocumentStore`, одна реализация `MarkdownPost`), 4.2, 4.3, 4.4, 4.7 (`etag`/`if_match`/`ConflictError`, `If-Match` в REST API). Частично: 4.5 (`on_create`/`read_only` работают только через REST API, не через админку; порядок ключей и неизвестные ключи при перезаписи не сделаны) и 4.6 (`Collection` без `schema`-параметра и без вложенных коллекций `depth > 0`; `posts_dirname`/`pages_dirname` как сахар над `Collection` не сделаны).
+**Состояние на 0.9.0.** Сделано: 4.1–4.4 и 4.7 (`Collection`, `DocumentStore`, `etag`, `If-Match`, единый разбор и атомарная запись, `safe_document_path` везде). Частично: 4.5 (`on_create` и `read_only` только в REST API; порядок ключей при перезаписи не сохраняется) и 4.6 (`depth` больше 0, теги `{dirname}` и `{filename}`, сахар над двумя `Collection`).
 
 **4.1 Единый модуль** `store.py` (примитивы уже в нём): добавить `DocumentStore` (`list`, `read`, `write`, `delete`, `exists`) на одну `Collection`. Публичная страница, `helpers.list_posts`, REST API и админка используют только его. Две реализации `MarkdownPost` свести к одной поверх `DocumentStore`. `safe_document_path` вызывается везде, где путь строится из slug (включая публичный маршрут).
 
@@ -92,14 +89,12 @@
 **Критерии (B):**
 
 1. Круговой тест `read → write` с таблицей `|---|---|` и `---` в значении YAML — выполнено (`tests/test_store.py`).
-2. Параллельная запись двух клиентов с одним `etag` даёт ровно один 412.
+2. Параллельная запись двух клиентов с одним `etag` даёт ровно один 412 — реализовано в `DocumentStore` и REST API; проверить покрытие тестом на двух клиентов.
 3. Поиск `read_text(` и `write_text(` в `src` не находит вызовов без `encoding`.
-4. Все чтения и записи документов идут через `DocumentStore`; одна реализация `MarkdownPost`; прежние места вызова удалены.
-5. Все существующие тесты проходят (базовая линия: 287 тестов в 31 файле).
+4. Все чтения и записи документов идут через `DocumentStore` — выполнено для REST API и админки; остаётся запись админки без валидации по схеме (4.5).
+5. Все существующие тесты проходят (базовая линия: 386 тестов в 30 файлах).
 
 ## 5. Настраиваемый frontmatter и JSON-LD (фаза C — главный раздел)
-
-**Состояние на 0.9.0.** Из 5.1 сделаны `choices`, `pattern`/`item_pattern`, `min`/`max`, `min_items`/`max_items`, `label`, `hint`, `hidden` (`read_only`/`on_create` — см. 4.5). Из 5.2–5.4 сделаны `document_to_jsonld`/`collection_to_jsonld` (`fastapi_blog.jsonld`) и секция `jsonld:` схемы (`JsonLdConfig`). Не начаты: `type: link`/`object`/`file`/`image` (5.1.1–5.1.3), HTTP/CLI экспорт, загрузка внешнего `context`, контроль потерянных терминов (5.5–5.8).
 
 **5.1 Расширение `FieldSpec`.** Все новые опции необязательны, доступны и в YAML/JSON-файле схемы. Ошибки схемы выявляются при её загрузке с указанием поля (как сейчас).
 
@@ -228,6 +223,101 @@ Body text.
 | i18n, сортировка и фильтры списков, поиск, `preview_path`, заметки, пользовательские виджеты | Не брать (нет второго потребителя, П7) | — |
 | TOML и JSON frontmatter, файловые коллекции | Не брать сейчас; только YAML-frontmatter | — |
 
+**5.9 SEO-расширение frontmatter.** Пункты 5.9.1–5.9.3 и 5.9.6 — MUST, остальное — SHOULD или MAY.
+
+**5.9.0 Принципы.**
+
+- SEO — не отдельная подсистема, а несколько новых семантических ролей схемы (как `title`, `date`, `description`) плюс настройки сайта. Роль привязывается к полю схемы; имя поля и `alias` выбирает автор схемы.
+- Если роль не привязана и настройка не задана, поведение прежнее (П6). Исключения-исправления перечислены в 5.9.6.
+- Только то, что поисковики используют: `<meta name="keywords">`, `priority` и `changefreq` в sitemap не поддерживаются (по публичной документации Google они не учитываются). Теги документа попадают только в `article:tag` и в `keywords` структурированных данных.
+- Универсальность (П3): в пакете нет имён сайтов, авторов и соцсетей; все значения приходят из frontmatter и настроек.
+
+**5.9.1 Новые роли.** Роль привязывается к одному полю, как остальные (`ROLES` и `_ROLE_TYPES` в `models/schema.py`).
+
+| Роль | Тип поля | Назначение |
+| --- | --- | --- |
+| `seo_title` | `str` | Заголовок для `<title>`, `og:title`, `twitter:title`; если не задан — `title` |
+| `description` (уже есть) | `str` | `<meta name="description">`, `og:description`, `twitter:description`, `description` в структурированных данных |
+| `canonical` | `str` | Явный канонический адрес: абсолютный `https://` или путь от корня сайта; иначе адрес вычисляется (5.9.4) |
+| `robots` | `list[str]` | Директивы `<meta name="robots">`; допустимы `noindex`, `nofollow`, `noarchive`, `nosnippet` (проверяются как `choices`) |
+| `image` | `str` | Картинка для `og:image`, `twitter:image` и структурированных данных: путь внутри сайта или абсолютный URL |
+| `image_alt` | `str` | `og:image:alt`, `twitter:image:alt`; при заданном `image` обязателен (находка `check`, 5.9.7) |
+| `updated` | `str`, `date` или `datetime` | Время изменения: `article:modified_time`, `dateModified`, `lastmod` в sitemap; если не задано — `date` |
+| `author` | `str` или `list[str]` | `<meta name="author">` и `author` в структурированных данных; если не задано — `seo.default_author` |
+| `lang` | `str` | Язык документа (код BCP 47): `<html lang>`, `og:locale`, `inLanguage`; если не задан — язык интерфейса запроса |
+| `redirect_from` | `list[str]` | Прежние адреса документа (5.9.5) |
+
+**Готовый набор полей.** `fastapi_blog.seo.seo_fields()` возвращает `FieldSpec` для этих ролей (`choices` у `robots`, подписи `label` и `hint`). Автор схемы добавляет набор целиком или частично и может переименовать поля. Длины `seo_title` и `description` ограничиваются не схемой, а проверкой `check` (5.9.7): превышение рекомендуемой длины — предупреждение, а не отказ записи.
+
+**5.9.2 Настройки сайта (`SeoConfig`).** Секция `seo:` файла схемы (по образцу `jsonld:`) и параметр `seo=` у `add_blog_to_fastapi` и `setup_fastapi_blog`; параметр сильнее секции. Ошибки значений выявляются при загрузке схемы с именем ключа.
+
+```yaml
+seo:
+  site_url: "https://example.org"      # база абсолютных адресов; в продакшене задавать всегда
+  site_name: "Example Notes"
+  title_template: "{title} - {site_name}"
+  default_image: "/static/social.png"
+  default_author: null
+  default_robots: []
+  index_description: "Short site description"
+  og: true
+  twitter_card: summary_large_image    # summary, summary_large_image или null
+  structured_data: blogposting         # blogposting, article или none
+  description_fallback: excerpt        # excerpt или none
+  description_length: 160
+  noindex_tags: false                  # страницы тегов получают robots noindex
+```
+
+Без секции и без параметра включены только исправления 5.9.6 (описание и `lang`). С секцией (даже пустой, `seo: {}`) работает всё из 5.9.4, но тег выводится только если у него есть значение. Без `site_url` абсолютные адреса строятся из URL запроса (как сейчас). Язык шаблонов `title_template` — из 6.4; до его появления допустим `str.format` с теми же именами.
+
+**5.9.3 Порядок подстановки значений.**
+
+| Значение | Источники по порядку |
+| --- | --- |
+| Заголовок | `seo_title`, затем `title`; к результату применяется `title_template`; пусто — `site_name`; иначе тег не выводится |
+| Описание | Поле `description`; при `description_fallback: excerpt` — первые `description_length` символов простого текста тела (без Markdown и HTML, обрезка по границе слова, детерминированно); для главной и списков — `index_description`; иначе тег не выводится |
+| Канонический адрес | Поле `canonical`, затем вычисленный адрес (как сейчас: без query, с учётом локали) |
+| Картинка | `image`, затем `default_image` |
+| Время изменения | `updated`, затем `date` |
+| Автор | `author`, затем `default_author` |
+| Robots | Объединение поля `robots` и `default_robots` без дублей, порядок стабилен |
+| Язык | `lang`, затем язык интерфейса запроса |
+
+**5.9.4 Вывод в страницу.**
+
+- Фрагмент `partials/_seo_head.html` подключается из `layouts/base.html` и переопределяется так же, как остальные шаблоны. Значения собирает Python-функция `seo.build_head(...)`, шаблон их только печатает.
+- Экранирование HTML автоматическое (Jinja). `canonical` и `image` принимаются только как `http`/`https` или путь от корня сайта; другое значение отбрасывается, а `check` сообщает об ошибке.
+- Абсолютные адреса строятся от `site_url`. Если он задан, заголовок `Host` запроса в адресах не используется.
+- Теги: `<title>`, `<meta name="description">`, `<link rel="canonical">`, `<meta name="robots">`, `<meta name="author">`; Open Graph (`og:title`, `og:description`, `og:type` — `article` для документов и `website` для главной и списков, `og:url`, `og:image`, `og:image:alt`, `og:site_name`, `og:locale`, `article:published_time`, `article:modified_time`, `article:tag`); Twitter (`twitter:card`, `twitter:title`, `twitter:description`, `twitter:image`, `twitter:image:alt`).
+- Структурированные данные: `<script type="application/ld+json">` с типом `BlogPosting` (или `Article`) в словаре schema.org: `headline`, `description`, `image`, `datePublished`, `dateModified`, `author` (`Person` с `name`), `inLanguage`, `mainEntityOfPage` (канонический адрес), `keywords` (из тегов). Это отдельный генератор: он не связан с экспортом `document_to_jsonld`, где словарь задаёт автор схемы. При встраивании в страницу в JSON экранируются `<`, `>` и `&` (`\u003c` и т. д.), чтобы значение не могло закрыть тег `script`.
+- Заголовок `Link: <…>; rel="canonical"` (уже есть) использует тот же адрес, включая переопределение из поля. Страница, у которой `canonical` указывает на другой адрес, не получает `hreflang` (как и прочие дубли).
+
+**5.9.5 Sitemap, robots.txt и редиректы (SHOULD).** Включаются параметром `seo_routes=True`, по умолчанию выключены: эти адреса часто принадлежат хосту.
+
+- `GET /sitemap.xml`: только опубликованные документы; исключаются документы с `noindex` в `robots` и документы, у которых `canonical` указывает на другой адрес. `<loc>` — канонический абсолютный адрес, `<lastmod>` — `updated` или `date` (формат W3C), без `priority` и `changefreq`; порядок по `loc`, вывод детерминирован. Главная и список постов включаются, страницы тегов — если `noindex_tags: false`. Если адресов больше 50 000 (лимит протокола), выдаётся индекс карт (`sitemap-1.xml` и далее).
+- `GET /robots.txt`: `User-agent: *`, `Allow: /` (или список `disallow` из настроек) и строка `Sitemap:` с абсолютным адресом. Включение `seo_routes=True` без `site_url` — ошибка конфигурации при старте (как `ConfigurationError` для API без учётных данных).
+- `redirect_from`: старый адрес (slug или путь) отвечает постоянным редиректом `301` на текущий канонический адрес документа. Индекс старых адресов строится при загрузке коллекции с тем же кэшем по подписи каталога. Неопубликованные документы редиректов не создают.
+
+**5.9.6 Исправление существующего поведения (MUST, записать в `CHANGELOG.md`).**
+
+- В `layouts/base.html` заголовок по умолчанию зашит как имя автора исходного проекта. Заменить на `site_name` или пустое значение: в шаблонах нет собственных имён (П3).
+- У `<html>` нет атрибута `lang`: добавить (порядок подстановки — 5.9.3).
+- Роль `description` не выводилась в `<meta name="description">`: выводить.
+
+**5.9.7 Проверки `check` (SHOULD).** Находки с настраиваемым уровнем, секция `seo.check`: `title_max` (по умолчанию 60), `description_max` (160), `missing_description` (`warn`), `missing_image` (`off`), `duplicate_title` и `duplicate_description` (`warn`, сравнение внутри коллекции), `image_alt_required` (`error`). Числа — ориентиры, а не требования поисковиков (сниппеты усекаются по ширине в пикселях, а не по числу символов), поэтому превышение по умолчанию только предупреждение. Всегда `error`: `canonical` не `http`/`https` и не путь; `robots` с неизвестной директивой; `image` указывает на несуществующий файл (при `check.files`, 5.1.3); конфликты `redirect_from` (старый адрес совпадает со slug существующего документа, один адрес у двух документов, цепочки и петли). Диагностика детерминирована.
+
+**5.9.8 Админка (MAY).** Поля SEO выделяются в форме группой: новая UI-опция `FieldSpec.group` (на проверку не влияет). Счётчики символов у `seo_title` и `description` используют пороги из `seo.check`. Предпросмотр поисковой выдачи не делать (нет второго потребителя, П7).
+
+**Критерии (5.9):**
+
+1. Схема с `seo_fields()` и `seo: {}`: страница документа содержит `<meta name="description">`, `<link rel="canonical">`, Open Graph и Twitter-теги; без `seo` вывод меняется только по 5.9.6.
+2. Значения с `<`, `"` и `</script>` в `seo_title`, `description`, `author` экранируются и в HTML, и в JSON-LD; `canonical: "javascript:alert(1)"` отбрасывается и даёт находку `check`.
+3. Каждая строка таблицы 5.9.3 покрыта тестом, включая выдержку из тела без разметки.
+4. `GET /sitemap.xml` детерминирован (два запуска дают одинаковые байты); документы с `noindex` и с чужим `canonical` не попадают; `robots.txt` содержит `Sitemap:` с абсолютным адресом; `seo_routes=True` без `site_url` падает при старте.
+5. `redirect_from` даёт `301` на канонический адрес; конфликтные конфигурации находит `check`.
+6. При заданном `site_url` адреса не зависят от заголовка `Host`.
+7. В `src/`, шаблонах и документации нет имён сайтов и авторов (`test_invariance.py`).
+
 ## 6. Проверки и CLI (фаза D)
 
 **6.1 `python -m fastapi_blog check [--collection NAME] [--json] [--fail-on error|warning]`.** Проверяет: разбор файла, схему, дубликаты уникальных ключей (6.4), ссылки (`check.links: off|warn|error`, по умолчанию `off`; ссылка разрешается по полю с alias `@id` или по slug в той же коллекции; абсолютные IRI вне коллекции пропускаются), контекст (5.6), внешние проверки (6.2). Коды выхода: `0` — чисто; `1` — есть находки уровня не ниже `--fail-on` (по умолчанию `error`); `2` — находок нет, но что-то нельзя было проверить (`undefined`); `64` — ошибка использования или конфигурации. `undefined` никогда не сводится к «чисто», но находка приоритетнее неопределённости. Вывод детерминирован; `--json` — машинный формат.
@@ -269,7 +359,7 @@ validators:
 5. Заменить `passlib` (не поддерживается с 2020 года, из-за него закреплён `bcrypt<4.1`) на прямое использование `bcrypt` или другой поддерживаемый хэшер и снять закрепление. Тесты: хэширование и проверка, пароль длиннее 72 байт, уже сохранённые хэши продолжают проходить проверку (`tests/test_password_validation.py`).
 6. Админка сохраняет через сервисный слой напрямую (без HTTP-вызова собственного API). Форма строится из схемы: `label` и `hint` — подписи, `choices` — select, `pattern` — валидация с текстом ошибки, `link` — автодополнение по целевой коллекции с учётом `filters`, `object` и `list[object]` — вложенные группы полей; поля с `hidden` не показываются, с `read_only` не редактируются после создания. Форма показывает диагностику проверок и конфликт `etag`.
 7. Превью разметки в админке санитизируется по умолчанию так же, как публичный рендер; отключается только явной опцией. Проверить текущее поведение и покрыть тестом с `<script>` в теле документа.
-8. Страницы ролей и пользователей остаются на стандартной теме starlette-admin 1.0; возврат собственной темы не требуется (MAY, при появлении второго потребителя).
+8. Страницы ролей и пользователей уже используют единую тему и переключатель языка (admin/templates/layout.html); новых требований к теме нет.
 9. Показ диффа перед сохранением и история изменений — вне объёма (MAY).
 
 **Критерии (E):** тесты прав на все роли и действия; запуск без пароля падает с понятной ошибкой; форма для схемы из 5.3 показывает select для `status`.
@@ -296,3 +386,5 @@ validators:
 3. Синтаксис шаблонов: одиночные скобки `{имя}` (принято в ТЗ) или двойные `{{имя}}`, как в git-CMS. Выбрать один вариант и не поддерживать оба.
 4. Нужны ли типы `file` и `image` в первой версии или достаточно `str` (в ТЗ — SHOULD).
 5. Заменять ли `passlib` в фазе E или отдельным небольшим патчем раньше: закрепление `bcrypt<4.1` — временная мера.
+6. SEO: оставлять ли `sitemap.xml` и `robots.txt` в пакете под `seo_routes` (в ТЗ — да, по умолчанию выключено) или отдать хосту.
+7. SEO: какое значение `structured_data` по умолчанию при наличии секции `seo` — `blogposting` (в ТЗ) или `none`.

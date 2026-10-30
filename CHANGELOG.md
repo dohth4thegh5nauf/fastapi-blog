@@ -28,10 +28,18 @@ anything new in the schema layer itself:
   `@id` then slug so two runs produce identical bytes regardless of
   filesystem iteration order (TODO 5.4 criterion 3)
 
+`add_blog_to_fastapi(jsonld_routes=True, ...)` (default `False`) now also adds
+the HTTP side of 5.4: `GET {prefix}/{slug}.jsonld` and `GET {prefix}/index.jsonld`,
+`Content-Type: application/ld+json`. Both only ever serve published posts —
+`{slug}.jsonld` 404s for a draft or missing slug, `index.jsonld`'s `@graph`
+simply excludes drafts. (`{prefix}/index.jsonld` is registered before
+`{prefix}/{slug}.jsonld`, since Starlette matches path routes in
+registration order and `index.jsonld` would otherwise also match the
+`{slug}` pattern with `slug='index'` first.)
+
 Not done: loading `context` from a local file (TODO 5.5, needs the `jsonld`
-extra), the HTTP routes (`GET {prefix}/{slug}.jsonld`), the `export` CLI
-command, and the "lost term" check (TODO 5.6) — this module only has the
-pure projection functions so far.
+extra), the `export` CLI command, and the "lost term" check (TODO 5.6) —
+the HTTP side is the last piece of 5.4 itself.
 
 ### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden` (TODO 5.1, partial)
 

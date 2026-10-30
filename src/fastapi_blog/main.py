@@ -36,6 +36,7 @@ def add_blog_to_fastapi(
   admin_password: str | None = None,
   frontmatter_schema: FrontmatterSchema | None = None,
   api_auth_dependency: Callable[..., Any] | None = None,
+  jsonld_routes: bool = False,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -68,6 +69,9 @@ def add_blog_to_fastapi(
       api_auth_dependency: Custom FastAPI dependency that authenticates REST API
                            requests (optional). It must raise `HTTPException`
                            when access is denied.
+      jsonld_routes: Add `GET {prefix}/{slug}.jsonld` and
+                     `GET {prefix}/index.jsonld` (default: False). Only
+                     published posts are served; see `fastapi_blog.jsonld`.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
                           (title, date, published, tags, description) tell the
                           blog which field is which. Default: the built-in fields.
@@ -150,6 +154,7 @@ def add_blog_to_fastapi(
     default_locale=default_locale,
     locale=default_locale,
     prefix=prefix,
+    jsonld_routes=jsonld_routes,
   )
 
   # Mount main router without locale prefix
@@ -175,6 +180,7 @@ def add_blog_to_fastapi(
       default_locale=default_locale,
       locale=locale,
       prefix=prefix,
+      jsonld_routes=jsonld_routes,
     )
 
     # Mount with locale prefix

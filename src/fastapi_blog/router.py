@@ -3,10 +3,10 @@ import pathlib
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from . import helpers, store
+from . import helpers, jsonld, store
 from .i18n import Translator
 from .models import SLUG_RE, FrontmatterSchema
 
@@ -23,6 +23,7 @@ def get_blog_router(
   locale: str | None = None,  # If set, creates routes for this specific locale
   prefix: str | None = 'blog',  # URL prefix (e.g., 'blog')
   frontmatter_schema: FrontmatterSchema | None = None,
+  jsonld_routes: bool = False,
 ) -> APIRouter:
   router = APIRouter()
 
@@ -246,6 +247,61 @@ def get_blog_router(
       name='tag.html',
       context=_add_i18n_context(request, context),
     )
+
+  if jsonld_routes:
+    jsonld_schema = helpers.resolve_schema(strict, frontmatter_schema)
+    jsonld_store = store.DocumentStore(
+      store.Collection(
+        'posts', pathlib.Path(posts_dirname), slug_pattern=SLUG_RE
+      )
+    )
+
+    def _jsonld_node(slug: str) -> dict[str, Any] | None:
+      try:
+        record = jsonld_store.read(slug)
+      except (ValueError, FileNotFoundError):
+        return None
+      return jsonld.document_to_jsonld(
+        record.frontmatter,
+        schema=jsonld_schema,
+        slug=slug,
+        collection='posts',
+        content=record.body.strip(),
+      )
+
+    # Registered before `/{slug}.jsonld`: Starlette matches routes in
+    # registration order, and `index.jsonld` would otherwise also match
+    # `/{slug}.jsonld` with `slug='index'` first.
+    @router.get('/index.jsonld', name=f'blog_index_jsonld{name_suffix}')
+    async def blog_index_jsonld():
+      documents = []
+      for post in _list_posts():
+        record = jsonld_store.read(post['slug'])
+        documents.append(
+          (post['slug'], record.frontmatter, record.body.strip())
+        )
+      graph = jsonld.collection_to_jsonld(
+        documents, schema=jsonld_schema, collection='posts'
+      )
+      return JSONResponse(content=graph, media_type='application/ld+json')
+
+    @router.get('/{slug}.jsonld', name=f'blog_post_jsonld{name_suffix}')
+    async def blog_post_jsonld(slug: str):
+      # Only published posts are public (TODO 5.4): `_list_posts()` already
+      # filters to published (its `published` default is `True`).
+      published_slugs = {post['slug'] for post in _list_posts()}
+      if slug not in published_slugs:
+        raise HTTPException(
+          status_code=status.HTTP_404_NOT_FOUND,
+          detail=f"Post '{slug}' not found",
+        )
+      node = _jsonld_node(slug)
+      if node is None:
+        raise HTTPException(
+          status_code=status.HTTP_404_NOT_FOUND,
+          detail=f"Post '{slug}' not found",
+        )
+      return JSONResponse(content=node, media_type='application/ld+json')
 
   @router.get('/{page_id}', name=f'blog_page{name_suffix}')
   async def blog_page(
