@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### SEO roles and `fastapi_blog.seo.seo_fields()` (TODO 5.9.1)
+
+Nine new semantic roles, the same mechanism as `title`/`date`/`published`:
+`seo_title`, `canonical`, `robots`, `image`, `image_alt`, `updated`,
+`author`, `lang`, `redirect_from` (`ROLES`/`_ROLE_TYPES` in
+`models/schema.py`; `author` is the first role allowed as either `str` or
+`list[str]`). `seo.seo_fields(roles=None)` returns a ready `FieldSpec` per
+role (`label`, `hint`, `robots`'s `choices` restricted to the four
+directives search engines actually act on —
+`noindex`/`nofollow`/`noarchive`/`nosnippet`, per TODO 5.9.0's "only what
+search engines use" principle) — a schema author adds the whole set, a
+subset (`seo_fields(('canonical', 'robots'))`), and can still rename or
+re-alias any of them.
+
+Binding these roles has no visible effect yet — nothing reads them. Not
+built: `SeoConfig`/the `seo:` schema section (5.9.2), the fallback/
+substitution order (5.9.3), and the actual `<head>`/Open Graph/Twitter/
+structured-data output (5.9.4) that would make them do something.
+
 ### Fixed existing behavior: real page titles, `lang`, `description`, no fork-author branding (TODO 5.9.6, MUST)
 
 `layouts/base.html`'s `<title>` fallback chain checked a top-level

@@ -29,6 +29,14 @@ if TYPE_CHECKING:
 # states than just published/draft (e.g. draft/review/active/retired),
 # with `FrontmatterSchema.published_values` saying which ones count as
 # public. A schema binds one or the other, never both.
+#
+# The SEO roles (TODO 5.9.1) feed `fastapi_blog.seo`: `seo_title` (falls
+# back to `title`), `canonical` (explicit canonical URL), `robots` (meta
+# robots directives), `image`/`image_alt` (social preview image),
+# `updated` (falls back to `date`), `author`, `lang` (falls back to the
+# request's interface locale) and `redirect_from` (previous URLs for a
+# document, TODO 5.9.5). None of them affect anything yet — `seo.py`
+# (not built yet either) is what will read them.
 ROLES: tuple[str, ...] = (
   'title',
   'date',
@@ -36,6 +44,15 @@ ROLES: tuple[str, ...] = (
   'status',
   'tags',
   'description',
+  'seo_title',
+  'canonical',
+  'robots',
+  'image',
+  'image_alt',
+  'updated',
+  'author',
+  'lang',
+  'redirect_from',
 )
 
 # Keys the blog sets on every post itself, so a field can't use them as a name.
@@ -72,6 +89,15 @@ _ROLE_TYPES: dict[str, tuple[str, ...]] = {
   'status': ('str',),
   'tags': ('list[str]',),
   'description': ('str',),
+  'seo_title': ('str',),
+  'canonical': ('str',),
+  'robots': ('list[str]',),
+  'image': ('str',),
+  'image_alt': ('str',),
+  'updated': ('str', 'date', 'datetime'),
+  'author': ('str', 'list[str]'),
+  'lang': ('str',),
+  'redirect_from': ('list[str]',),
 }
 
 # Values `on_create` accepts, and the field type each one needs.

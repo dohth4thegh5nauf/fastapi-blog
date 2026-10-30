@@ -37,7 +37,7 @@ def test_field_spec_rejects_unknown_type():
 
 def test_field_spec_rejects_unknown_role():
   with pytest.raises(ValueError, match='Unknown role'):
-    FieldSpec('x', role='author')
+    FieldSpec('x', role='nonexistent')
 
 
 def test_field_spec_rejects_role_with_wrong_type():
