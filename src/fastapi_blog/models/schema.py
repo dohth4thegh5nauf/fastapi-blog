@@ -13,6 +13,7 @@ import copy
 import dataclasses
 import datetime
 import pathlib
+import re
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
@@ -68,6 +69,21 @@ _ON_CREATE_TYPES: dict[str, str] = {
   'uuid': 'str',
 }
 
+# Types `choices` is supported for.
+_CHOICE_TYPES: tuple[str, ...] = (
+  'str',
+  'int',
+  'float',
+  'list[str]',
+  'list[int]',
+)
+
+# Types `min`/`max` are supported for.
+_MIN_MAX_TYPES: tuple[str, ...] = ('int', 'float')
+
+# Types `min_items`/`max_items` are supported for.
+_ITEMS_TYPES: tuple[str, ...] = ('list[str]', 'list[int]')
+
 
 class _Missing:
   """Sentinel that means no default value was given."""
@@ -103,6 +119,28 @@ class FieldSpec:
           field; `'uuid'` needs a `str` field.
       on_create_prefix: Prepended to the generated value when
           `on_create='uuid'` (e.g. `'note-'`). Not valid otherwise.
+      label: Display label for the admin form and `check` messages (default:
+          the field name).
+      hint: Short help text shown next to the field in the admin form.
+      hidden: When set, the field is not shown in the admin form (pairs well
+          with `default`/`on_create`).
+      choices: Allowed values: each item is a scalar, or `{value, label}`
+          (`label` is display-only; the stored/validated value is `value`).
+          For `list[str]`/`list[int]`, every element must be an allowed
+          value. Valid for `str`, `int`, `float`, `list[str]`, `list[int]`.
+      pattern: A regex string, or `[regex, message]` to show `message`
+          instead of the default error. The whole value must match
+          (`re.fullmatch`). Only valid for `type='str'`.
+      item_pattern: Like `pattern`, but applied to every element of a
+          `list[str]` field instead of the field itself.
+      min: Minimum value, for `int`/`float` fields.
+      max: Maximum value, for `int`/`float` fields.
+      min_items: Minimum length, for `list[str]`/`list[int]` fields. Works
+          independently of `max_items` (unlike some CMS tools, which only
+          accept the pair together). Mutually exclusive with `min_length` on
+          the same field.
+      max_items: Maximum length, for `list[str]`/`list[int]` fields.
+          Mutually exclusive with `max_length` on the same field.
 
   """
 
@@ -118,6 +156,16 @@ class FieldSpec:
   read_only: bool = False
   on_create: str | None = None
   on_create_prefix: str | None = None
+  label: str | None = None
+  hint: str | None = None
+  hidden: bool = False
+  choices: tuple[Any, ...] | None = None
+  pattern: str | tuple[str, str] | None = None
+  item_pattern: str | tuple[str, str] | None = None
+  min: int | float | None = None
+  max: int | float | None = None
+  min_items: int | None = None
+  max_items: int | None = None
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -176,6 +224,57 @@ class FieldSpec:
       raise ValueError(
         f'`min_length`/`max_length` are not supported for type '
         f'{self.type!r} (field {self.name!r})'
+      )
+    if self.choices is not None:
+      object.__setattr__(self, 'choices', tuple(self.choices))
+      if not self.choices:
+        raise ValueError(f'`choices` is empty for field {self.name!r}')
+      if self.type not in _CHOICE_TYPES:
+        raise ValueError(
+          f'`choices` is not supported for type {self.type!r} '
+          f'(field {self.name!r})'
+        )
+      for item in self.choices:
+        if isinstance(item, Mapping) and 'value' not in item:
+          raise ValueError(
+            f'A `choices` item of field {self.name!r} is a mapping but has '
+            "no 'value' key"
+          )
+    if self.pattern is not None:
+      object.__setattr__(self, 'pattern', _normalize_pattern(self.pattern))
+      if self.type != 'str':
+        raise ValueError(
+          f'`pattern` is not supported for type {self.type!r} '
+          f'(field {self.name!r}); did you mean `item_pattern`?'
+        )
+    if self.item_pattern is not None:
+      object.__setattr__(
+        self, 'item_pattern', _normalize_pattern(self.item_pattern)
+      )
+      if self.type != 'list[str]':
+        raise ValueError(
+          f'`item_pattern` is not supported for type {self.type!r} '
+          f"(field {self.name!r}); it needs type 'list[str]'"
+        )
+    has_min_max = self.min is not None or self.max is not None
+    if has_min_max and self.type not in _MIN_MAX_TYPES:
+      raise ValueError(
+        f'`min`/`max` are not supported for type {self.type!r} '
+        f'(field {self.name!r})'
+      )
+    has_items = self.min_items is not None or self.max_items is not None
+    if has_items and self.type not in _ITEMS_TYPES:
+      raise ValueError(
+        f'`min_items`/`max_items` are not supported for type {self.type!r} '
+        f'(field {self.name!r})'
+      )
+    if self.min_items is not None and self.min_length is not None:
+      raise ValueError(
+        f'Field {self.name!r} sets both `min_items` and `min_length`; use one'
+      )
+    if self.max_items is not None and self.max_length is not None:
+      raise ValueError(
+        f'Field {self.name!r} sets both `max_items` and `max_length`; use one'
       )
 
   @property
@@ -455,6 +554,91 @@ def _parse_field(name: str, options: Mapping[str, Any] | None) -> FieldSpec:
   return FieldSpec(name=name, **options)
 
 
+def _normalize_pattern(pattern: str | tuple[str, str]) -> str | tuple[str, str]:
+  """Normalize a `pattern`/`item_pattern` option and check it compiles.
+
+  Accepts a bare regex string, or a `[regex, message]` pair (a list, if it
+  came from YAML/JSON) for a custom error message; returns a `str` or a
+  `tuple[str, str]`.
+  """
+  if isinstance(pattern, str):
+    re.compile(pattern)
+    return pattern
+  regex, message = pattern
+  re.compile(regex)
+  return (regex, message)
+
+
+def _choice_values(choices: tuple[Any, ...]) -> list[Any]:
+  """Return the allowed values of a `choices` option (dropping UI labels)."""
+  return [
+    item['value'] if isinstance(item, Mapping) else item for item in choices
+  ]
+
+
+def _choices_validator(spec: FieldSpec) -> Callable[[Any], Any]:
+  assert spec.choices is not None
+  allowed = _choice_values(spec.choices)
+  allowed_set = set(allowed)
+
+  def validate(value: Any) -> Any:
+    if value is None:
+      return value
+    if spec.type in _CONTAINER_TYPES:
+      bad = [item for item in value if item not in allowed_set]
+      if bad:
+        raise ValueError(
+          f'{spec.name}: invalid choice(s) {bad!r}; allowed: {allowed!r}'
+        )
+      return value
+    if value not in allowed_set:
+      raise ValueError(
+        f'{spec.name}: invalid choice {value!r}; allowed: {allowed!r}'
+      )
+    return value
+
+  return validate
+
+
+def _pattern_validator(spec: FieldSpec) -> Callable[[Any], Any]:
+  str_pattern = (
+    _split_pattern(spec.pattern) if spec.pattern is not None else None
+  )
+  item_pattern = (
+    _split_pattern(spec.item_pattern) if spec.item_pattern is not None else None
+  )
+
+  def validate(value: Any) -> Any:
+    if value is None:
+      return value
+    if item_pattern is not None:
+      regex, message = item_pattern
+      for item in value:
+        if not regex.fullmatch(str(item)):
+          raise ValueError(
+            message or f'{spec.name}: {item!r} does not match {regex.pattern!r}'
+          )
+      return value
+    if str_pattern is not None:
+      regex, message = str_pattern
+      if not regex.fullmatch(value):
+        raise ValueError(
+          message or f'{spec.name}: {value!r} does not match {regex.pattern!r}'
+        )
+    return value
+
+  return validate
+
+
+def _split_pattern(
+  pattern: str | tuple[str, str],
+) -> tuple[re.Pattern[str], str | None]:
+  if isinstance(pattern, str):
+    return re.compile(pattern), None
+  regex, message = pattern
+  return re.compile(regex), message
+
+
 def _implicit_default(spec: FieldSpec) -> Any:
   """Return the default used when a non-required field has none set."""
   if spec.default is not MISSING:
@@ -502,6 +686,7 @@ def _none_to_default(factory: Callable[[], Any]) -> Callable[[Any], Any]:
 
 def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
   from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -526,8 +711,31 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
       options['min_length'] = spec.min_length
     if spec.max_length is not None:
       options['max_length'] = spec.max_length
+    if spec.min_items is not None:
+      options['min_length'] = spec.min_items
+    if spec.max_items is not None:
+      options['max_length'] = spec.max_items
+    if spec.min is not None:
+      options['ge'] = spec.min
+    if spec.max is not None:
+      options['le'] = spec.max
     if spec.description:
       options['description'] = spec.description
+    if spec.label:
+      options['title'] = spec.label
+    extra_meta: dict[str, Any] = {}
+    if spec.hint:
+      extra_meta['hint'] = spec.hint
+    if spec.hidden:
+      extra_meta['hidden'] = True
+    if extra_meta:
+      options['json_schema_extra'] = extra_meta
+
+    value_validators: list[Any] = []
+    if spec.choices is not None:
+      value_validators.append(AfterValidator(_choices_validator(spec)))
+    if spec.pattern is not None or spec.item_pattern is not None:
+      value_validators.append(AfterValidator(_pattern_validator(spec)))
 
     if spec.required:
       info = Field(..., **options)
@@ -541,6 +749,10 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
           annotation, BeforeValidator(_none_to_default(factory))
         ]
       info = Field(default_factory=factory, **options)
+
+    for validator in value_validators:
+      annotation = Annotated[annotation, validator]  # type: ignore[valid-type]
+
     definitions[spec.name] = (annotation, info)
 
   # `extra` is validated in `FrontmatterSchema`, so the `str` is a valid literal.

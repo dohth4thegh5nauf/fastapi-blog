@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import re
 
 import pytest
 from pydantic import ValidationError
@@ -476,3 +477,170 @@ def test_read_only_is_not_checked_on_create():
   instance = schema.model()(**{'@id': 'anything'})
   result = schema.dump_for_write(instance, is_create=True)
   assert result['@id'] == 'anything'
+
+
+# --- choices / pattern / min / max / min_items / max_items (TODO 5.1) ------
+
+
+def test_field_spec_rejects_empty_choices():
+  with pytest.raises(ValueError, match='choices.*empty'):
+    FieldSpec('status', choices=())
+
+
+def test_field_spec_rejects_choices_on_unsupported_type():
+  with pytest.raises(ValueError, match='choices'):
+    FieldSpec('x', type='bool', choices=('a', 'b'))
+
+
+def test_field_spec_rejects_choices_mapping_without_value():
+  with pytest.raises(ValueError, match="no 'value' key"):
+    FieldSpec('status', choices=({'label': 'Draft'},))
+
+
+def test_choices_accepts_an_allowed_scalar_value():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('status', choices=('draft', 'active', 'retired')),)
+  )
+  instance = schema.model()(status='active')
+  assert instance.status == 'active'
+
+
+def test_choices_rejects_a_disallowed_value():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('status', choices=('draft', 'active')),)
+  )
+  with pytest.raises(ValidationError, match='invalid choice'):
+    schema.model()(status='bogus')
+
+
+def test_choices_with_value_label_mapping_validates_against_value():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'status',
+        choices=({'value': 'draft', 'label': 'Draft'}, {'value': 'active'}),
+      ),
+    )
+  )
+  instance = schema.model()(status='draft')
+  assert instance.status == 'draft'
+  with pytest.raises(ValidationError):
+    schema.model()(status='Draft')  # the label itself is not a valid value
+
+
+def test_choices_on_a_list_checks_every_element():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('tags', type='list[str]', choices=('a', 'b', 'c')),)
+  )
+  instance = schema.model()(tags=['a', 'c'])
+  assert instance.tags == ['a', 'c']
+  with pytest.raises(ValidationError, match='invalid choice'):
+    schema.model()(tags=['a', 'nope'])
+
+
+def test_field_spec_rejects_pattern_on_non_str_type():
+  with pytest.raises(ValueError, match='pattern'):
+    FieldSpec('x', type='int', pattern=r'\d+')
+
+
+def test_field_spec_rejects_item_pattern_except_on_list_str():
+  with pytest.raises(ValueError, match='item_pattern'):
+    FieldSpec('x', type='str', item_pattern=r'\d+')
+
+
+def test_field_spec_rejects_an_invalid_regex():
+  with pytest.raises(re.error):
+    FieldSpec('x', pattern='(unterminated')
+
+
+def test_pattern_accepts_a_matching_value():
+  schema = FrontmatterSchema(fields=(FieldSpec('code', pattern=r'[A-Z]{3}'),))
+  instance = schema.model()(code='ABC')
+  assert instance.code == 'ABC'
+
+
+def test_pattern_rejects_a_non_matching_value_with_default_message():
+  schema = FrontmatterSchema(fields=(FieldSpec('code', pattern=r'[A-Z]{3}'),))
+  with pytest.raises(ValidationError, match='does not match'):
+    schema.model()(code='abc')
+
+
+def test_pattern_with_custom_message_surfaces_it():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('code', pattern=(r'[A-Z]{3}', 'Expected ABC-style code')),
+    )
+  )
+  with pytest.raises(ValidationError, match='Expected ABC-style code'):
+    schema.model()(code='abc')
+
+
+def test_pattern_from_a_yaml_list_pair_works():
+  schema = FrontmatterSchema.from_dict(
+    {'fields': {'code': {'pattern': ['[A-Z]{3}', 'Bad code']}}}
+  )
+  with pytest.raises(ValidationError, match='Bad code'):
+    schema.model()(code='abc')
+
+
+def test_item_pattern_checks_every_list_element():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('tags', type='list[str]', item_pattern=r'[a-z]+'),)
+  )
+  instance = schema.model()(tags=['abc', 'def'])
+  assert instance.tags == ['abc', 'def']
+  with pytest.raises(ValidationError):
+    schema.model()(tags=['abc', 'DEF'])
+
+
+def test_field_spec_rejects_min_max_on_unsupported_type():
+  with pytest.raises(ValueError, match='min.*max'):
+    FieldSpec('x', type='str', min=1)
+
+
+def test_min_max_enforced_on_int_field():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('rating', type='int', min=1, max=5),)
+  )
+  assert schema.model()(rating=3).rating == 3
+  with pytest.raises(ValidationError):
+    schema.model()(rating=0)
+  with pytest.raises(ValidationError):
+    schema.model()(rating=6)
+
+
+def test_field_spec_rejects_min_items_on_unsupported_type():
+  with pytest.raises(ValueError, match='min_items'):
+    FieldSpec('x', type='str', min_items=1)
+
+
+def test_field_spec_rejects_min_items_combined_with_min_length():
+  with pytest.raises(ValueError, match='min_items.*min_length'):
+    FieldSpec('tags', type='list[str]', min_items=1, min_length=1)
+
+
+def test_min_items_max_items_enforced_independently():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('tags', type='list[str]', min_items=1),)
+  )
+  assert schema.model()(tags=['a']).tags == ['a']
+  with pytest.raises(ValidationError):
+    schema.model()(tags=[])
+
+
+def test_label_hint_hidden_round_trip_through_to_dict():
+  spec = FieldSpec(
+    'status', label='Status', hint='Lifecycle state', hidden=True
+  )
+  data = spec.to_dict()
+  assert data['label'] == 'Status'
+  assert data['hint'] == 'Lifecycle state'
+  assert data['hidden'] is True
+
+  schema = FrontmatterSchema(fields=(spec,))
+  field_info = schema.model().model_fields['status']
+  assert field_info.title == 'Status'
+  assert field_info.json_schema_extra == {
+    'hint': 'Lifecycle state',
+    'hidden': True,
+  }

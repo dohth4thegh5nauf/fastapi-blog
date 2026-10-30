@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden` (TODO 5.1, partial)
+
+`FieldSpec` gained the simpler options from TODO 5.1's table (the ones that
+are pure validation/metadata, not a feature of their own):
+
+- `choices`: allowed values — a scalar, or `{value, label}` where `label` is
+  display-only and `value` is what's stored/validated. Valid for `str`,
+  `int`, `float`, `list[str]`, `list[int]`; for a list type, every element
+  must be allowed. Enforced via a Pydantic `AfterValidator`, so the error
+  names the actual bad value(s), not just "not a valid enum member"
+- `pattern`: a regex string, or `[regex, message]` for a custom error
+  message instead of Pydantic's generic one; the whole value must match
+  (`re.fullmatch`). Only for `type='str'`. `item_pattern` is the same thing
+  applied to every element of a `list[str]` field instead of the field
+  itself
+- `min`/`max` (`int`/`float` fields, inclusive bounds) and `min_items`/
+  `max_items` (`list[str]`/`list[int]` fields, independent of each other,
+  unlike `min_length`/`max_length` which this project's own
+  `_LENGTH_TYPES` already lets you set independently too — `min_items`/
+  `max_items` exist so a schema author doesn't have to read "length" as
+  "list item count" on a list field; a field can't set both
+  `min_items`/`max_items` and `min_length`/`max_length`, to avoid the
+  ambiguity of two options doing the same thing)
+- `label` (→ the Pydantic field's `title`, used by the admin form and JSON
+  Schema), `hint` and `hidden` (both carried as `json_schema_extra`, since
+  Pydantic has no native equivalent — the admin form/`check` read them from
+  there)
+
+All of these are validated at schema-definition time (`FieldSpec.__post_init__`):
+wrong type for the option, an empty `choices`, an unparsable regex, or
+`min_items`+`min_length` both set on one field all raise immediately when
+the schema is built, not when a document is later validated against it.
+
+Not done from 5.1: `type: link`/`object`/`file`/`image` (each a
+cross-document or nested-schema feature, substantially bigger than a
+validation option) and the `jsonld` schema section (5.2–5.7) itself.
+
 ### Document storage: path safety wired in everywhere (TODO 4.4)
 
 `store.safe_document_path` (slug pattern + resolved-path containment check)
