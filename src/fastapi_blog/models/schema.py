@@ -25,7 +25,18 @@ if TYPE_CHECKING:
 
 
 # Semantic roles the blog understands. Each role can be bound to one field.
-ROLES: tuple[str, ...] = ('title', 'date', 'published', 'tags', 'description')
+# `status` is a generalization of `published` (TODO 5.7): a field with more
+# states than just published/draft (e.g. draft/review/active/retired),
+# with `FrontmatterSchema.published_values` saying which ones count as
+# public. A schema binds one or the other, never both.
+ROLES: tuple[str, ...] = (
+  'title',
+  'date',
+  'published',
+  'status',
+  'tags',
+  'description',
+)
 
 # Keys the blog sets on every post itself, so a field can't use them as a name.
 RESERVED_NAMES: tuple[str, ...] = ('slug', 'content')
@@ -58,6 +69,7 @@ _ROLE_TYPES: dict[str, tuple[str, ...]] = {
   'title': ('str',),
   'date': ('str', 'date', 'datetime'),
   'published': ('bool',),
+  'status': ('str',),
   'tags': ('list[str]',),
   'description': ('str',),
 }
@@ -352,6 +364,11 @@ class FrontmatterSchema:
       fields: Field descriptions.
       extra: What to do with keys not listed in `fields`: `forbid` (error),
           `allow` (keep them) or `ignore` (drop them).
+      published_values: Required when a field binds the `status` role
+          (TODO 5.7): the `status` values that count as published. A
+          document is public when its `status` field's value is one of
+          these, instead of a plain `published: bool`. Mutually exclusive
+          with binding the `published` role on the same schema.
 
   Example:
       ```python
@@ -386,6 +403,7 @@ class FrontmatterSchema:
   fields: tuple[FieldSpec, ...] = ()
   extra: str = 'forbid'
   jsonld: JsonLdConfig | None = None
+  published_values: tuple[str, ...] | None = None
   _model: Any = dataclasses.field(default=None, init=False, repr=False)
   _payload_model: Any = dataclasses.field(default=None, init=False, repr=False)
 
@@ -429,6 +447,25 @@ class FrontmatterSchema:
           f'Field {role!r} clashes with the role {role!r}, which is '
           f'bound to field {name!r}: rename it or set `alias`'
         )
+
+    if self.published_values is not None:
+      self.published_values = tuple(self.published_values)
+    if 'published' in roles and 'status' in roles:
+      raise ValueError(
+        "Roles 'published' and 'status' are bound at the same time "
+        f'(to {roles["published"]!r} and {roles["status"]!r}); a schema '
+        'uses one or the other, not both'
+      )
+    if 'status' in roles and not self.published_values:
+      raise ValueError(
+        f"Field {roles['status']!r} has role 'status', which needs "
+        '`published_values` on the schema (which status values count as '
+        'published)'
+      )
+    if self.published_values and 'status' not in roles:
+      raise ValueError(
+        "`published_values` is set but no field has role 'status'"
+      )
 
   def role_map(self) -> dict[str, str]:
     """Return a mapping from each bound role to its field name."""
@@ -549,15 +586,18 @@ class FrontmatterSchema:
     }
     if self.jsonld is not None:
       result['jsonld'] = self.jsonld.to_dict()
+    if self.published_values is not None:
+      result['published_values'] = list(self.published_values)
     return result
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> Self:
     """Build a schema from a plain dict.
 
-    The dict has an optional `extra` key, a `fields` key and an optional
-    `jsonld` key (TODO 5.3). `fields` is either a mapping `{name: options}`
-    or a list of `{name: ..., ...}`.
+    The dict has an optional `extra` key, a `fields` key, an optional
+    `jsonld` key (TODO 5.3) and an optional `published_values` key (TODO
+    5.7, see `FrontmatterSchema.published_values`). `fields` is either a
+    mapping `{name: options}` or a list of `{name: ..., ...}`.
 
     Args:
         data: Schema description, e.g. loaded from YAML or JSON.
@@ -575,6 +615,7 @@ class FrontmatterSchema:
     raw_fields = data.pop('fields', None) or {}
     extra = data.pop('extra', 'forbid')
     raw_jsonld = data.pop('jsonld', None)
+    raw_published_values = data.pop('published_values', None)
     if data:
       raise ValueError(f'Unknown schema key(s): {sorted(data)}')
 
@@ -593,7 +634,15 @@ class FrontmatterSchema:
     jsonld = (
       JsonLdConfig.from_dict(raw_jsonld) if raw_jsonld is not None else None
     )
-    return cls(fields=tuple(specs), extra=extra, jsonld=jsonld)
+    published_values = (
+      tuple(raw_published_values) if raw_published_values is not None else None
+    )
+    return cls(
+      fields=tuple(specs),
+      extra=extra,
+      jsonld=jsonld,
+      published_values=published_values,
+    )
 
   @classmethod
   def from_file(cls, path: str | pathlib.Path) -> Self:
@@ -788,6 +837,17 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
       extra_meta['hint'] = spec.hint
     if spec.hidden:
       extra_meta['hidden'] = True
+    if spec.choices is not None:
+      # Surfaces in the generated JSON Schema as `enum` (TODO 5.7), even
+      # though validation itself goes through `_choices_validator` below
+      # (not Pydantic's own enum machinery, so a bad value's error names it).
+      extra_meta['enum'] = _choice_values(spec.choices)
+    if spec.pattern is not None:
+      # Surfaces as `pattern` (TODO 5.7). Validation itself goes through
+      # `_pattern_validator` below (fullmatch, optional custom message),
+      # not Pydantic's own `Field(pattern=...)` (match, generic message).
+      regex, _message = _split_pattern(spec.pattern)
+      extra_meta['pattern'] = regex.pattern
     if extra_meta:
       options['json_schema_extra'] = extra_meta
 

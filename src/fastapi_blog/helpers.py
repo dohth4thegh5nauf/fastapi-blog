@@ -102,8 +102,15 @@ def sort_posts(
 
 
 def _is_published(post: dict[str, Any], schema: FrontmatterSchema) -> bool:
-  # Without a `published` role there is no draft concept: all posts are public.
-  if 'published' not in schema.role_map():
+  # `status` (TODO 5.7) generalizes `published`: public iff its value is
+  # one of `schema.published_values`. The schema forbids binding both
+  # roles on the same schema (see `FrontmatterSchema.__post_init__`).
+  roles = schema.role_map()
+  if 'status' in roles:
+    return post.get(roles['status']) in (schema.published_values or ())
+  # Without a `published` role either, there is no draft concept: all
+  # posts are public.
+  if 'published' not in roles:
     return True
   return bool(post.get('published'))
 

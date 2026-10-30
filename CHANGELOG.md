@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### `schema --json-schema` and the `status` role (TODO 5.7)
+
+- `python -m fastapi_blog schema --json-schema` prints the frontmatter's
+  JSON Schema (`FrontmatterSchema.model().model_json_schema()`), same
+  `--schema`/`--out` as `export`. `choices` and `pattern` weren't visible in
+  it before — both are enforced through our own `AfterValidator`s (for a
+  named bad value and `re.fullmatch`/custom messages, not Pydantic's
+  generic enum/pattern errors), so Pydantic's own schema generation never
+  saw them. `_build_model` now also puts them in each field's
+  `json_schema_extra` (`enum`/`pattern`), which Pydantic merges into the
+  generated schema — the validators are still what actually runs
+- New `status` role: a generalization of `published` for schemas with more
+  states than draft/published (e.g. draft/review/active/retired).
+  `FrontmatterSchema.published_values` (required whenever a field binds
+  `status`) says which values count as public; binding `published` and
+  `status` on the same schema is now a schema error (they're two answers
+  to the same question). `helpers._is_published` checks `status`'s value
+  against `published_values` instead of a plain bool when the role is
+  bound, so `list_posts(published=...)`, the blog's draft filtering and
+  the JSON-LD routes' "published only" rule all pick it up automatically
+  — no changes needed in router.py/jsonld.py themselves
+
 ### JSON-LD emission: `document_to_jsonld`/`collection_to_jsonld` (TODO 5.2-5.4, partial)
 
 New `fastapi_blog.jsonld` module, built on the existing `alias` mechanism

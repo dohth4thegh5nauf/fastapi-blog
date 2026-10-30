@@ -94,6 +94,35 @@ def test_posts_not_matching_the_schema_are_skipped(external_posts, caplog):
   assert any('Skipping' in rec.message for rec in caplog.records)
 
 
+STATUS_SCHEMA = FrontmatterSchema(
+  fields=(
+    FieldSpec('title', required=True, role='title'),
+    FieldSpec('date', required=True, role='date'),
+    FieldSpec(
+      'status',
+      required=True,
+      choices=('draft', 'active', 'retired'),
+      role='status',
+    ),
+  ),
+  published_values=('active',),
+)
+
+
+def test_status_role_filters_by_published_values(posts_dir):
+  _write(posts_dir, 'live', "title: Live\ndate: '2024-01-01'\nstatus: active")
+  _write(posts_dir, 'gone', "title: Gone\ndate: '2024-01-02'\nstatus: retired")
+  _write(posts_dir, 'wip', "title: WIP\ndate: '2024-01-03'\nstatus: draft")
+
+  published = helpers.list_posts(posts_dirname='posts', schema=STATUS_SCHEMA)
+  assert [p['slug'] for p in published] == ['live']
+
+  unpublished = helpers.list_posts(
+    published=False, posts_dirname='posts', schema=STATUS_SCHEMA
+  )
+  assert sorted(p['slug'] for p in unpublished) == ['gone', 'wip']
+
+
 def test_schema_extra_overrides_strict_flag(posts_dir):
   _write(posts_dir, 'extra', "title: T\ndate: '2024-01-01'\ncover: pic.png")
   loose = fastapi_blog.FrontmatterSchema(

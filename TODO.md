@@ -4,7 +4,7 @@
 
 ## 0. Статус выполнения и стек (на 2026-10-29)
 
-Фаза A выполнена; фаза B выполнена почти полностью (остаток — 4.5 и 4.6); фаза C: 5.1 частично, 5.2–5.4 выполнено; фазы D и E не начаты; SEO-расширение (5.9) добавлено в ТЗ и не начато. Статус составлен по `CHANGELOG.md`, `src/` и `tests/` последнего присланного архива (версия 0.9.0 в работе, 425 тестов). Разделы 1–8 описывают то, что ещё предстоит сделать, и остаются в силе, если ниже не сказано иное.
+Фаза A выполнена; фаза B выполнена почти полностью (остаток — 4.5 и 4.6); фаза C: 5.1 частично, 5.2–5.4 и 5.7 выполнено; фазы D и E не начаты; SEO-расширение (5.9) добавлено в ТЗ и не начато. Статус составлен по `CHANGELOG.md`, `src/` и `tests/` последнего присланного архива (версия 0.9.0 в работе, 438 тестов). Разделы 1–8 описывают то, что ещё предстоит сделать, и остаются в силе, если ниже не сказано иное.
 
 | Раздел | Статус | Сделано и осталось |
 | --- | --- | --- |
@@ -15,7 +15,8 @@
 | 4.6 | Частично | `Collection(..., extension, depth=0, create, delete)`: `create`, `delete`, `extension` работают; `depth` больше 0 — `NotImplementedError`; нет тегов `{dirname}` и `{filename}` и сахара `posts_dirname`/`pages_dirname` над двумя `Collection` (публичный API принимает `posts_dirname: str`); `POSTS_DIR` читается с `DeprecationWarning`; `posts_dirname` теперь доходит и до админки |
 | 5.1 (часть) | Частично | `choices`, `pattern` и `item_pattern` (в том числе с сообщением), `min` и `max`, `min_items` и `max_items`, `label`, `hint`, `hidden`; не сделано: `link`, `object`, `file`, `image` |
 | 5.2–5.4 | Выполнено | `fastapi_blog.jsonld`: `document_to_jsonld` и `collection_to_jsonld` (чистые функции, детерминированный `@graph`); `FrontmatterSchema.jsonld` и секция `jsonld:` файла схемы; `id_template` пока на `str.format`. HTTP: `add_blog_to_fastapi(jsonld_routes=True)` добавляет `GET {prefix}/{slug}.jsonld` и `GET {prefix}/index.jsonld` (`application/ld+json`, только опубликованные посты); по умолчанию выключено. CLI: `python -m fastapi_blog export` (`--posts-dir`/`--schema`/`--collection` вместо буквального `--collection NAME` из ТЗ — реестра именованных коллекций в проекте нет, см. `CHANGELOG.md`); `--format jsonld` всегда, `expanded`/`nquads` при установленном extra `jsonld`, иначе код выхода 64 |
-| 5.5–5.8 | Не начато | Контекст из локального файла (нужен extra `jsonld`), контроль потерянных терминов, `--json-schema`; extra `jsonld` используется только для `expanded`/`nquads` в CLI |
+| 5.7 | Выполнено | `python -m fastapi_blog schema --json-schema` (`choices`→`enum`, `pattern`, `description` — через `json_schema_extra`, валидация остаётся в наших `AfterValidator`); роль `status` как обобщение `published` (`FrontmatterSchema.published_values`, `published`+`status` одновременно — ошибка схемы; `helpers._is_published` подхватывает её без правок в `router.py`/`jsonld.py`) |
+| 5.5, 5.6, 5.8 | Не начато | Контекст из локального файла и безопасность удалённых контекстов (нужен extra `jsonld`), контроль потерянных терминов; extra `jsonld` используется только для `expanded`/`nquads` в CLI |
 | 5.9 (SEO) | Не начато | В коде есть только вычисляемый `canonical` (тег `link` и заголовок `Link`) и `hreflang`; не выводятся `description`, Open Graph, `robots`, структурированные данные страницы; нет sitemap и `robots.txt`; в `layouts/base.html` заголовок по умолчанию зашит как имя автора исходного проекта, у `<html>` нет `lang` |
 | 6 (фаза D) | Не начато | Нет CLI `check` и `export`, внешних проверок, языка шаблонов, нумерации |
 | 7 (фаза E) | Не начато | См. раздел 2: права, учётные данные по умолчанию, `passlib`, превью |

@@ -316,6 +316,67 @@ def test_role_map():
   assert FrontmatterSchema(fields=(FieldSpec('x'),)).role_map() == {}
 
 
+# --- `status` role / `published_values` (TODO 5.7) --------------------------
+
+
+def test_status_role_needs_published_values():
+  with pytest.raises(ValueError, match='published_values'):
+    FrontmatterSchema(fields=(FieldSpec('status', role='status'),))
+
+
+def test_published_values_needs_a_status_role():
+  with pytest.raises(ValueError, match='status'):
+    FrontmatterSchema(
+      fields=(FieldSpec('title'),), published_values=('active',)
+    )
+
+
+def test_status_and_published_roles_are_mutually_exclusive():
+  with pytest.raises(
+    ValueError, match="'published'.*'status'|'status'.*'published'"
+  ):
+    FrontmatterSchema(
+      fields=(
+        FieldSpec('published', type='bool', role='published'),
+        FieldSpec('status', role='status'),
+      ),
+      published_values=('active',),
+    )
+
+
+def test_status_role_rejects_wrong_type():
+  with pytest.raises(ValueError, match="role 'status'"):
+    FieldSpec('status', type='bool', role='status')
+
+
+def test_status_role_configures_cleanly():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, role='title'),
+      FieldSpec(
+        'status',
+        required=True,
+        choices=('draft', 'active', 'retired'),
+        role='status',
+      ),
+    ),
+    published_values=('active',),
+  )
+  assert schema.role_map()['status'] == 'status'
+  assert schema.published_values == ('active',)
+
+
+def test_published_values_round_trips_through_to_dict():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('status', required=True, role='status'),),
+    published_values=['active', 'featured'],
+  )
+  data = schema.to_dict()
+  assert data['published_values'] == ['active', 'featured']
+  rebuilt = FrontmatterSchema.from_dict(data)
+  assert rebuilt.published_values == ('active', 'featured')
+
+
 # --- REST API payload model ---------------------------------------------------
 
 

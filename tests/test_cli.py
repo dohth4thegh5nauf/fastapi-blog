@@ -1,4 +1,4 @@
-"""Tests for `python -m fastapi_blog export` (TODO 5.4/5.7 CLI side)."""
+"""Tests for `python -m fastapi_blog` (TODO 5.4/5.7 CLI: export, schema)."""
 
 import json
 
@@ -106,6 +106,69 @@ def test_export_expanded_format_needs_pyld(posts_dir, capsys, monkeypatch):
   )
   assert exit_code == 64
   assert 'jsonld` extra' in capsys.readouterr().err
+
+
+# --- `schema --json-schema` (TODO 5.7) ---------------------------------------
+
+
+def test_schema_json_schema_prints_the_built_in_fields(capsys):
+  exit_code = main(['schema', '--json-schema'])
+  assert exit_code == 0
+  output = json.loads(capsys.readouterr().out)
+  assert output['title'] == 'Frontmatter'
+  assert 'title' in output['properties']
+
+
+def test_schema_json_schema_shows_choices_as_enum(tmp_path, capsys):
+  schema_file = tmp_path / 'schema.yaml'
+  schema_file.write_text(
+    'fields:\n'
+    '  status:\n'
+    '    required: true\n'
+    '    choices: [draft, active, retired]\n',
+    encoding='utf-8',
+  )
+  exit_code = main(['schema', '--json-schema', '--schema', str(schema_file)])
+  assert exit_code == 0
+  output = json.loads(capsys.readouterr().out)
+  assert output['properties']['status']['enum'] == [
+    'draft',
+    'active',
+    'retired',
+  ]
+
+
+def test_schema_json_schema_shows_pattern(tmp_path, capsys):
+  schema_file = tmp_path / 'schema.yaml'
+  schema_file.write_text(
+    'fields:\n  code:\n    pattern: "[A-Z]{3}"\n', encoding='utf-8'
+  )
+  exit_code = main(['schema', '--json-schema', '--schema', str(schema_file)])
+  assert exit_code == 0
+  output = json.loads(capsys.readouterr().out)
+  assert output['properties']['code']['pattern'] == '[A-Z]{3}'
+
+
+def test_schema_without_json_schema_flag_is_a_usage_error(capsys):
+  exit_code = main(['schema'])
+  assert exit_code == 64
+  assert '--json-schema' in capsys.readouterr().err
+
+
+def test_schema_json_schema_reports_a_missing_schema_file(capsys):
+  exit_code = main(
+    ['schema', '--json-schema', '--schema', 'does-not-exist.yaml']
+  )
+  assert exit_code == 64
+  assert 'does-not-exist.yaml' in capsys.readouterr().err
+
+
+def test_schema_json_schema_writes_to_out_file(tmp_path):
+  out_file = tmp_path / 'schema.json'
+  exit_code = main(['schema', '--json-schema', '--out', str(out_file)])
+  assert exit_code == 0
+  output = json.loads(out_file.read_text(encoding='utf-8'))
+  assert output['title'] == 'Frontmatter'
 
 
 def test_export_nquads_format_is_sorted(tmp_path):

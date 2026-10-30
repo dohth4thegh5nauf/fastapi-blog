@@ -1,8 +1,8 @@
 """Command-line interface: `python -m fastapi_blog <command>`.
 
-Currently just `export` (TODO 5.4/5.7's CLI side); `check` (TODO 6.1) isn't
-built yet. Operates directly on the filesystem and a schema file — it never
-starts a FastAPI app.
+`export` (TODO 5.4) and `schema --json-schema` (TODO 5.7) so far; `check`
+(TODO 6.1) isn't built yet. Operates directly on the filesystem and a
+schema file — it never starts a FastAPI app.
 
 This CLI takes `--posts-dir`/`--schema`/`--collection` directly rather than
 TODO's literal `--collection NAME` (which presupposes a project-level
@@ -56,6 +56,20 @@ def _build_parser() -> argparse.ArgumentParser:
     help="Output format ('expanded'/'nquads' need the `jsonld` extra)",
   )
   export_parser.add_argument('--out', help='Output file (default: stdout)')
+
+  schema_parser = subparsers.add_parser(
+    'schema', help='Inspect a frontmatter schema'
+  )
+  schema_parser.add_argument(
+    '--schema',
+    help='Path to a YAML/JSON schema file (default: the built-in fields)',
+  )
+  schema_parser.add_argument(
+    '--json-schema',
+    action='store_true',
+    help='Print the JSON Schema of the frontmatter (TODO 5.7)',
+  )
+  schema_parser.add_argument('--out', help='Output file (default: stdout)')
 
   return parser
 
@@ -129,11 +143,35 @@ def _cmd_export(args: argparse.Namespace) -> int:
   return EXIT_OK
 
 
+def _cmd_schema(args: argparse.Namespace) -> int:
+  if not args.json_schema:
+    print(
+      'error: schema needs --json-schema (nothing else to do yet)',
+      file=sys.stderr,
+    )
+    return EXIT_USAGE_ERROR
+
+  try:
+    schema = _load_schema(args.schema)
+  except (ValueError, OSError) as exc:
+    print(f'error: {exc}', file=sys.stderr)
+    return EXIT_USAGE_ERROR
+
+  output = json.dumps(schema.model().model_json_schema(), indent=2) + '\n'
+  if args.out:
+    Path(args.out).write_text(output, encoding='utf-8')
+  else:
+    sys.stdout.write(output)
+  return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
   parser = _build_parser()
   args = parser.parse_args(argv)
   if args.command == 'export':
     return _cmd_export(args)
+  if args.command == 'schema':
+    return _cmd_schema(args)
   parser.error(f'Unknown command: {args.command}')  # pragma: no cover
   return EXIT_USAGE_ERROR  # pragma: no cover
 
