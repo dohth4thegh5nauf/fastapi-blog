@@ -177,6 +177,34 @@ def test_layout_html_narrows_the_sidebar_to_14rem():
   assert 'margin-left: 14rem' in layout
 
 
+def test_sidebar_width_override_is_scoped_to_the_lg_breakpoint():
+  """`width: 14rem` must not apply below 992px.
+
+  Tabler's own `.navbar-vertical.navbar-expand-lg{width:15rem}` is
+  unscoped in its CSS text, but a *separate*, higher-specificity mobile
+  rule resets the sidebar to an in-flow, full-width bar below 992px
+  (confirmed live: `position: relative`, width matching the viewport).
+  An unscoped `width: 14rem` override here fights that reset and pins the
+  sidebar's own mobile header row to 224px instead of the viewport's full
+  width — this was reported as "the header shrinks in width below 992px".
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  media_start = layout.index('@media (min-width: 992px)')
+  media_body_start = layout.index('{', media_start)
+  depth = 1
+  i = media_body_start + 1
+  while depth > 0:
+    if layout[i] == '{':
+      depth += 1
+    elif layout[i] == '}':
+      depth -= 1
+    i += 1
+  media_body = layout[media_body_start:i]
+  assert 'width: 14rem' in media_body
+  # Only one `width: 14rem` in the whole file: inside this media query.
+  assert layout.count('width: 14rem') == media_body.count('width: 14rem')
+
+
 def test_layout_html_keeps_the_switchers_visible_below_the_lg_breakpoint():
   """The theme/language switchers must not vanish below 992px.
 

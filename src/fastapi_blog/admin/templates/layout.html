@@ -33,22 +33,22 @@ header.navbar {
 aside.navbar-vertical.navbar-expand-lg {
   overflow-y: auto;
 }
-/* Narrow the sidebar from Tabler's default 15rem to 14rem. The width and
-   the sibling margin-left (which makes room for the fixed sidebar) must
-   change together, or the two drift apart: either the content starts
-   under the sidebar (margin too small) or a gap of bare background opens
-   up next to it (margin too big). Tabler itself keeps them in sync this
-   same way (see `.navbar-expand-lg.navbar-vertical{width:15rem}` and
-   `.navbar-expand-lg.navbar-vertical~.navbar,~.page-wrapper{margin-left:
-   15rem}` in tabler.min.css) — this just overrides both to the same new
-   value, each at >= Tabler's own specificity so it actually wins. The
-   margin-left rule is scoped to the same `min-width:992px` breakpoint as
-   Tabler's own, since that's also where the sidebar switches from an
-   off-canvas (toggled) panel to always-visible. */
-aside.navbar-vertical.navbar-expand-lg {
-  width: 14rem;
-}
 @media (min-width: 992px) {
+  /* Narrow the sidebar from Tabler's default 15rem to 14rem. The width and
+     the sibling margin-left (which makes room for the fixed sidebar) must
+     change together, or the two drift apart: either the content starts
+     under the sidebar (margin too small) or a gap of bare background opens
+     up next to it (margin too big). Tabler itself keeps them in sync this
+     same way (see `.navbar-expand-lg.navbar-vertical{width:15rem}` and
+     `.navbar-expand-lg.navbar-vertical~.navbar,~.page-wrapper{margin-left:
+     15rem}` in tabler.min.css) — this just overrides both to the same new
+     value, each at >= Tabler's own specificity so it actually wins. The
+     margin-left rule is scoped to the same `min-width:992px` breakpoint as
+     Tabler's own, since that's also where the sidebar switches from an
+     off-canvas (toggled) panel to always-visible. */
+  aside.navbar-vertical.navbar-expand-lg {
+    width: 14rem;
+  }
   .navbar-expand-lg.navbar-vertical ~ .navbar,
   .navbar-expand-lg.navbar-vertical ~ .page-wrapper {
     margin-left: 14rem;

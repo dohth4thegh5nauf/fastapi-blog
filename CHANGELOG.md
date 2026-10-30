@@ -275,6 +275,16 @@ pages at all.
   populated, so hiding it loses nothing) and its own user-menu trigger
   (redundant with the one the sidebar's mobile row already shows), so the
   switchers show up without duplicating anything
+- The sidebar's own mobile header row (brand, hamburger, user menu — what's
+  visible below 992px once the sidebar itself collapses to an off-canvas
+  panel) was pinned to 224px instead of the viewport's full width,
+  reported as "the header shrinks in width below 992px". Cause: the 14rem
+  sidebar-width override (previous entry) was unscoped, so it also applied
+  below 992px — fighting Tabler's own mobile reset, which otherwise turns
+  the sidebar into a full-width, in-flow bar there (`position: relative`,
+  confirmed live). Scoping the override to `@media (min-width: 992px)`
+  (alongside the existing `margin-left: 14rem`, which was already scoped
+  the same way) fixes it
 
 ### Dependency upgrade
 
