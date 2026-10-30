@@ -25,22 +25,60 @@ pages at all.
   (hardcoded hex colors) in favor of Tabler's own `data-bs-theme="dark"`
   support, which every page already loads
 - Deleted `admin/templates/layouts/base.html` and `layouts/custom_base.html`
-  (superseded by `layout.html`); `login.html` now extends
-  `@starlette-admin/layout.html` directly — it builds its own self-contained
-  switchers since there's no authenticated navbar to hook into
+  (superseded by `layout.html`), **and the project's `login.html` override
+  entirely**: the stock `@starlette-admin/login.html` already extends the
+  bare `"layout.html"` name, so it already inherits this project's theme
+  through the shadowed `layout.html` — there was nothing left for a custom
+  login page to add. `SimpleAuthProvider.render_login` only needed to keep
+  passing the project's YAML-based `_` translator through the template
+  context. The login page is now the stock Tabler card, matching every
+  other page's theme instead of a separately maintained dark-only design
 - Fixed two bugs found testing this in a real browser: `render_login` was
   missing the stock "already authenticated → redirect" check (dropped
   during the 1.0 port), so a logged-in user opening `/admin/login` saw the
-  form rendered underneath the real navbar, visually overlapping with
-  login's own switchers; and `login.html`'s logo check used
-  `login_logo_url`/`logo_url` as plain values, but 1.0 made both callables
-  (`(request) -> str | None`), so the unused-by-default logo silently
-  requested a URL that was the Python function's `repr()`
+  form rendered underneath the real navbar, visually overlapping with the
+  old login page's own switchers; and the old `login.html`'s logo check
+  used `login_logo_url`/`logo_url` as plain values, but 1.0 made both
+  callables (`(request) -> str | None`), so the unused-by-default logo
+  silently requested a URL that was the Python function's `repr()`
 - `MarkdownListView`'s route moved: `/admin/posts/list` → `/admin/posts`
+- The top navbar (theme/language/user menu) now stays on screen while the
+  page scrolls (`header.navbar { position: sticky; top: 0 }` in
+  `layout.html`), matching the sidebar's own fixed position. It used to
+  scroll away with the content on every page
+- The sidebar no longer reserves a permanent scrollbar gutter: Tabler
+  hardcodes `overflow-y: scroll` on it (`.navbar-vertical.navbar-expand-*`),
+  which shows a non-functional scrollbar track even though the menu is
+  nowhere near tall enough to need one. `layout.html` overrides it to
+  `auto`. This was very likely the "header border" artifact reported after
+  the first pass at this — the dead scrollbar track sitting right where the
+  sidebar meets the navbar, not an actual border
 - `pyproject.toml`: added `[tool.pytest.ini_options] testpaths = ["tests"]`.
   Without it, pytest also collected `+/` (reference material per
   `AGENTS.md`, already excluded from ruff/mypy) and failed on its
   cookiecutter template files, which aren't valid Python
+- `home.html`/`markdown_list.html`/`markdown_edit.html` each wrapped their
+  `{% block content %}` in their own `<div class="container-fluid">`, but
+  the shared layout's `.page-body` already wraps `{% block content %}` in
+  a `.container-xl` — the extra wrapper double-nested the gutter padding
+  and made Home/Posts noticeably narrower than the stock Users/Access
+  Control pages. Removed the redundant outer wrapper from all three
+  (`markdown_edit.html` keeps its unrelated inner `container-fluid`, used
+  for spacing inside the card header, not as a page-level wrapper)
+- The sidebar is narrowed from Tabler's default 15rem to 14rem
+  (`aside.navbar-vertical.navbar-expand-lg { width: 14rem }` in
+  `layout.html`), with the `margin-left` Tabler puts on `.navbar`/
+  `.page-wrapper` to make room for it changed to match — the two must move
+  together or the content either starts under the sidebar or leaves a gap
+  next to it
+- Fixed a gap (the width of the scrollbar, e.g. 15px) between the sidebar's
+  right edge and the content on every page. Tabler sets `margin-left:
+  calc(-100% + 100vw)` on `:root` as a scrollbar-width compensation trick;
+  the sidebar is `position: fixed` so it ignores that shift and stays
+  flush left, but `.page-wrapper`/`.navbar` are normal flow and get
+  shifted on top of their own `margin-left`, opening the gap. `layout.html`
+  zeroes that `:root` margin out — nothing else in the project relies on
+  the compensation it was doing
 
 ### Dependency upgrade
 

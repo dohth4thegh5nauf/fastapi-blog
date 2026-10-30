@@ -15,6 +15,60 @@
 #}
 {% extends "@starlette-admin/layout.html" %}
 
+{% block head_css %}
+{{ super() }}
+<style>
+/* Keep the top navbar (theme/language/user menu) visible while the page
+   content scrolls, matching the sidebar's own fixed position. */
+header.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+}
+/* Tabler hardcodes `overflow-y: scroll` on `.navbar-vertical.navbar-expand-*`
+   (specificity 0,2,0), which reserves a scrollbar gutter even when the menu
+   is nowhere near tall enough to need one (a permanent, non-functional
+   scrollbar). `auto` only shows it when there's something to scroll; the
+   extra `aside` keeps this rule's specificity above the one it overrides. */
+aside.navbar-vertical.navbar-expand-lg {
+  overflow-y: auto;
+}
+/* Narrow the sidebar from Tabler's default 15rem to 14rem. The width and
+   the sibling margin-left (which makes room for the fixed sidebar) must
+   change together, or the two drift apart: either the content starts
+   under the sidebar (margin too small) or a gap of bare background opens
+   up next to it (margin too big). Tabler itself keeps them in sync this
+   same way (see `.navbar-expand-lg.navbar-vertical{width:15rem}` and
+   `.navbar-expand-lg.navbar-vertical~.navbar,~.page-wrapper{margin-left:
+   15rem}` in tabler.min.css) — this just overrides both to the same new
+   value, each at >= Tabler's own specificity so it actually wins. The
+   margin-left rule is scoped to the same `min-width:992px` breakpoint as
+   Tabler's own, since that's also where the sidebar switches from an
+   off-canvas (toggled) panel to always-visible. */
+aside.navbar-vertical.navbar-expand-lg {
+  width: 14rem;
+}
+@media (min-width: 992px) {
+  .navbar-expand-lg.navbar-vertical ~ .navbar,
+  .navbar-expand-lg.navbar-vertical ~ .page-wrapper {
+    margin-left: 14rem;
+  }
+}
+/* Tabler sets `margin-left: calc(-100% + 100vw)` on `:root` (a scrollbar-
+   width compensation trick) so normal-flow content shifts right by the
+   scrollbar's width. The sidebar is `position: fixed`, so it ignores that
+   shift and stays flush at the viewport's left edge, but `.page-wrapper`/
+   `.navbar` are normal flow and get shifted on top of their own
+   `margin-left` above — opening a gap (the width of the scrollbar) between
+   the sidebar's right edge and the content's left edge. Zeroing it out
+   here removes the gap; the project doesn't rely on that compensation
+   anywhere else. */
+:root {
+  margin-left: 0;
+}
+</style>
+{% endblock %}
+
 {% block head %}
 {{ super() }}
 <script>

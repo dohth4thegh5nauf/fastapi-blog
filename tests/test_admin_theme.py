@@ -61,15 +61,41 @@ def test_home_and_markdown_pages_extend_the_unified_layout():
     assert '{% extends "layout.html" %}' in content, name
 
 
-def test_login_extends_the_stock_layout_directly():
-  """login.html's switchers/styling don't need `navbar_extra`.
+def test_home_and_markdown_pages_dont_double_wrap_the_container():
+  """A page must not add its own top-level `.container-*` wrapper.
 
-  It builds its own self-contained switchers (there is no logged-in navbar
-  to hook into), so it extends the framework's layout directly rather than
-  the shared `layout.html`.
+  `{% block content %}` already sits inside the layout's `.container-xl`
+  (see `@starlette-admin/templates/layout.html`'s `.page-body`), so doing
+  it again double-nests the gutter padding and ends up a different width
+  than the built-in Role/User pages, which don't add one. `markdown_edit.
+  html` still nests a `container-fluid` *inside* its card header for
+  internal spacing — that one is fine, it isn't a second top-level wrapper.
   """
-  content = _read('login.html')
-  assert '{% extends "@starlette-admin/layout.html" %}' in content
+  for name in ('home.html', 'markdown_list.html'):
+    content = _read(name)
+    assert 'container-fluid' not in content, name
+    assert 'container-xl' not in content, name
+
+  edit_content = _read('markdown_edit.html')
+  # Exactly one container-fluid: the card-header's internal one.
+  assert edit_content.count('container-fluid') == 1
+
+
+def test_no_project_login_override():
+  """There is no project override of login.html any more.
+
+  It used to duplicate the stock login page (dark theme, its own
+  hand-rolled theme/language switchers) for no real reason: the stock
+  `@starlette-admin/login.html` extends the bare `"layout.html"` name too,
+  so it already inherits this project's theme via the shadowed
+  `layout.html` (the `navbar` block just doesn't render pre-login, since
+  there's no `current_user` yet — nothing project-specific to add). Letting
+  the framework serve its own login page keeps it visually identical to
+  every other page with zero duplicated code, and `SimpleAuthProvider.
+  render_login` (see `admin/auth_provider.py`) only needs to swap in the
+  project's YAML-based `_` translator via the template context.
+  """
+  assert not (ADMIN_TEMPLATES / 'login.html').exists()
 
 
 def test_layout_html_exists():
@@ -84,3 +110,39 @@ def test_layout_html_contains_theme_and_language_markers():
   assert 'theme-toggle' in layout
   assert 'navbar_extra' in layout
   assert 'custom-language-item' in layout
+
+
+def test_layout_html_pins_the_top_navbar_while_scrolling():
+  """The top navbar (theme/language/user menu) must stay on screen.
+
+  It used to scroll away with the page content, unlike the sidebar (which
+  is `position: fixed`). `header.navbar` is `position: sticky` here for
+  exactly that reason.
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert 'header.navbar' in layout
+  assert 'position: sticky' in layout
+
+
+def test_layout_html_removes_the_dead_sidebar_scrollbar():
+  """The sidebar must not reserve a permanent scrollbar gutter.
+
+  Tabler hardcodes `overflow-y: scroll` on the sidebar, so even a menu
+  nowhere near tall enough to need scrolling still shows a non-functional
+  scrollbar. `layout.html` overrides it to `auto`.
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert 'navbar-vertical' in layout
+  assert 'overflow-y: auto' in layout
+
+
+def test_layout_html_narrows_the_sidebar_to_14rem():
+  """The sidebar is 14rem wide, not Tabler's stock 15rem.
+
+  The sidebar's own width and the margin-left Tabler puts on its siblings
+  (`.navbar`, `.page-wrapper`) must change together, or the content either
+  starts under the sidebar or leaves a gap next to it.
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert 'width: 14rem' in layout
+  assert 'margin-left: 14rem' in layout
