@@ -136,6 +136,18 @@ def test_layout_html_removes_the_dead_sidebar_scrollbar():
   assert 'overflow-y: auto' in layout
 
 
+def test_layout_html_reserves_a_stable_scrollbar_gutter():
+  """`.container-xl` must sit at the same x position on every page.
+
+  It's centered with `margin: auto` in `.page-wrapper`, so its position
+  depends on the viewport's content width, which a short page (no
+  scrollbar) and a tall page (scrollbar present) disagree on by the
+  scrollbar's own width unless that space is always reserved.
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert 'scrollbar-gutter: stable' in layout
+
+
 def test_layout_html_narrows_the_sidebar_to_14rem():
   """The sidebar is 14rem wide, not Tabler's stock 15rem.
 

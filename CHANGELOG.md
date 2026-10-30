@@ -79,6 +79,16 @@ pages at all.
   shifted on top of their own `margin-left`, opening the gap. `layout.html`
   zeroes that `:root` margin out — nothing else in the project relies on
   the compensation it was doing
+- Removing that `:root` margin uncovered a second, pre-existing issue:
+  `.container-xl` is centered with `margin: auto` inside `.page-wrapper`,
+  so its position depends on the viewport's *content* width, which a page
+  tall enough to scroll (e.g. Posts) and a short one with no scrollbar
+  (e.g. an empty Users table) disagree on by the scrollbar's own width —
+  the container sat a few pixels further right on the short page.
+  `layout.html` now reserves the scrollbar's gutter unconditionally
+  (`scrollbar-gutter: stable` on `:root`), so every page's content width,
+  and therefore its container's position, is identical regardless of
+  whether that particular page needs to scroll
 
 ### Dependency upgrade
 

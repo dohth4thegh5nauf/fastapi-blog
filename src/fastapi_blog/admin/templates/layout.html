@@ -61,10 +61,20 @@ aside.navbar-vertical.navbar-expand-lg {
    `.navbar` are normal flow and get shifted on top of their own
    `margin-left` above — opening a gap (the width of the scrollbar) between
    the sidebar's right edge and the content's left edge. Zeroing it out
-   here removes the gap; the project doesn't rely on that compensation
-   anywhere else. */
+   here removes the gap. */
 :root {
   margin-left: 0;
+  /* Tabler's trick above was also hiding a second issue: `.container-xl`
+     is centered with `margin: auto` inside `.page-wrapper`, so its
+     position depends on the viewport's *content* width — which shrinks
+     by the scrollbar's width on a page tall enough to scroll. A short
+     page (e.g. an empty Users table) has no scrollbar and stays full
+     width, so its container sits a few pixels further right than on a
+     long page (e.g. Posts) right next to it in the sidebar. Reserving
+     the scrollbar's gutter unconditionally keeps the content width (and
+     so the container's position) identical whether or not a given page
+     actually needs to scroll. */
+  scrollbar-gutter: stable;
 }
 </style>
 {% endblock %}
