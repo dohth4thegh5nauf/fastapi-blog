@@ -37,9 +37,22 @@ simply excludes drafts. (`{prefix}/index.jsonld` is registered before
 registration order and `index.jsonld` would otherwise also match the
 `{slug}` pattern with `slug='index'` first.)
 
+`python -m fastapi_blog export` (new `fastapi_blog/__main__.py`) is the CLI
+side: `--posts-dir`, `--schema` (a YAML/JSON schema file; default: the
+built-in fields), `--collection` (used by the schema's `id_template`),
+`--format jsonld|expanded|nquads` and `--out FILE` (default: stdout).
+`expanded`/`nquads` need the `jsonld` extra (`pyld`) and exit `64` with a
+clear message when it isn't installed; `nquads` lines are sorted (RDF
+statements have no inherent order), so two runs produce byte-identical
+output (TODO 5.4 criterion 3, same as `collection_to_jsonld` itself).
+Takes `--posts-dir`/`--schema`/`--collection` directly rather than TODO's
+literal `--collection NAME`, which presupposes a project-level registry of
+named collections (each with its own directory and schema) that doesn't
+exist anywhere in this codebase yet — `Collection`s are built ad hoc per
+call everywhere else too.
+
 Not done: loading `context` from a local file (TODO 5.5, needs the `jsonld`
-extra), the `export` CLI command, and the "lost term" check (TODO 5.6) —
-the HTTP side is the last piece of 5.4 itself.
+extra), and the "lost term" check (TODO 5.6) — 5.4 itself is now done.
 
 ### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden` (TODO 5.1, partial)
 
