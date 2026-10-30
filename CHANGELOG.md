@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Document storage: path safety wired in everywhere (TODO 4.4)
+
+`store.safe_document_path` (slug pattern + resolved-path containment check)
+existed but wasn't called from any of the five places that turn a slug into
+a file path. Wired it into all of them, using the same compiled `SLUG_RE`
+(now exported from `fastapi_blog.models`) everywhere instead of each site
+re-deriving its own slug check:
+
+- `editor.py`'s `_post_path` (REST API and the deprecated UI routes)
+- `router.py`'s public `/posts/{post_id}` route (already indirectly safe via
+  the `_list_posts()` whitelist, but now also explicit)
+- `admin/markdown_crud.py`'s `MarkdownFileManager.load_post`/`save_post`/
+  `delete_post`
+- `admin/markdown_model.py`'s `MarkdownPost.get_file_path` (used by
+  `exists`, `load_from_file`, `save_to_file`, `delete`); its own ad hoc
+  `re.match(r'^[a-z0-9-]+$', ...)` check is gone in favor of this
+
+Added `tests/test_markdown_crud.py` and traversal-slug tests in
+`test_markdown_model.py`/`test_router.py` covering all five.
+
 ### Admin UI: one theme/language switcher everywhere
 
 The dependency upgrade (below) left the admin inconsistent: the built-in

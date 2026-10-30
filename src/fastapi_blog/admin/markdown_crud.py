@@ -11,7 +11,7 @@ from starlette_admin.routing import route
 from starlette_admin.views import CustomView
 
 from .. import store
-from ..models import DEFAULT_SCHEMA, FrontmatterSchema
+from ..models import DEFAULT_SCHEMA, SLUG_RE, FrontmatterSchema
 from .form_fields import (
   build_form_fields,
   form_fields_meta,
@@ -108,7 +108,12 @@ class MarkdownFileManager:
 
   def load_post(self, slug: str) -> MarkdownPost | None:
     """Load a single post by slug."""
-    file_path = self.posts_dir / f'{slug}.md'
+    try:
+      file_path = store.safe_document_path(
+        self.posts_dir, slug, pattern=SLUG_RE
+      )
+    except ValueError:
+      return None
     if not file_path.exists():
       return None
 
@@ -125,12 +130,17 @@ class MarkdownFileManager:
     self, slug: str, frontmatter: dict[str, Any], content: str
   ) -> None:
     """Save a post to file."""
-    file_path = self.posts_dir / f'{slug}.md'
+    file_path = store.safe_document_path(self.posts_dir, slug, pattern=SLUG_RE)
     store.write_document(file_path, frontmatter, f'\n{content}')
 
   def delete_post(self, slug: str) -> bool:
     """Delete a post."""
-    file_path = self.posts_dir / f'{slug}.md'
+    try:
+      file_path = store.safe_document_path(
+        self.posts_dir, slug, pattern=SLUG_RE
+      )
+    except ValueError:
+      return False
     if file_path.exists():
       file_path.unlink()
       return True

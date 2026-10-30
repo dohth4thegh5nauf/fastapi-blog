@@ -117,6 +117,26 @@ def test_invalid_slug(posts_dir):
     post.save_to_file()
 
 
+def test_path_traversal_slug_is_rejected(posts_dir, tmp_path):
+  """A slug built from `..` segments must never escape posts_dir.
+
+  `get_file_path` routes through `store.safe_document_path`, which checks
+  the slug pattern (no `/` or `.` allowed) and the resolved path's
+  containment, so this can never reach a file outside `posts_dir`.
+  """
+  secret = tmp_path / 'secret.md'
+  secret.write_text('---\ntitle: Secret\n---\n', encoding='utf-8')
+
+  post = MarkdownPost(
+    slug='../secret', title='Should Not Write', content='pwned'
+  )
+  with pytest.raises(ValueError, match='Invalid slug'):
+    post.save_to_file()
+  assert secret.read_text(encoding='utf-8') == '---\ntitle: Secret\n---\n'
+
+  assert not MarkdownPost.exists('../secret')
+
+
 def test_to_dict(posts_dir):
   """Test converting post to dictionary."""
   post = MarkdownPost(

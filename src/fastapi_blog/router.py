@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import helpers, store
 from .i18n import Translator
-from .models import FrontmatterSchema
+from .models import SLUG_RE, FrontmatterSchema
 
 
 def get_blog_router(
@@ -179,7 +179,16 @@ def get_blog_router(
         detail=f"Post '{post_id}' not found",
       )
     post = dict(matches[0])
-    _, body = store.read_document(pathlib.Path(f'{posts_dirname}/{post_id}.md'))
+    try:
+      post_path = store.safe_document_path(
+        pathlib.Path(posts_dirname), post_id, pattern=SLUG_RE
+      )
+    except ValueError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Post '{post_id}' not found",
+      ) from exc
+    _, body = store.read_document(post_path)
     post['content'] = helpers.markdown(body, sanitize=sanitize_html)
 
     context = {'post': post}

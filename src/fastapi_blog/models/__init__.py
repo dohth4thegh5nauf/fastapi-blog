@@ -2,6 +2,7 @@
 
 from .api import (
   SLUG_PATTERN,
+  SLUG_RE,
   LooseFrontmatter,
   LoosePostPayload,
   Slug,
@@ -31,6 +32,7 @@ __all__ = [
   'FieldSpec',
   'FrontmatterSchema',
   'SLUG_PATTERN',
+  'SLUG_RE',
   'Slug',
   'StrictFrontmatter',
   'LooseFrontmatter',

@@ -4,12 +4,12 @@ This module provides an ORM-like interface for markdown files,
 allowing starlette-admin to work with file-based posts.
 """
 
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from .. import store
+from ..models import SLUG_RE
 
 
 class MarkdownPost:
@@ -80,13 +80,22 @@ class MarkdownPost:
 
   @classmethod
   def get_file_path(cls, slug: str) -> Path:
-    """Get file path for a post by slug."""
-    return cls.get_posts_dir() / f'{slug}.md'
+    """Get file path for a post by slug.
+
+    Raises:
+        ValueError: `slug` doesn't match the slug pattern, or would resolve
+            outside the posts directory.
+
+    """
+    return store.safe_document_path(cls.get_posts_dir(), slug, pattern=SLUG_RE)
 
   @classmethod
   def exists(cls, slug: str) -> bool:
     """Check if a post exists."""
-    return cls.get_file_path(slug).exists()
+    try:
+      return cls.get_file_path(slug).exists()
+    except ValueError:
+      return False
 
   @classmethod
   def list_all(cls) -> list['MarkdownPost']:
@@ -177,12 +186,13 @@ class MarkdownPost:
 
   def save_to_file(self) -> None:
     """Save post to markdown file."""
-    # Validate slug
-    if not self.slug or not re.match(r'^[a-z0-9-]+$', self.slug):
+    try:
+      file_path = self.get_file_path(self.slug)
+    except ValueError as exc:
       raise ValueError(
         f'Invalid slug: {self.slug}. '
         'Must contain only lowercase letters, numbers, and hyphens.'
-      )
+      ) from exc
 
     # Prepare frontmatter. A missing date is left out rather than invented.
     frontmatter: dict[str, Any] = {'title': self.title}
@@ -198,8 +208,6 @@ class MarkdownPost:
     # Add any extra frontmatter fields
     frontmatter.update(self.extra_frontmatter)
 
-    # Write to file
-    file_path = self.get_file_path(self.slug)
     store.write_document(file_path, frontmatter, f'\n{self.content}')
 
   def delete(self) -> None:

@@ -20,8 +20,8 @@ from . import helpers, store
 from .auth import add_startup_check, check_api_auth_config
 from .models import (
   SLUG_PATTERN,
+  SLUG_RE,
   FrontmatterSchema,
-  is_valid_slug,
   payload_model,
 )
 
@@ -84,14 +84,17 @@ async def optional_authentication(request: Request) -> dict | None:
 
 
 def _post_path(slug: str, posts_dirname: str) -> pathlib.Path:
-  if not is_valid_slug(slug):
+  try:
+    return store.safe_document_path(
+      pathlib.Path(posts_dirname), slug, pattern=SLUG_RE
+    )
+  except ValueError as exc:
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail=(
         'Invalid slug. Allowed: lowercase letters, digits, hyphens (max 100).'
       ),
-    )
-  return pathlib.Path(posts_dirname) / f'{slug}.md'
+    ) from exc
 
 
 def _serialize(payload: Any, schema: FrontmatterSchema | None = None) -> str:
