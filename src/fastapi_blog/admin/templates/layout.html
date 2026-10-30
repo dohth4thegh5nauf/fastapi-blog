@@ -76,6 +76,25 @@ aside.navbar-vertical.navbar-expand-lg {
      actually needs to scroll. */
   scrollbar-gutter: stable;
 }
+/* Below the `lg` breakpoint, Tabler hides `header.navbar` entirely
+   (`d-none d-lg-flex`) and the sidebar collapses to an off-canvas panel,
+   leaving only its own top row (brand, hamburger, user menu) visible. That
+   row has no hook for our own content (see `navbar_extra` below), so the
+   theme toggle and language switcher simply vanished below 992px. Forcing
+   `header.navbar` to stay visible brings them back, but also duplicates
+   its own toggler (targets an always-empty `#navbar-menu` collapse — never
+   populated, so hiding it loses nothing) and its own user-menu trigger
+   (redundant with the one already in the sidebar's row); hiding just those
+   two avoids showing the same "Logout" menu twice. */
+@media (max-width: 991.98px) {
+  header.navbar.navbar-expand-md {
+    display: flex !important;
+  }
+  header.navbar .navbar-toggler,
+  header.navbar .nav-item.dropdown.ms-3 {
+    display: none !important;
+  }
+}
 </style>
 {% endblock %}
 

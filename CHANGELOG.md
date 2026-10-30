@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### JSON-LD emission: `document_to_jsonld`/`collection_to_jsonld` (TODO 5.2-5.4, partial)
+
+New `fastapi_blog.jsonld` module, built on the existing `alias` mechanism
+(a field aliased `'@id'`/`'@type'` supplies that key directly) rather than
+anything new in the schema layer itself:
+
+- `FrontmatterSchema` gained a `jsonld: JsonLdConfig | None` field (and
+  `from_dict`/`to_dict` support for a schema file's `jsonld:` section, TODO
+  5.3): `context`, `base`, `id_template` (a plain `str.format()` template
+  with `{base}`/`{collection}`/`{slug}` — not the full slug/template
+  language from TODO 6.4, not built yet), `type`, `content_term`
+- `document_to_jsonld(frontmatter, *, schema, slug, collection='', content=None)`:
+  projects one document — `@context` (when configured), `@id`/`@type`
+  (from a field if present, else the config's template/default), then the
+  schema's own fields in schema order, by alias. `None`/`''`/`[]`/`{}` are
+  omitted; `date`/`datetime` values become ISO 8601 strings; the body is
+  only included when `jsonld.content_term` is set
+- `collection_to_jsonld(documents, *, schema, collection='', context=None)`:
+  `{'@context', '@graph'}` for a whole collection, `@graph` sorted by
+  `@id` then slug so two runs produce identical bytes regardless of
+  filesystem iteration order (TODO 5.4 criterion 3)
+
+Not done: loading `context` from a local file (TODO 5.5, needs the `jsonld`
+extra), the HTTP routes (`GET {prefix}/{slug}.jsonld`), the `export` CLI
+command, and the "lost term" check (TODO 5.6) — this module only has the
+pure projection functions so far.
+
 ### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden` (TODO 5.1, partial)
 
 `FieldSpec` gained the simpler options from TODO 5.1's table (the ones that
@@ -239,6 +266,15 @@ pages at all.
   header used `{{ t.home }}` for the page title, but the YAML translations
   only define `home.title` (not `home.home`) — the heading and active
   breadcrumb item had silently been rendering empty on every locale
+- The theme/language switchers disappeared entirely below the `lg`
+  breakpoint (992px): Tabler hides `header.navbar` there (`d-none
+  d-lg-flex`), and the sidebar's own mobile header row (shown instead) has
+  no hook for our `navbar_extra` content. `layout.html` now forces
+  `header.navbar` to stay visible below 992px, while hiding its own
+  toggler (targets an always-empty `#navbar-menu` collapse — never
+  populated, so hiding it loses nothing) and its own user-menu trigger
+  (redundant with the one the sidebar's mobile row already shows), so the
+  switchers show up without duplicating anything
 
 ### Dependency upgrade
 

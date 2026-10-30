@@ -175,3 +175,17 @@ def test_layout_html_narrows_the_sidebar_to_14rem():
   layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
   assert 'width: 14rem' in layout
   assert 'margin-left: 14rem' in layout
+
+
+def test_layout_html_keeps_the_switchers_visible_below_the_lg_breakpoint():
+  """The theme/language switchers must not vanish below 992px.
+
+  Tabler hides `header.navbar` entirely below `lg` (`d-none d-lg-flex`),
+  and the sidebar's own mobile row has no hook for our content, so the
+  switchers (added via the `navbar_extra` block, which only renders inside
+  `header.navbar`) simply disappeared there until this was added.
+  """
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert '@media (max-width: 991.98px)' in layout
+  assert 'header.navbar.navbar-expand-md' in layout
+  assert 'display: flex !important' in layout

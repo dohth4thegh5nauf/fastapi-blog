@@ -20,6 +20,7 @@ from .schema import (
   ROLES,
   FieldSpec,
   FrontmatterSchema,
+  JsonLdConfig,
 )
 
 
@@ -31,6 +32,7 @@ __all__ = [
   'ROLES',
   'FieldSpec',
   'FrontmatterSchema',
+  'JsonLdConfig',
   'SLUG_PATTERN',
   'SLUG_RE',
   'Slug',

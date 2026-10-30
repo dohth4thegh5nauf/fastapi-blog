@@ -295,6 +295,55 @@ class FieldSpec:
     return result
 
 
+@dataclasses.dataclass(frozen=True)
+class JsonLdConfig:
+  """A schema's `jsonld` section (TODO 5.3): JSON-LD defaults for a collection.
+
+  Nothing here is resolved or validated by this module — `fastapi_blog.jsonld`
+  (TODO 5.4) is what turns a document into JSON-LD using it.
+
+  Attributes:
+      context: The `@context` value emitted as-is: an inline mapping, or a
+          list of mappings/URLs. Loading `context` from a local file (TODO
+          5.5, needs the `jsonld` extra) isn't implemented yet — pass the
+          already-loaded mapping instead.
+      base: Base IRI substituted into `id_template`'s `{base}` placeholder.
+      id_template: Used for a document's `@id` when no field has
+          `alias='@id'`. A plain `str.format()` template with `{base}`,
+          `{collection}`, `{slug}` placeholders — not the full slug/template
+          language from TODO 6.4 (not built), so filters and date tags
+          aren't available here yet.
+      type: Default `@type` when no field has `alias='@type'`.
+      content_term: JSON-LD term the document body is emitted under (the
+          raw Markdown, not rendered HTML). `None` (default) omits the body.
+
+  """
+
+  context: Any = None
+  base: str | None = None
+  id_template: str | None = None
+  type: str | None = None
+  content_term: str | None = None
+
+  def to_dict(self) -> dict[str, Any]:
+    """Return non-default options as a plain dict."""
+    result: dict[str, Any] = {}
+    for item in dataclasses.fields(self):
+      value = getattr(self, item.name)
+      if value != item.default:
+        result[item.name] = value
+    return result
+
+  @classmethod
+  def from_dict(cls, data: Mapping[str, Any]) -> 'JsonLdConfig':
+    """Build from a plain dict (the `jsonld:` section of a schema file)."""
+    known = {item.name for item in dataclasses.fields(cls)}
+    unknown = set(data) - known
+    if unknown:
+      raise ValueError(f'Unknown jsonld option(s): {sorted(unknown)}')
+    return cls(**data)
+
+
 @dataclasses.dataclass(eq=False)
 class FrontmatterSchema:
   """Set of frontmatter fields plus the policy for unknown keys.
@@ -336,6 +385,7 @@ class FrontmatterSchema:
 
   fields: tuple[FieldSpec, ...] = ()
   extra: str = 'forbid'
+  jsonld: JsonLdConfig | None = None
   _model: Any = dataclasses.field(default=None, init=False, repr=False)
   _payload_model: Any = dataclasses.field(default=None, init=False, repr=False)
 
@@ -407,7 +457,9 @@ class FrontmatterSchema:
 
   def with_extra(self, extra: str) -> 'FrontmatterSchema':
     """Return a copy of the schema with another `extra` mode."""
-    return FrontmatterSchema(fields=self.fields, extra=extra)
+    return FrontmatterSchema(
+      fields=self.fields, extra=extra, jsonld=self.jsonld
+    )
 
   def model(self) -> 'type[BaseModel]':
     """Return the Pydantic model for this schema (built once, then cached)."""
@@ -491,17 +543,21 @@ class FrontmatterSchema:
 
   def to_dict(self) -> dict[str, Any]:
     """Return the schema as a plain dict (the format `from_dict` reads)."""
-    return {
+    result: dict[str, Any] = {
       'extra': self.extra,
       'fields': {spec.name: spec.to_dict() for spec in self.fields},
     }
+    if self.jsonld is not None:
+      result['jsonld'] = self.jsonld.to_dict()
+    return result
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> Self:
     """Build a schema from a plain dict.
 
-    The dict has an optional `extra` key and a `fields` key. `fields` is
-    either a mapping `{name: options}` or a list of `{name: ..., ...}`.
+    The dict has an optional `extra` key, a `fields` key and an optional
+    `jsonld` key (TODO 5.3). `fields` is either a mapping `{name: options}`
+    or a list of `{name: ..., ...}`.
 
     Args:
         data: Schema description, e.g. loaded from YAML or JSON.
@@ -518,6 +574,7 @@ class FrontmatterSchema:
     data = dict(data)
     raw_fields = data.pop('fields', None) or {}
     extra = data.pop('extra', 'forbid')
+    raw_jsonld = data.pop('jsonld', None)
     if data:
       raise ValueError(f'Unknown schema key(s): {sorted(data)}')
 
@@ -533,7 +590,10 @@ class FrontmatterSchema:
         specs.append(_parse_field(str(item['name']), options))
     else:
       raise ValueError('`fields` must be a mapping or a list')
-    return cls(fields=tuple(specs), extra=extra)
+    jsonld = (
+      JsonLdConfig.from_dict(raw_jsonld) if raw_jsonld is not None else None
+    )
+    return cls(fields=tuple(specs), extra=extra, jsonld=jsonld)
 
   @classmethod
   def from_file(cls, path: str | pathlib.Path) -> Self:
