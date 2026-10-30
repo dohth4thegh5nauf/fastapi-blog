@@ -8,9 +8,11 @@ from fastapi import (
   APIRouter,
   Depends,
   FastAPI,
+  Header,
   HTTPException,
   Path,
   Request,
+  Response,
   status,
 )
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -97,13 +99,31 @@ def _post_path(slug: str, posts_dirname: str) -> pathlib.Path:
     ) from exc
 
 
-def _serialize(payload: Any, schema: FrontmatterSchema | None = None) -> str:
+def _frontmatter_dump(
+  payload: Any,
+  schema: FrontmatterSchema | None = None,
+  *,
+  is_create: bool = True,
+  existing: dict[str, Any] | None = None,
+) -> dict[str, Any]:
   if schema is None:
-    fm_dump = payload.frontmatter.model_dump(exclude_none=True)
-  else:
-    # Write the keys other services expect (aliases), not internal names
-    fm_dump = schema.dump(payload.frontmatter, by_alias=True)
-  return store.serialize_document(fm_dump, f'\n{payload.content.rstrip()}\n')
+    return payload.frontmatter.model_dump(exclude_none=True)
+  # Write the keys other services expect (aliases), not internal names;
+  # fills `on_create` fields and enforces `read_only` ones (see 4.5).
+  try:
+    return schema.dump_for_write(
+      payload.frontmatter, is_create=is_create, existing=existing
+    )
+  except ValueError as exc:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+    ) from exc
+
+
+def _body(payload: Any) -> str:
+  # `payload` is an instance of the dynamically built `Payload` model
+  # (`payload_model()`), which mypy can't see `.content` on statically.
+  return f'\n{payload.content.rstrip()}\n'
 
 
 def _parse_file(path: pathlib.Path) -> dict[str, Any]:
@@ -125,6 +145,7 @@ def get_api_router(
   admin_password: str | None = None,
   frontmatter_schema: FrontmatterSchema | None = None,
   auth_dependency: Callable[..., Any] | None = None,
+  require_if_match: bool = False,
 ) -> APIRouter:
   """Get REST API router for post management.
 
@@ -145,6 +166,13 @@ def get_api_router(
           It must raise `HTTPException` when access is denied. When given, it
           replaces the session and Basic checks. Works without any session
           support.
+      require_if_match: When `True`, `PUT /update/{slug}` and
+          `DELETE /delete/{slug}` need an `If-Match` header (its value from a
+          prior `GET /{slug}/raw`'s `ETag` response header) and reject the
+          write with 412 if the post changed since, or 428 if the header is
+          missing (see TODO 4.7). `False` (default) makes the header
+          optional: when sent, it's still checked; when not, the write goes
+          through unconditionally like before.
 
   Returns:
       APIRouter with REST API endpoints
@@ -178,6 +206,16 @@ def get_api_router(
   api_router = APIRouter(tags=['editor'])
   Payload = payload_model(strict, frontmatter_schema)
   slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
+  docs = store.DocumentStore(
+    store.Collection('posts', pathlib.Path(posts_dirname), slug_pattern=SLUG_RE)
+  )
+
+  def _require_if_match(if_match: str | None) -> None:
+    if require_if_match and if_match is None:
+      raise HTTPException(
+        status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+        detail='If-Match header is required',
+      )
 
   # Setup authentication dependency
   auth_func: Callable[..., Any]
@@ -206,68 +244,91 @@ def get_api_router(
 
   @api_router.get('/{slug}/raw')
   async def get_raw(
+    response: Response,
     slug: str = slug_path,
     user: dict | None = Depends(auth_func),
   ) -> dict[str, Any]:
-    path = _post_path(slug, posts_dirname)
-    if not path.is_file():
+    try:
+      record = docs.read(slug)
+    except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Post '{slug}' not found",
-      )
-    data = _parse_file(path)
-    return {'slug': slug, **data}
+      ) from exc
+    response.headers['ETag'] = record.etag
+    return {
+      'slug': slug,
+      'frontmatter': record.frontmatter,
+      'content': record.body.lstrip('\n'),
+    }
 
   @api_router.post('/create/{slug}', status_code=status.HTTP_201_CREATED)
   async def create_post(
     payload: Payload,  # type: ignore[valid-type]
+    response: Response,
     slug: str = slug_path,
     user: dict | None = Depends(auth_func),
   ) -> dict[str, str]:
-    path = _post_path(slug, posts_dirname)
-    if path.exists():
+    if docs.exists(slug):
       raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail=f"Post '{slug}' already exists",
       )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
+    fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
+    etag = docs.write(slug, fm_dump, _body(payload))
     helpers.clear_posts_cache()
+    response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
 
   @api_router.put('/update/{slug}')
   async def update_post(
     payload: Payload,  # type: ignore[valid-type]
+    response: Response,
     slug: str = slug_path,
     user: dict | None = Depends(auth_func),
+    if_match: str | None = Header(None, alias='If-Match'),
   ) -> dict[str, str]:
-    path = _post_path(slug, posts_dirname)
-    if not path.is_file():
+    _require_if_match(if_match)
+    try:
+      existing = docs.read(slug).frontmatter
+    except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Post '{slug}' not found",
-      )
-    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
+      ) from exc
+    fm_dump = _frontmatter_dump(
+      payload, frontmatter_schema, is_create=False, existing=existing
+    )
+    try:
+      etag = docs.write(slug, fm_dump, _body(payload), if_match=if_match)
+    except store.ConflictError as exc:
+      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     helpers.clear_posts_cache()
+    response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'updated'}
 
   @api_router.delete('/delete/{slug}', status_code=status.HTTP_204_NO_CONTENT)
   async def delete_post(
     slug: str = slug_path,
     user: dict | None = Depends(auth_func),
+    if_match: str | None = Header(None, alias='If-Match'),
   ) -> None:
-    path = _post_path(slug, posts_dirname)
-    if not path.is_file():
+    _require_if_match(if_match)
+    try:
+      docs.delete(slug, if_match=if_match)
+    except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Post '{slug}' not found",
-      )
-    path.unlink()
+      ) from exc
+    except store.ConflictError as exc:
+      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     helpers.clear_posts_cache()
 
   @api_router.post('/save')
   async def save_post(
     request: Request,
+    response: Response,
     user: dict | None = Depends(auth_func),
   ) -> JSONResponse:
     data = await request.json()
@@ -291,14 +352,14 @@ def get_api_router(
         detail=f'Invalid payload: {str(e)}',
       ) from e
 
-    path = _post_path(slug, posts_dirname)
-    is_new = not path.exists()
-
-    if is_new:
-      path.parent.mkdir(parents=True, exist_ok=True)
-
-    store.atomic_write_text(path, _serialize(payload, frontmatter_schema))
+    is_new = not docs.exists(slug)
+    existing = None if is_new else docs.read(slug).frontmatter
+    fm_dump = _frontmatter_dump(
+      payload, frontmatter_schema, is_create=is_new, existing=existing
+    )
+    etag = docs.write(slug, fm_dump, _body(payload))
     helpers.clear_posts_cache()
+    response.headers['ETag'] = etag
 
     return JSONResponse(
       content={'slug': slug, 'status': 'created' if is_new else 'updated'},
@@ -320,6 +381,7 @@ def add_editor_to_app(
   admin_username: str | None = None,
   admin_password: str | None = None,
   auth_dependency: Callable[..., Any] | None = None,
+  require_if_match: bool = False,
 ) -> FastAPI:
   """Add editor REST API and optional UI to FastAPI app.
 
@@ -342,6 +404,8 @@ def add_editor_to_app(
       admin_password: Password for Basic auth (optional)
       auth_dependency: Custom authentication dependency (optional), see
           `get_api_router()`
+      require_if_match: Require an `If-Match` header on update/delete
+          (optional), see `get_api_router()`
 
   Returns:
       FastAPI application with editor routes added
@@ -404,6 +468,7 @@ def add_editor_to_app(
     admin_password=admin_password,
     frontmatter_schema=frontmatter_schema,
     auth_dependency=auth_dependency,
+    require_if_match=require_if_match,
   )
   app.include_router(api_router, prefix=prefix)
   add_startup_check(

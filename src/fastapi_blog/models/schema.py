@@ -61,6 +61,13 @@ _ROLE_TYPES: dict[str, tuple[str, ...]] = {
   'description': ('str',),
 }
 
+# Values `on_create` accepts, and the field type each one needs.
+_ON_CREATE_TYPES: dict[str, str] = {
+  'today': 'date',
+  'now': 'datetime',
+  'uuid': 'str',
+}
+
 
 class _Missing:
   """Sentinel that means no default value was given."""
@@ -86,6 +93,16 @@ class FieldSpec:
       min_length: Minimum length for `str` and list fields.
       max_length: Maximum length for `str` and list fields.
       description: Human-readable description of the field.
+      read_only: When set, the storage layer rejects a write that changes
+          this field's value on an existing document (new documents may
+          still set it).
+      on_create: `'today'`, `'now'` or `'uuid'`. Filled in automatically the
+          first time the document is created, only if the field was left
+          unset; never touched again afterwards (combine with `read_only`
+          to make that permanent). `'today'`/`'now'` need a `date`/`datetime`
+          field; `'uuid'` needs a `str` field.
+      on_create_prefix: Prepended to the generated value when
+          `on_create='uuid'` (e.g. `'note-'`). Not valid otherwise.
 
   """
 
@@ -98,6 +115,9 @@ class FieldSpec:
   min_length: int | None = None
   max_length: int | None = None
   description: str | None = None
+  read_only: bool = False
+  on_create: str | None = None
+  on_create_prefix: str | None = None
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -119,6 +139,27 @@ class FieldSpec:
       raise ValueError(f'Empty alias for field {self.name!r}')
     if self.required and self.default is not MISSING:
       raise ValueError(f'Required field {self.name!r} cannot have a default')
+    if self.on_create is not None:
+      if self.on_create not in _ON_CREATE_TYPES:
+        raise ValueError(
+          f'Unknown on_create {self.on_create!r} for field {self.name!r}. '
+          f'Supported values: {", ".join(_ON_CREATE_TYPES)}'
+        )
+      needed_type = _ON_CREATE_TYPES[self.on_create]
+      if self.type != needed_type:
+        raise ValueError(
+          f'Field {self.name!r} has on_create={self.on_create!r}, which '
+          f'needs type {needed_type!r}, got {self.type!r}'
+        )
+      if self.required:
+        raise ValueError(
+          f'Field {self.name!r} cannot be both `required` and `on_create`: '
+          'on_create only fills a value that was left unset'
+        )
+    if self.on_create_prefix is not None and self.on_create != 'uuid':
+      raise ValueError(
+        f"`on_create_prefix` on field {self.name!r} needs on_create='uuid'"
+      )
     if self.role is not None:
       if self.role not in ROLES:
         raise ValueError(
@@ -304,6 +345,51 @@ class FrontmatterSchema:
     """
     return instance.model_dump(by_alias=by_alias, exclude_none=exclude_none)
 
+  def dump_for_write(
+    self,
+    instance: 'BaseModel',
+    *,
+    is_create: bool,
+    existing: Mapping[str, Any] | None = None,
+  ) -> dict[str, Any]:
+    """Dump a validated instance for writing to disk, applying 4.5 rules.
+
+    On creation, every `on_create` field the caller left unset (not in
+    `instance.model_fields_set`) is filled in now, once. On update, a
+    `read_only` field whose value differs from `existing` is rejected: the
+    caller may still send back the same value unchanged (full-replace
+    payloads naturally echo it).
+
+    Args:
+        instance: Instance of the model returned by `model()`.
+        is_create: Whether this is a new document (vs. an update).
+        existing: The document's current frontmatter, by external key (as
+            returned by `read_document`); ignored when `is_create`.
+
+    Returns:
+        Dict with the frontmatter values, by external key (alias).
+
+    Raises:
+        ValueError: A `read_only` field's value would change.
+
+    """
+    set_fields = instance.model_fields_set
+    for spec in self.fields:
+      if is_create:
+        if spec.on_create and spec.name not in set_fields:
+          setattr(instance, spec.name, _on_create_value(spec))
+        continue
+      if not spec.read_only or spec.name not in set_fields or existing is None:
+        continue
+      old_value = existing.get(spec.key, MISSING)
+      if old_value is MISSING:
+        continue
+      if getattr(instance, spec.name) != old_value:
+        raise ValueError(
+          f'Field {spec.name!r} is read-only and cannot be changed'
+        )
+    return self.dump(instance, by_alias=True)
+
   def to_dict(self) -> dict[str, Any]:
     """Return the schema as a plain dict (the format `from_dict` reads)."""
     return {
@@ -380,6 +466,20 @@ def _implicit_default(spec: FieldSpec) -> Any:
   if spec.type in _CONTAINER_TYPES:
     return []
   return None
+
+
+def _on_create_value(spec: FieldSpec) -> Any:
+  """Return the value an `on_create` field gets when left unset at creation."""
+  if spec.on_create == 'today':
+    return datetime.date.today()
+  if spec.on_create == 'now':
+    return datetime.datetime.now()
+  if spec.on_create == 'uuid':
+    import uuid
+
+    value = uuid.uuid4().hex
+    return f'{spec.on_create_prefix}{value}' if spec.on_create_prefix else value
+  raise AssertionError(f'unreachable on_create: {spec.on_create!r}')
 
 
 def _make_factory(value: Any) -> Callable[[], Any]:

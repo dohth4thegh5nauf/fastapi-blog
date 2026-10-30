@@ -1,5 +1,6 @@
 """Tests for the configurable frontmatter schema."""
 
+import datetime
 import json
 
 import pytest
@@ -355,3 +356,123 @@ def test_payload_model_function():
   assert payload_model(False).__name__ == 'LoosePostPayload'
   schema = FrontmatterSchema(fields=(FieldSpec('title'),))
   assert payload_model(True, schema) is schema.payload_model()
+
+
+# --- on_create / read_only (TODO 4.5) ---------------------------------------
+
+
+def test_field_spec_rejects_unknown_on_create():
+  with pytest.raises(ValueError, match='Unknown on_create'):
+    FieldSpec('x', type='str', on_create='never')
+
+
+@pytest.mark.parametrize(
+  ('on_create', 'wrong_type'),
+  [('today', 'str'), ('now', 'date'), ('uuid', 'int')],
+)
+def test_field_spec_rejects_on_create_with_wrong_type(on_create, wrong_type):
+  with pytest.raises(ValueError, match='needs type'):
+    FieldSpec('x', type=wrong_type, on_create=on_create)
+
+
+def test_field_spec_rejects_required_with_on_create():
+  with pytest.raises(ValueError, match='required.*on_create'):
+    FieldSpec('x', type='date', required=True, on_create='today')
+
+
+def test_field_spec_rejects_on_create_prefix_without_uuid():
+  with pytest.raises(ValueError, match='on_create_prefix'):
+    FieldSpec('x', type='date', on_create='today', on_create_prefix='n-')
+
+
+def test_on_create_today_fills_unset_date_field():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('published_at', type='date', on_create='today'),
+    )
+  )
+  instance = schema.model()(title='Hi')
+  result = schema.dump_for_write(instance, is_create=True)
+  assert result['published_at'] == datetime.date.today()
+
+
+def test_on_create_does_not_override_a_provided_value():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('published_at', type='date', on_create='today'),)
+  )
+  given = datetime.date(2020, 1, 1)
+  instance = schema.model()(published_at=given)
+  result = schema.dump_for_write(instance, is_create=True)
+  assert result['published_at'] == given
+
+
+def test_on_create_uuid_is_stable_across_rewrites():
+  """A `read_only` + `on_create='uuid'` field keeps its value on update."""
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'doc_id', alias='@id', type='str', on_create='uuid', read_only=True
+      ),
+    )
+  )
+  created = schema.dump_for_write(schema.model()(), is_create=True)
+  assert created['@id']
+
+  # Re-submitting the same value (as a full-replace payload naturally would)
+  # is accepted.
+  updated = schema.dump_for_write(
+    schema.model()(**{'@id': created['@id']}),
+    is_create=False,
+    existing=created,
+  )
+  assert updated['@id'] == created['@id']
+
+
+def test_on_create_uuid_with_prefix():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'doc_id',
+        alias='@id',
+        type='str',
+        on_create='uuid',
+        on_create_prefix='note-',
+      ),
+    )
+  )
+  result = schema.dump_for_write(schema.model()(), is_create=True)
+  assert result['@id'].startswith('note-')
+
+
+def test_read_only_rejects_a_changed_value_on_update():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('doc_id', alias='@id', type='str', read_only=True),)
+  )
+  existing = {'@id': 'note-0001'}
+  instance = schema.model()(**{'@id': 'note-9999'})
+  with pytest.raises(ValueError, match='read-only'):
+    schema.dump_for_write(instance, is_create=False, existing=existing)
+
+
+def test_read_only_allows_an_update_that_leaves_it_untouched():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('doc_id', alias='@id', type='str', read_only=True),
+    )
+  )
+  existing = {'title': 'Old', '@id': 'note-0001'}
+  instance = schema.model()(title='New')
+  result = schema.dump_for_write(instance, is_create=False, existing=existing)
+  assert result['title'] == 'New'
+  assert '@id' not in result  # left unset, so dropped like any other field
+
+
+def test_read_only_is_not_checked_on_create():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('doc_id', alias='@id', type='str', read_only=True),)
+  )
+  instance = schema.model()(**{'@id': 'anything'})
+  result = schema.dump_for_write(instance, is_create=True)
+  assert result['@id'] == 'anything'

@@ -94,6 +94,7 @@ def _create_admin_for_locale(
   enable_role_management: bool = False,
   admin_username: str = 'admin',
   frontmatter_schema: FrontmatterSchema | None = None,
+  posts_dirname: str | None = None,
 ) -> Admin:
   """Create an Admin instance for a specific locale.
 
@@ -110,6 +111,10 @@ def _create_admin_for_locale(
       enable_role_management: Whether to automatically add role management views
       admin_username: Root admin username for role management access control
       frontmatter_schema: Custom frontmatter schema for the markdown posts
+      posts_dirname: Directory with the markdown posts (same one passed to
+          `setup_fastapi_blog`/`add_blog_to_fastapi`); falls back to
+          `POSTS_DIR`/a cwd-based guess when not given (see
+          `markdown_crud.get_posts_directory`)
 
   Returns:
       Configured Admin instance
@@ -147,6 +152,7 @@ def _create_admin_for_locale(
       icon='fa fa-home',
       locale=locale,
       schema=frontmatter_schema,
+      posts_dirname=posts_dirname,
     ),
   )
 
@@ -204,7 +210,7 @@ def _create_admin_for_locale(
     get_posts_directory,
   )
 
-  posts_dir = get_posts_directory()
+  posts_dir = get_posts_directory(posts_dirname)
 
   # Add list view (shows in menu)
   posts_list_view = MarkdownListView(
@@ -242,6 +248,7 @@ def add_admin_to_app(
   default_locale: str | None = None,
   enable_role_management: bool = False,
   frontmatter_schema: FrontmatterSchema | None = None,
+  posts_dirname: str | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -264,6 +271,10 @@ def add_admin_to_app(
       built-in fields). The post list, the post form and the dashboard are built
       from it. Saving goes through the REST API, so pass the same schema to
       `add_blog_to_fastapi(include_api=True, ...)`.
+    posts_dirname: Directory with the markdown posts. Pass the same value
+      given to `setup_fastapi_blog`/`add_blog_to_fastapi` so the admin panel
+      and the blog/REST API always agree on where posts live (default:
+      `POSTS_DIR`, deprecated, or a cwd-based guess).
 
   Returns:
     Dictionary mapping locale codes to Admin instances
@@ -429,6 +440,7 @@ def add_admin_to_app(
     enable_role_management=enable_role_management,
     admin_username=admin_username,
     frontmatter_schema=frontmatter_schema,
+    posts_dirname=posts_dirname,
   )
 
   default_admin.mount_to(app)
@@ -460,6 +472,7 @@ def add_admin_to_app(
       enable_role_management=enable_role_management,
       admin_username=admin_username,
       frontmatter_schema=frontmatter_schema,
+      posts_dirname=posts_dirname,
     )
 
     admin.mount_to(app)

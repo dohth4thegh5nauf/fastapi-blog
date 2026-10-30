@@ -10,7 +10,7 @@ from starlette_admin import CustomView
 from starlette_admin.contrib.sqla import ModelView
 from starlette_admin.routing import route
 
-from ..models import FrontmatterSchema
+from ..models import DEFAULT_SCHEMA, FrontmatterSchema
 
 
 # Lazy import to avoid initialization errors
@@ -202,28 +202,24 @@ class HomeView(CustomView):
     icon: str = 'fa fa-home',
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
+    posts_dirname: str | None = None,
   ):
     """Initialize home view with locale and frontmatter schema."""
     super().__init__(menu_label=label, icon=icon)
     self.locale = locale
     self.schema = schema
+    self.posts_dirname = posts_dirname
 
   @route('')
   async def index(self, request: Request) -> Response:
     """Render custom home page with blog statistics."""
     from .markdown_crud import get_posts_directory
-    from .markdown_model import MarkdownPost
 
-    # Configure posts directory
-    posts_dir = get_posts_directory()
-    MarkdownPost.configure(posts_dir)
+    posts_dir = get_posts_directory(self.posts_dirname)
 
     # Get all posts (with error handling for malformed posts)
     try:
-      if self.schema is None:
-        all_posts = MarkdownPost.list_all()
-      else:
-        all_posts = load_posts_for_home(posts_dir, self.schema)
+      all_posts = load_posts_for_home(posts_dir, self.schema or DEFAULT_SCHEMA)
     except Exception:
       # If loading fails, return empty state
       all_posts = []

@@ -26,6 +26,89 @@ re-deriving its own slug check:
 Added `tests/test_markdown_crud.py` and traversal-slug tests in
 `test_markdown_model.py`/`test_router.py` covering all five.
 
+### Document storage: `Collection` and `DocumentStore` (TODO 4.1, 4.6, 4.7)
+
+`store.py` gained the one abstraction every caller that turns a slug into a
+file should go through:
+
+- `Collection(name, dir, *, slug_pattern=..., extension='md', depth=0,
+  create=True, delete=True)`: a directory of same-shaped documents. `depth >
+  0` (nested collections) raises `NotImplementedError` — not built yet, kept
+  as an explicit gap rather than a half-working guess. Deliberately does
+  *not* carry a `FrontmatterSchema` (unlike the literal signature sketched
+  in `TODO.md`): schema validation and `on_create`/`read_only` already live
+  in `FrontmatterSchema.dump_for_write` (previous section), which callers
+  run before `DocumentStore.write`, keeping the storage layer free of the
+  Pydantic layer above it.
+- `DocumentStore`: `list`/`read`/`exists`/`write`/`delete` over one
+  `Collection`. `read` returns a `DocumentRecord` with an `etag` (sha256 of
+  the file's content); `write`/`delete` accept `if_match`, raising
+  `ConflictError` (`.status_code` 412 on a stale etag, 409 if the document
+  doesn't exist) on mismatch. `create=False`/`delete=False` block those
+  operations (an existing document can still be rewritten). Writes are
+  serialized by an in-process lock per store instance; no cross-process
+  locking, as the TODO explicitly rules out.
+
+Migrated onto it: `admin/markdown_crud.py`'s `MarkdownFileManager`, and
+`editor.py`'s REST API (`create_post`/`update_post`/`delete_post`/
+`get_raw`/`save_post`), which now also return an `ETag` response header and
+accept an `If-Match` request header — `update_post`/`delete_post` translate
+a stale etag into a 412, a missing document (when `If-Match` was sent) into
+409. `get_api_router()`/`add_editor_to_app()` gained `require_if_match:
+bool = False`: when `True`, update/delete need the header or get a 428.
+
+**Two `MarkdownPost` implementations, down to one.** `admin/markdown_model.py`
+(a second, independent `MarkdownPost`/file-reading implementation, used only
+as `HomeView`'s fallback when no custom schema was given) is deleted.
+`HomeView` now always goes through `load_posts_for_home` (which itself goes
+through `MarkdownFileManager`/`DocumentStore`), passing `DEFAULT_SCHEMA` when
+the caller didn't set one.
+
+**`posts_dirname` now actually reaches the admin panel.** It didn't before:
+`setup_fastapi_blog(posts_dirname=...)`/`add_blog_to_fastapi` passed it to
+the blog and REST API, but the admin panel read posts via
+`markdown_crud.get_posts_directory()` alone — a `POSTS_DIR` environment
+variable or a cwd-based guess, completely independent of whatever
+`posts_dirname` the blog used. A caller that set `posts_dirname` to anything
+other than the default `'posts'` got a blog and an admin panel silently
+looking at two different directories. `add_admin_to_app()` and
+`HomeView`/`_create_admin_for_locale` now take `posts_dirname` too, and
+`setup_fastapi_blog` passes it through to both. `get_posts_directory()`
+still falls back to `POSTS_DIR`/a cwd guess when no `posts_dirname` is
+given, but using the environment variable now raises `DeprecationWarning`.
+
+Not done: 4.6's nested collections (`depth > 0`, `{dirname}`/`{filename}`
+slug template tags — the latter also needs 6.4, not started) and the
+`posts_dirname`/`pages_dirname` → two-`Collection` sugar layer. The public
+blog/REST API/admin surface still takes `posts_dirname: str` rather than a
+`Collection`.
+
+### Document storage: `on_create` and `read_only` fields (TODO 4.5)
+
+`FieldSpec` gained `on_create` (`'today' | 'now' | 'uuid'`, with an optional
+`on_create_prefix` for `'uuid'`) and `read_only`. A field with `on_create`
+must not also be `required` (it fills a value only when one was left unset,
+which a required field can never be); `'today'`/`'now'`/`'uuid'` each need a
+matching field type (`date`/`datetime`/`str`).
+
+`FrontmatterSchema.dump_for_write(instance, *, is_create, existing=None)`
+applies both at the one place that matters — the moment a document is
+written — using `instance.model_fields_set` to tell "left unset" apart from
+"explicitly sent": on create, it fills every unset `on_create` field once;
+on update, it rejects (`ValueError`) a `read_only` field whose new value
+differs from `existing`'s. The REST API (`editor.py`'s `create_post`,
+`update_post` and the deprecated `/save` route) now calls it instead of
+`schema.dump`, turning that `ValueError` into an HTTP 400.
+
+Not done: the admin panel's own save path (`markdown_crud.py`) doesn't go
+through `FrontmatterSchema` validation at all yet (see 4.1/4.6 — unifying
+the two `MarkdownPost` implementations on one `DocumentStore`), so these two
+options only take effect through the REST API for now. Key-order and
+unknown-key preservation on rewrite (the rest of 4.5) needs a merge-into-
+existing-dict write path rather than a full Pydantic round-trip, which is
+really 4.1's `DocumentStore` territory — deferred there rather than bolted
+on here.
+
 ### Admin UI: one theme/language switcher everywhere
 
 The dependency upgrade (below) left the admin inconsistent: the built-in

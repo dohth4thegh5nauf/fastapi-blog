@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import pathlib
 import re
+import warnings
 from types import SimpleNamespace
 
 import jinja2
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import fastapi_blog
+import fastapi_blog.admin as fastapi_blog_admin
 from fastapi_blog import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema, helpers
 from fastapi_blog.admin.form_fields import build_form_fields, form_fields_meta
 from fastapi_blog.admin.markdown_crud import (
@@ -20,6 +22,7 @@ from fastapi_blog.admin.markdown_crud import (
   MarkdownFileManager,
   MarkdownListView,
   MarkdownPost,
+  get_posts_directory,
 )
 from fastapi_blog.admin.views import load_posts_for_home
 
@@ -412,3 +415,112 @@ def test_setup_fastapi_blog_applies_the_schema_everywhere(workdir):
   created = client.post('/api/posts/create/hello', json=payload, auth=auth)
   assert created.status_code == 201
   assert 'Hello' in client.get('/blog/posts').text
+
+
+def test_setup_fastapi_blog_threads_posts_dirname_to_add_admin(monkeypatch):
+  """`setup_fastapi_blog(posts_dirname=...)` must pass it on to `add_admin_to_app`.
+
+  It used to be dropped: the admin panel read posts via
+  `get_posts_directory()` alone (a `POSTS_DIR` env var or a cwd-based
+  guess), so it could silently point at a different directory than
+  `setup_fastapi_blog(posts_dirname=...)` configured for the blog/REST API.
+  """
+  captured = {}
+  real_add_admin = fastapi_blog_admin.add_admin_to_app
+
+  def spy(*args, **kwargs):
+    captured.update(kwargs)
+    return real_add_admin(*args, **kwargs)
+
+  monkeypatch.setattr(fastapi_blog_admin, 'add_admin_to_app', spy)
+  monkeypatch.setattr(fastapi_blog, '_import_admin', lambda: fastapi_blog_admin)
+
+  fastapi_blog.setup_fastapi_blog(
+    FastAPI(),
+    posts_dirname='content',
+    admin_username='admin',
+    admin_password='Admin123!',
+    secret_key='a' * 64,
+  )
+  assert captured['posts_dirname'] == 'content'
+
+
+def test_admin_panel_reads_posts_from_posts_dirname(tmp_path, monkeypatch):
+  """A post created via the REST API shows up on the admin Home page.
+
+  End to end, when both are configured with the same explicit
+  `posts_dirname`.
+  """
+  monkeypatch.chdir(tmp_path)
+  monkeypatch.delenv('POSTS_DIR', raising=False)
+  content_dir = tmp_path / 'content'
+  content_dir.mkdir()
+  helpers.list_posts.cache_clear()
+
+  app = FastAPI()
+  fastapi_blog_admin.add_admin_to_app(
+    app,
+    database_url='sqlite+aiosqlite:///:memory:',
+    admin_username='admin',
+    admin_password='Admin123!',
+    secret_key='a' * 64,
+    locales=['en'],
+    default_locale='en',
+    posts_dirname='content',
+  )
+  fastapi_blog.add_blog_to_fastapi(
+    app,
+    posts_dirname='content',
+    include_api=True,
+    admin_username='admin',
+    admin_password='Admin123!',
+  )
+
+  with TestClient(app) as client:
+    payload = {
+      'frontmatter': {
+        'title': 'In Content Dir',
+        'date': '2024-05-01',
+        'published': True,
+      },
+      'content': 'Body',
+    }
+    created = client.post(
+      '/api/posts/create/hello', json=payload, auth=('admin', 'Admin123!')
+    )
+    assert created.status_code == 201
+    assert (content_dir / 'hello.md').exists()
+
+    login_page = client.get('/admin/login')
+    token = re.search(
+      r'name="csrftoken" value="([^"]+)"', login_page.text
+    ).group(1)
+    client.post(
+      '/admin/login',
+      data={
+        'username': 'admin',
+        'password': 'Admin123!',
+        'csrftoken': token,
+      },
+    )
+    home = client.get('/admin/')
+    assert 'In Content Dir' in home.text
+
+  helpers.list_posts.cache_clear()
+
+
+def test_posts_dir_env_var_is_deprecated(tmp_path, monkeypatch):
+  monkeypatch.chdir(tmp_path)
+  monkeypatch.setenv('POSTS_DIR', str(tmp_path / 'env-posts'))
+  with pytest.warns(DeprecationWarning, match='POSTS_DIR'):
+    result = get_posts_directory()
+  assert result == str(tmp_path / 'env-posts')
+
+
+def test_posts_dirname_argument_skips_the_deprecation_warning(
+  tmp_path, monkeypatch
+):
+  monkeypatch.setenv('POSTS_DIR', str(tmp_path / 'env-posts'))
+  with warnings.catch_warnings():
+    warnings.simplefilter('error')
+    assert get_posts_directory('explicit-dir') == 'explicit-dir'

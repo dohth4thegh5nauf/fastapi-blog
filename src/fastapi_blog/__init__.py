@@ -136,4 +136,5 @@ def setup_fastapi_blog(
     secret_key=secret_key,
     enable_role_management=enable_role_management,
     frontmatter_schema=frontmatter_schema,
+    posts_dirname=posts_dirname,
   )

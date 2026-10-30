@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
+from fastapi_blog.models import FieldSpec, FrontmatterSchema
 
 
 @pytest.fixture
@@ -324,3 +325,200 @@ def test_ui_routes_require_auth(auth_client, app_dir):
   for route in ui_routes:
     response = auth_client.get(route)
     assert response.status_code == 401, f'Route {route} should require auth'
+
+
+# --- etag / If-Match concurrency via the REST API (TODO 4.7) ----------------
+
+
+def test_get_raw_returns_an_etag_header(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  response = client.get('/api/posts/hello-world/raw')
+  assert response.status_code == 200
+  assert response.headers['etag']
+
+
+def test_create_returns_an_etag_header(client, app_dir):
+  response = client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  assert response.status_code == 201
+  assert response.headers['etag']
+
+
+def test_update_without_if_match_succeeds_unconditionally(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  updated = {**VALID_PAYLOAD, 'content': 'New content'}
+  response = client.put('/api/posts/update/hello-world', json=updated)
+  assert response.status_code == 200
+
+
+def test_update_with_matching_if_match_succeeds(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  etag = client.get('/api/posts/hello-world/raw').headers['etag']
+  updated = {**VALID_PAYLOAD, 'content': 'New content'}
+  response = client.put(
+    '/api/posts/update/hello-world',
+    json=updated,
+    headers={'If-Match': etag},
+  )
+  assert response.status_code == 200
+  assert response.headers['etag'] != etag
+
+
+def test_update_with_stale_if_match_is_rejected(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  stale_etag = client.get('/api/posts/hello-world/raw').headers['etag']
+  # A concurrent writer moves the post on.
+  client.put(
+    '/api/posts/update/hello-world',
+    json={**VALID_PAYLOAD, 'content': 'Someone else got here first'},
+  )
+  response = client.put(
+    '/api/posts/update/hello-world',
+    json={**VALID_PAYLOAD, 'content': 'My stale change'},
+    headers={'If-Match': stale_etag},
+  )
+  assert response.status_code == 412
+
+
+def test_delete_with_stale_if_match_is_rejected(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  stale_etag = client.get('/api/posts/hello-world/raw').headers['etag']
+  client.put(
+    '/api/posts/update/hello-world',
+    json={**VALID_PAYLOAD, 'content': 'Changed'},
+  )
+  response = client.delete(
+    '/api/posts/delete/hello-world', headers={'If-Match': stale_etag}
+  )
+  assert response.status_code == 412
+  assert client.get('/api/posts/hello-world/raw').status_code == 200
+
+
+def test_delete_with_matching_if_match_succeeds(client, app_dir):
+  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
+  etag = client.get('/api/posts/hello-world/raw').headers['etag']
+  response = client.delete(
+    '/api/posts/delete/hello-world', headers={'If-Match': etag}
+  )
+  assert response.status_code == 204
+
+
+@pytest.fixture
+def require_if_match_client(app_dir):
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, require_if_match=True
+  )
+  return TestClient(app)
+
+
+def test_require_if_match_rejects_update_without_the_header(
+  require_if_match_client,
+):
+  require_if_match_client.post(
+    '/api/posts/create/hello-world', json=VALID_PAYLOAD
+  )
+  response = require_if_match_client.put(
+    '/api/posts/update/hello-world',
+    json={**VALID_PAYLOAD, 'content': 'New'},
+  )
+  assert response.status_code == 428
+
+
+def test_require_if_match_rejects_delete_without_the_header(
+  require_if_match_client,
+):
+  require_if_match_client.post(
+    '/api/posts/create/hello-world', json=VALID_PAYLOAD
+  )
+  response = require_if_match_client.delete('/api/posts/delete/hello-world')
+  assert response.status_code == 428
+
+
+def test_require_if_match_accepts_update_with_the_header(
+  require_if_match_client,
+):
+  require_if_match_client.post(
+    '/api/posts/create/hello-world', json=VALID_PAYLOAD
+  )
+  etag = require_if_match_client.get('/api/posts/hello-world/raw').headers[
+    'etag'
+  ]
+  response = require_if_match_client.put(
+    '/api/posts/update/hello-world',
+    json={**VALID_PAYLOAD, 'content': 'New'},
+    headers={'If-Match': etag},
+  )
+  assert response.status_code == 200
+
+
+# --- on_create / read_only via the REST API (TODO 4.5) ----------------------
+
+ID_SCHEMA = FrontmatterSchema(
+  fields=(
+    FieldSpec('title', required=True, role='title'),
+    FieldSpec(
+      'doc_id', alias='@id', type='str', on_create='uuid', read_only=True
+    ),
+  ),
+  extra='allow',
+)
+
+
+@pytest.fixture
+def id_client(app_dir):
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, frontmatter_schema=ID_SCHEMA
+  )
+  return TestClient(app)
+
+
+def test_on_create_fills_unset_field_on_create(id_client):
+  response = id_client.post(
+    '/api/posts/create/with-id',
+    json={'frontmatter': {'title': 'Hi'}, 'content': 'Body'},
+  )
+  assert response.status_code == 201
+
+  raw = id_client.get('/api/posts/with-id/raw').json()
+  assert raw['frontmatter']['@id']
+
+
+def test_read_only_field_is_stable_across_updates(id_client):
+  create = id_client.post(
+    '/api/posts/create/with-id',
+    json={'frontmatter': {'title': 'Hi'}, 'content': 'Body'},
+  )
+  doc_id = id_client.get('/api/posts/with-id/raw').json()['frontmatter']['@id']
+
+  # Sending back the same id (a full-replace payload naturally would) works.
+  ok = id_client.put(
+    '/api/posts/update/with-id',
+    json={
+      'frontmatter': {'title': 'Hi 2', '@id': doc_id},
+      'content': 'Body 2',
+    },
+  )
+  assert ok.status_code == 200
+  assert (
+    id_client.get('/api/posts/with-id/raw').json()['frontmatter']['@id']
+    == doc_id
+  )
+
+  # Trying to change it is rejected.
+  rejected = id_client.put(
+    '/api/posts/update/with-id',
+    json={
+      'frontmatter': {'title': 'Hi 3', '@id': 'something-else'},
+      'content': 'Body 3',
+    },
+  )
+  assert rejected.status_code == 400
+  assert 'read-only' in rejected.json()['detail']
+  assert (
+    id_client.get('/api/posts/with-id/raw').json()['frontmatter']['@id']
+    == doc_id
+  )
+  assert create.status_code == 201  # sanity: the fixture create did succeed

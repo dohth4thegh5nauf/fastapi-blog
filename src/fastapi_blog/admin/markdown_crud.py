@@ -1,6 +1,7 @@
 """CRUD operations for markdown files using starlette-admin CustomView."""
 
 import os
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,15 +26,31 @@ def _(message: str) -> str:
   return message
 
 
-def get_posts_directory() -> str:
-  """Get posts directory from environment or default location.
+def get_posts_directory(posts_dirname: str | None = None) -> str:
+  """Get the posts directory: `posts_dirname`, else `POSTS_DIR`, else a guess.
+
+  Args:
+    posts_dirname: The directory to use, normally the same `posts_dirname`
+      passed to `setup_fastapi_blog`/`add_blog_to_fastapi`, so the admin
+      panel and the blog/REST API always agree on where posts live.
 
   Returns:
     Path to posts directory as string
 
   """
+  if posts_dirname is not None:
+    return posts_dirname
+
   posts_dir_env = os.getenv('POSTS_DIR')
   if posts_dir_env:
+    warnings.warn(
+      'The POSTS_DIR environment variable is deprecated (TODO.md, 4.6): '
+      "pass posts_dirname='...' to setup_fastapi_blog()/add_admin_to_app() "
+      'instead, so the admin panel and the blog/REST API always agree on '
+      'where posts live.',
+      DeprecationWarning,
+      stacklevel=2,
+    )
     return posts_dir_env
 
   # Try to find posts directory relative to the app
@@ -73,26 +90,33 @@ class MarkdownPost:
 
 
 class MarkdownFileManager:
-  """Manager for reading/writing markdown files."""
+  """Manager for reading/writing markdown files, backed by a `DocumentStore`.
+
+  The one place the admin panel turns a slug into a file (see TODO 4.1):
+  everything here goes through `self.store` rather than building paths by
+  hand, so slug/path safety is enforced in exactly one place.
+  """
 
   def __init__(
     self, posts_dir: str = 'posts', schema: FrontmatterSchema | None = None
   ):
     """Initialize file manager with posts directory and frontmatter schema."""
     self.posts_dir = Path(posts_dir)
-    self.posts_dir.mkdir(exist_ok=True)
     self.schema = schema
+    self.store = store.DocumentStore(
+      store.Collection('posts', self.posts_dir, slug_pattern=SLUG_RE)
+    )
 
   def list_posts(self) -> list[MarkdownPost]:
     """List all markdown posts."""
     posts = []
-    for file_path in self.posts_dir.glob('*.md'):
+    for slug in self.store.list():
       try:
-        post = self.load_post(file_path.stem)
+        post = self.load_post(slug)
         if post:
           posts.append(post)
       except Exception as e:
-        print(f'Error loading {file_path}: {e}')
+        print(f'Error loading {slug}: {e}')
 
     # Sort by date descending (handle both datetime and string)
     def get_sort_key(p):
@@ -109,42 +133,38 @@ class MarkdownFileManager:
   def load_post(self, slug: str) -> MarkdownPost | None:
     """Load a single post by slug."""
     try:
-      file_path = store.safe_document_path(
-        self.posts_dir, slug, pattern=SLUG_RE
-      )
-    except ValueError:
+      record = self.store.read(slug)
+    except FileNotFoundError:
       return None
-    if not file_path.exists():
-      return None
-
-    try:
-      frontmatter, body = store.read_document(file_path)
     except ValueError as e:
+      # Invalid slug: no such post. Malformed YAML frontmatter on an
+      # otherwise valid file: degrade gracefully (one broken post shouldn't
+      # break the whole admin listing) by treating the file as plain body.
+      path = self.store.path_for(slug) if SLUG_RE.fullmatch(slug) else None
+      if path is None:
+        return None
       print(f'Error parsing frontmatter for {slug}: {e}')
-      frontmatter, body = {}, file_path.read_text(encoding='utf-8')
-    body = body.strip()
+      frontmatter: dict[str, Any] = {}
+      body = path.read_text(encoding='utf-8')
+      return MarkdownPost(slug, frontmatter, body.strip(), self.schema)
 
-    return MarkdownPost(slug, frontmatter, body, self.schema)
+    return MarkdownPost(
+      slug, record.frontmatter, record.body.strip(), self.schema
+    )
 
   def save_post(
     self, slug: str, frontmatter: dict[str, Any], content: str
   ) -> None:
     """Save a post to file."""
-    file_path = store.safe_document_path(self.posts_dir, slug, pattern=SLUG_RE)
-    store.write_document(file_path, frontmatter, f'\n{content}')
+    self.store.write(slug, frontmatter, f'\n{content}')
 
   def delete_post(self, slug: str) -> bool:
     """Delete a post."""
     try:
-      file_path = store.safe_document_path(
-        self.posts_dir, slug, pattern=SLUG_RE
-      )
-    except ValueError:
+      self.store.delete(slug)
+    except (ValueError, FileNotFoundError):
       return False
-    if file_path.exists():
-      file_path.unlink()
-      return True
-    return False
+    return True
 
 
 class MarkdownListView(CustomView):
