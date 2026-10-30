@@ -81,6 +81,23 @@ def test_home_and_markdown_pages_dont_double_wrap_the_container():
   assert edit_content.count('container-fluid') == 1
 
 
+def test_home_page_header_matches_the_plain_h1_pattern():
+  """home.html's header block must match every other page's structure.
+
+  It used to wrap an `<h2 class="page-title">` in a `.row.g-2` grid, while
+  every other page (the stock `@starlette-admin/list.html` for Users/Roles,
+  and this project's own markdown_list.html/markdown_edit.html) uses a
+  plain `<h1>` directly inside the `.d-flex` header. The row/col wrapper
+  rendered a shorter `.page-header`, which pushed Home's content a few
+  pixels higher than every other page's — not visible at a glance, only as
+  a slight vertical misalignment when switching between pages.
+  """
+  content = _read('home.html')
+  assert '<h1>{{ t.title }}</h1>' in content
+  assert 'page-title' not in content
+  assert 'row g-2' not in content
+
+
 def test_no_project_login_override():
   """There is no project override of login.html any more.
 

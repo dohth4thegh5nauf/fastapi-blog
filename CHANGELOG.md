@@ -89,6 +89,16 @@ pages at all.
   (`scrollbar-gutter: stable` on `:root`), so every page's content width,
   and therefore its container's position, is identical regardless of
   whether that particular page needs to scroll
+- `home.html`'s header block wrapped an `<h2 class="page-title">` in its
+  own `.row.g-2` grid, instead of the plain `<h1>` every other page uses
+  (both the stock `@starlette-admin/list.html` and this project's own
+  `markdown_list.html`/`markdown_edit.html`). That rendered a shorter
+  `.page-header`, so Home's content started a few pixels higher than every
+  other page's — fixed by matching the same plain-`<h1>` structure
+- Fixed a pre-existing, unrelated bug surfaced while fixing the above: the
+  header used `{{ t.home }}` for the page title, but the YAML translations
+  only define `home.title` (not `home.home`) — the heading and active
+  breadcrumb item had silently been rendering empty on every locale
 
 ### Dependency upgrade
 
