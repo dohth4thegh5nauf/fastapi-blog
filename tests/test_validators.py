@@ -337,7 +337,6 @@ def test_ok_validator_lets_writes_through(tmp_path, checked_client):
   assert (tmp_path / 'posts' / 'note.md').exists()
 
 
-
 def test_validator_uses_shared_template_filters():
   validator = Validator(
     name='example',

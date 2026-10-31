@@ -107,8 +107,8 @@ class MarkdownFileManager:
     """Initialize file manager with posts directory and frontmatter schema."""
     self.posts_dir = Path(posts_dir)
     self.collection_spec = collection_spec
-    self.schema = (
-      schema or (collection_spec.schema if collection_spec else None)
+    self.schema = schema or (
+      collection_spec.schema if collection_spec else None
     )
     self.store = store.DocumentStore(
       collection_spec.to_collection()

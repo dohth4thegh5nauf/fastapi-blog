@@ -266,9 +266,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
     print(f'error: {exc}', file=sys.stderr)
     return EXIT_USAGE_ERROR
   project = config.find_project()
-  all_collections = project.collections if project is not None else {
-    spec.name: spec for spec in specs
-  }
+  all_collections = (
+    project.collections
+    if project is not None
+    else {spec.name: spec for spec in specs}
+  )
   reports = [
     checks.check_collection(spec, root=root, collections=all_collections)
     for spec in specs

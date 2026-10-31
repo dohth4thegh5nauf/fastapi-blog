@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Review fixes: collection flags, rollback and docs (TODO 4.6/6.3/6.4)
+
+- The project file accepts `create: false` and `delete: false` per
+  collection (TODO 4.6); they reach `store.Collection` through
+  `CollectionSpec`, so the storage layer, the REST API and the admin panel
+  enforce them together. The REST API maps the refusal to HTTP 403 instead
+  of an unhandled 500.
+- Rolling back a just-created document no longer goes through the
+  user-facing delete: a collection with `delete: false` combined with a
+  blocking validator now returns HTTP 422 with the file removed, instead of
+  crashing on the delete refusal (TODO 6.3).
+- `docs/PROJECT_FILE.md` documented the landed `slug`/`slug_template`/
+  `unique`/`summary`/`check` options and the `create`/`delete` flags; the
+  stale note promising them "when they land" is removed.
+
 ### Collection change notifications (TODO 6.5)
 
 - Added immutable `store.ChangeEvent` records with `kind`, `collection`,

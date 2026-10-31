@@ -163,14 +163,15 @@ def test_check_runs_the_validators_of_the_spec(tmp_path):
   assert checks.exit_code([report]) == checks.EXIT_FINDINGS
 
 
-
 def test_check_reports_duplicate_unique_fields_and_sequence(tmp_path):
   spec = _spec(tmp_path, TITLE_SCHEMA)
   spec = CollectionSpec(
     name=spec.name,
     dir=spec.dir,
     schema=TITLE_SCHEMA,
-    slug_template=__import__('fastapi_blog.templates', fromlist=['parse_template']).parse_template(
+    slug_template=__import__(
+      'fastapi_blog.templates', fromlist=['parse_template']
+    ).parse_template(
       '{seq|pad(4)}-{title_slug}',
       ('seq', 'title_slug'),
       {'title'},
@@ -180,4 +181,7 @@ def test_check_reports_duplicate_unique_fields_and_sequence(tmp_path):
   _write(spec.dir, '0001-a', '---\ntitle: Same\n---\n')
   _write(spec.dir, '0001-b', '---\ntitle: Same\n---\n')
   report = checks.check_collection(spec, root=tmp_path)
-  assert len([issue for issue in report.issues if issue.code == 'unique.duplicate']) == 2
+  assert (
+    len([issue for issue in report.issues if issue.code == 'unique.duplicate'])
+    == 2
+  )

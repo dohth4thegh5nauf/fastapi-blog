@@ -302,7 +302,7 @@ Applications can opt into the same collection behavior explicitly:
 ```python
 from fastapi_blog import load_project, setup_fastapi_blog
 
-posts = load_project("fastapi_blog.yaml").collections["posts"]
+posts = load_project('fastapi_blog.yaml').collections['posts']
 setup_fastapi_blog(app, collection_spec=posts, include_api=True)
 ```
 

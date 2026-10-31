@@ -268,13 +268,13 @@ from fastapi import FastAPI
 from fastapi_blog import load_project, setup_fastapi_blog
 
 app = FastAPI()
-posts = load_project("fastapi_blog.yaml").collections["posts"]
+posts = load_project('fastapi_blog.yaml').collections['posts']
 
 setup_fastapi_blog(
-    app,
-    collection_spec=posts,
-    include_api=True,
-    admin=True,
+  app,
+  collection_spec=posts,
+  include_api=True,
+  admin=True,
 )
 ```
 

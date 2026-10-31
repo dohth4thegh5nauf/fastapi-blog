@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 
 import yaml
 
-from ..templates import SERVICE_TAGS, parse_template
+from ..templates import parse_template
 
 
 if TYPE_CHECKING:
@@ -835,7 +835,18 @@ class FrontmatterSchema:
       try:
         parse_template(
           self.jsonld.id_template,
-          ('base', 'collection', 'slug', 'title_slug', 'seq', 'year', 'month', 'day', 'dirname', 'filename'),
+          (
+            'base',
+            'collection',
+            'slug',
+            'title_slug',
+            'seq',
+            'year',
+            'month',
+            'day',
+            'dirname',
+            'filename',
+          ),
           {spec.name for spec in self.fields},
         )
       except ValueError as exc:

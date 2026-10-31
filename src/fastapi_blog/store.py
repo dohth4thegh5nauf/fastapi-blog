@@ -22,8 +22,8 @@ import os
 import re
 import tempfile
 import threading
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
 
 import yaml
@@ -481,6 +481,9 @@ class DocumentStore:
             document's current etag (from a prior `read`); pass the literal
             etag of a document you know doesn't exist yet to require that it
             still doesn't.
+        user: Optional actor recorded on the change notification.
+        notify: When False, skip the `on_change` notification (used by outer
+            operations that notify once for the whole write).
 
     Raises:
         InvalidSlugError: `slug` is invalid or escapes the collection
@@ -500,9 +503,7 @@ class DocumentStore:
           raise ConflictError(
             f'document {slug!r} does not exist', status_code=409
           )
-        current_etag = compute_etag(
-          existing_path.read_text(encoding='utf-8')
-        )
+        current_etag = compute_etag(existing_path.read_text(encoding='utf-8'))
         if if_match != current_etag:
           raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
       if existing_path is None and not self.collection.create:
@@ -585,6 +586,8 @@ class DocumentStore:
         slug: Document slug.
         if_match: When given, the delete only proceeds if it equals the
             document's current etag.
+        user: Optional actor recorded on the change notification.
+        notify: When False, skip the `on_change` notification.
 
     Raises:
         InvalidSlugError: `slug` is invalid.

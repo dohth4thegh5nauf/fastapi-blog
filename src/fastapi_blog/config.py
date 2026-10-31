@@ -37,8 +37,8 @@ from .templates import (
   SUMMARY_TAGS,
   SlugOptions,
   Template,
-  parse_template,
   build_slug,
+  parse_template,
 )
 from .validators import Validator
 
@@ -50,6 +50,8 @@ _COLLECTION_KEYS = {
   'schema',
   'slug_pattern',
   'extension',
+  'create',
+  'delete',
   'validators',
   'slug',
   'slug_template',
@@ -73,6 +75,8 @@ class CollectionSpec:
       schema: Frontmatter schema the documents must match, if any.
       slug_pattern: `slug_pattern` of the underlying `store.Collection`.
       extension: `extension` of the underlying `store.Collection`.
+      create: When `False`, no new documents may be written (TODO 4.6).
+      delete: When `False`, documents may not be deleted (TODO 4.6).
       validators: External validators run by `check` (TODO 6.2).
       slug_options: How `{title_slug}` is made (the `slug` section, TODO 6.4).
       slug_template: Parsed `slug_template` (`templates.Template`), if any.
@@ -88,6 +92,8 @@ class CollectionSpec:
   schema: FrontmatterSchema | None = None
   slug_pattern: str | None = None
   extension: str | tuple[str, ...] | None = None
+  create: bool = True
+  delete: bool = True
   validators: tuple[Validator, ...] = ()
   slug_options: SlugOptions = dataclasses.field(default_factory=SlugOptions)
   slug_template: Template | None = None
@@ -112,7 +118,14 @@ class CollectionSpec:
       kwargs['slug_pattern'] = r'^[^/\\\x00-\x20]{1,200}$'
     if self.extension is not None:
       kwargs['extension'] = self.extension
-    return store.Collection(self.name, self.dir, on_change=self.on_change, **kwargs)
+    return store.Collection(
+      self.name,
+      self.dir,
+      on_change=self.on_change,
+      create=self.create,
+      delete=self.delete,
+      **kwargs,
+    )
 
   def make_slug(
     self,
@@ -124,19 +137,12 @@ class CollectionSpec:
   ) -> str:
     """Build a new slug once, using the configured role bindings/template."""
     if self.slug_template is None:
-      raise ConfigError(
-        f'Collection {self.name!r} has no `slug_template`'
-      )
+      raise ConfigError(f'Collection {self.name!r} has no `slug_template`')
     schema = self.schema or DEFAULT_SCHEMA
-    fields = {
-      field.name: frontmatter.get(field.key)
-      for field in schema.fields
-    }
+    fields = {field.name: frontmatter.get(field.key) for field in schema.fields}
     title_spec = schema.field_for_role('title')
     date_spec = schema.field_for_role('date')
-    title = (
-      frontmatter.get(title_spec.key, '') if title_spec else ''
-    )
+    title = frontmatter.get(title_spec.key, '') if title_spec else ''
     date_value = frontmatter.get(date_spec.key) if date_spec else None
     return build_slug(
       self.slug_template,
@@ -163,14 +169,9 @@ class CollectionSpec:
   ) -> tuple[str, str]:
     """Create a document using the configured slug template and sequence lock."""
     if self.slug_template is None:
-      raise ConfigError(
-        f'Collection {self.name!r} has no `slug_template`'
-      )
+      raise ConfigError(f'Collection {self.name!r} has no `slug_template`')
     schema = self.schema or DEFAULT_SCHEMA
-    fields = {
-      field.name: frontmatter.get(field.key)
-      for field in schema.fields
-    }
+    fields = {field.name: frontmatter.get(field.key) for field in schema.fields}
     title_spec = schema.field_for_role('title')
     date_spec = schema.field_for_role('date')
     title = frontmatter.get(title_spec.key, '') if title_spec else ''
@@ -190,19 +191,14 @@ class CollectionSpec:
       notify=notify,
     )
 
-  def summarize(
-    self, slug: str, frontmatter: Mapping[str, Any]
-  ) -> str:
+  def summarize(self, slug: str, frontmatter: Mapping[str, Any]) -> str:
     """Render the configured caption, or fall back to the title role."""
     schema = self.schema or DEFAULT_SCHEMA
     title_spec = schema.field_for_role('title')
     title = frontmatter.get(title_spec.key) if title_spec else None
     if self.summary is None:
       return str(title or slug)
-    fields = {
-      field.name: frontmatter.get(field.key)
-      for field in schema.fields
-    }
+    fields = {field.name: frontmatter.get(field.key) for field in schema.fields}
     result = self.summary.render(
       {
         'slug': slug,
@@ -255,6 +251,13 @@ def _collection_spec(
     raise ConfigError(
       f'`extension` of collection {name!r} must be a string or a list'
     )
+  for flag in ('create', 'delete'):
+    if flag in entry and not isinstance(entry[flag], bool):
+      raise ConfigError(
+        f'`{flag}` of collection {name!r} must be true or false'
+      )
+  create = entry.get('create', True)
+  delete = entry.get('delete', True)
   validators: tuple[Validator, ...] = ()
   if entry.get('validators'):
     try:
@@ -285,9 +288,7 @@ def _collection_spec(
   summary = None
   if entry.get('summary') is not None:
     try:
-      summary = parse_template(
-        str(entry['summary']), SUMMARY_TAGS, field_names
-      )
+      summary = parse_template(str(entry['summary']), SUMMARY_TAGS, field_names)
     except ValueError as exc:
       raise ConfigError(f'Collection {name!r}: {exc}') from exc
   check_options = entry.get('check', {})
@@ -300,15 +301,14 @@ def _collection_spec(
     raise ConfigError(
       f'Collection {name!r}: unknown check option(s) {unknown_checks}'
     )
+
   def _check_level(value: Any) -> str:
     # PyYAML's YAML 1.1 resolver treats the unquoted token `off` as False.
     return 'off' if value is False else str(value)
 
   check_links = _check_level(check_options.get('links', 'off'))
   check_files = _check_level(check_options.get('files', 'off'))
-  for check_name, level in (
-    ('links', check_links), ('files', check_files)
-  ):
+  for check_name, level in (('links', check_links), ('files', check_files)):
     if level not in ('off', 'warn', 'error'):
       raise ConfigError(
         f'Collection {name!r}: `check.{check_name}` must be off, warn or error'
@@ -344,6 +344,8 @@ def _collection_spec(
     extension=tuple(str(item) for item in extension)
     if isinstance(extension, (list, tuple))
     else extension,
+    create=create,
+    delete=delete,
     validators=validators,
     slug_options=slug_options,
     slug_template=slug_template,
@@ -407,7 +409,8 @@ def load_project(path: str | pathlib.Path) -> Project:
         if target_field is None and target.schema:
           target_field = next(
             (
-              item for item in target.schema.fields
+              item
+              for item in target.schema.fields
               if item.key == field.value_field
             ),
             None,

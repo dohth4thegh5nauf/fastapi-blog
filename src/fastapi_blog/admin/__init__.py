@@ -117,6 +117,8 @@ def _create_admin_for_locale(
           `setup_fastapi_blog`/`add_blog_to_fastapi`); falls back to
           `POSTS_DIR`/a cwd-based guess when not given (see
           `markdown_crud.get_posts_directory`)
+      collection_spec: Project-file collection spec; takes precedence over
+          `posts_dirname`/`frontmatter_schema` for the managed collection
 
   Returns:
       Configured Admin instance
@@ -291,6 +293,8 @@ def add_admin_to_app(
       given to `setup_fastapi_blog`/`add_blog_to_fastapi` so the admin panel
       and the blog/REST API always agree on where posts live (default:
       `POSTS_DIR`, deprecated, or a cwd-based guess).
+    collection_spec: Project-file collection spec; takes precedence over
+      `posts_dirname`/`frontmatter_schema` for the managed collection
 
   Returns:
     Dictionary mapping locale codes to Admin instances

@@ -118,7 +118,6 @@ def test_collection_spec_carries_an_inline_schema():
   assert spec.schema is schema
 
 
-
 def test_slug_template_and_unique_seq_are_loaded(project_dir):
   (project_dir / 'posts').mkdir()
   (project_dir / 'schema.yaml').write_text(
@@ -129,9 +128,11 @@ def test_slug_template_and_unique_seq_are_loaded(project_dir):
     'collections:\n  posts:\n    dir: posts\n    schema: schema.yaml\n'
     '    slug_template: "{seq|pad(4)}-{title_slug}"\n'
     '    unique: [seq]\n'
-    '    summary: "{title}"\n'
+    '    summary: "{title}"\n',
   )
-  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'posts'
+  ]
   assert spec.slug_template is not None
   assert spec.unique == ('seq',)
   assert spec.make_slug({'title': 'Hello World'}, []) == '0001-hello-world'
@@ -143,7 +144,9 @@ def test_slug_template_and_unique_seq_are_loaded(project_dir):
   assert spec.summarize('0001-hello-world', {'title': 'Hello'}) == 'Hello'
 
 
-def test_default_schema_fields_are_available_to_collection_templates(project_dir):
+def test_default_schema_fields_are_available_to_collection_templates(
+  project_dir,
+):
   (project_dir / 'posts').mkdir()
   _write(
     project_dir,
@@ -151,7 +154,9 @@ def test_default_schema_fields_are_available_to_collection_templates(project_dir
     '    slug_template: "{year}-{title_slug}"\n'
     '    summary: "{title}"\n',
   )
-  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'posts'
+  ]
   assert spec.slug_template is not None
   assert spec.summarize('2026-hello', {'title': 'Hello'}) == 'Hello'
 
@@ -163,10 +168,10 @@ def test_collection_slug_uses_first_save_utc_when_date_is_missing(project_dir):
     'collections:\n  posts:\n    dir: posts\n'
     '    slug_template: "{year}-{month}-{day}-{title_slug}"\n',
   )
-  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
-  created_at = datetime.datetime(
-    2024, 2, 3, 23, 30, tzinfo=datetime.timezone.utc
-  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'posts'
+  ]
+  created_at = datetime.datetime(2024, 2, 3, 23, 30, tzinfo=datetime.UTC)
   store = config.store.DocumentStore(spec.to_collection())
   slug, _etag = spec.create_document(
     store, {'title': 'Hello'}, 'Body', created_at=created_at
@@ -178,7 +183,33 @@ def test_unique_seq_requires_sequence_tag(project_dir):
   _write(
     project_dir,
     'collections:\n  posts:\n    dir: posts\n'
-    '    slug_template: "{title_slug}"\n    unique: [seq]\n'
+    '    slug_template: "{title_slug}"\n    unique: [seq]\n',
   )
   with pytest.raises(config.ConfigError, match='slug_template'):
+    config.load_project(project_dir / 'fastapi_blog.yaml')
+
+
+def test_load_project_reads_create_and_delete_flags(project_dir):
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'pages').mkdir()
+  _write(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n    create: false\n'
+    '  pages:\n    dir: pages\n    delete: false\n',
+  )
+  project = config.load_project(project_dir / 'fastapi_blog.yaml')
+  posts = project.collections['posts'].to_collection()
+  pages = project.collections['pages'].to_collection()
+  assert posts.create is False
+  assert posts.delete is True
+  assert pages.create is True
+  assert pages.delete is False
+
+
+def test_load_project_rejects_non_boolean_create_delete(project_dir):
+  _write(
+    project_dir,
+    "collections:\n  posts:\n    dir: posts\n    create: 'sometimes'\n",
+  )
+  with pytest.raises(config.ConfigError, match='`create`'):
     config.load_project(project_dir / 'fastapi_blog.yaml')

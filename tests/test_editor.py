@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import FastAPI
@@ -149,8 +149,8 @@ def test_generated_slug_uses_utc_first_save_when_date_is_empty(
   class FrozenDateTime:
     @staticmethod
     def now(tz):
-      assert tz is timezone.utc
-      return datetime(2024, 2, 3, 23, 30, tzinfo=timezone.utc)
+      assert tz is UTC
+      return datetime(2024, 2, 3, 23, 30, tzinfo=UTC)
 
   monkeypatch.setattr(editor, 'datetime', FrozenDateTime)
   schema = FrontmatterSchema(
@@ -167,9 +167,7 @@ def test_generated_slug_uses_utc_first_save_when_date_is_empty(
     ),
   )
   app = FastAPI()
-  app = add_blog_to_fastapi(
-    app, prefix='blog', frontmatter_schema=schema
-  )
+  app = add_blog_to_fastapi(app, prefix='blog', frontmatter_schema=schema)
   app = add_editor_to_app(
     app,
     ui=False,
@@ -717,7 +715,9 @@ def test_read_only_field_is_stable_across_updates(id_client):
   assert create.status_code == 201  # sanity: the fixture create did succeed
 
 
-def test_api_on_change_receives_successful_events_and_authenticated_actor(app_dir):
+def test_api_on_change_receives_successful_events_and_authenticated_actor(
+  app_dir,
+):
   events = []
   spec = CollectionSpec(
     name='posts', dir=app_dir / 'posts', on_change=events.append
@@ -756,3 +756,104 @@ def test_api_on_change_receives_successful_events_and_authenticated_actor(app_di
   assert events[1].etag == updated.headers['etag']
   assert events[2].etag is None
   assert all(event.user == 'api-editor' for event in events)
+
+
+def test_rollback_removes_created_file_when_deletes_are_disabled(app_dir):
+  """A blocking validator must roll back even on a delete: false collection."""
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    delete=False,
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title', 'date', 'published', 'tags', 'description'},
+    ),
+    validators=(
+      Validator.from_dict(
+        {
+          'name': 'reject',
+          'argv': [sys.executable, '-c', 'import sys; sys.exit(1)'],
+          'blocking': ['error'],
+        }
+      ),
+    ),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/create',
+    json={
+      'frontmatter': {
+        'title': 'Rejected Generated',
+        'date': '2026-10-31',
+        'published': True,
+        'tags': [],
+        'description': '',
+      },
+      'content': 'Body',
+    },
+  )
+
+  assert response.status_code == 422
+  assert not (app_dir / 'posts' / '0001-rejected-generated.md').exists()
+
+
+def test_create_and_delete_respect_collection_flags(app_dir):
+  """create: false and delete: false refuse the operation with HTTP 403."""
+  create_spec = CollectionSpec(
+    name='posts', dir=app_dir / 'posts', create=False
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=create_spec
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/save',
+    json={
+      'slug': 'nope',
+      'frontmatter': {
+        'title': 'Nope',
+        'date': '2026-10-31',
+        'published': True,
+        'tags': [],
+        'description': '',
+      },
+      'content': 'Body',
+    },
+  )
+  assert response.status_code == 403
+  assert not list((app_dir / 'posts').iterdir())
+
+  delete_spec = CollectionSpec(
+    name='posts', dir=app_dir / 'posts', delete=False
+  )
+  app2 = FastAPI()
+  app2 = add_editor_to_app(
+    app2, ui=False, require_auth=False, collection_spec=delete_spec
+  )
+  client2 = TestClient(app2)
+  response = client2.post(
+    '/api/posts/save',
+    json={
+      'slug': 'keep-me',
+      'frontmatter': {
+        'title': 'Keep Me',
+        'date': '2026-10-31',
+        'published': True,
+        'tags': [],
+        'description': '',
+      },
+      'content': 'Body',
+    },
+  )
+  assert response.status_code == 201
+  response = client2.delete('/api/posts/delete/keep-me')
+  assert response.status_code == 403
+  assert (app_dir / 'posts' / 'keep-me.md').exists()

@@ -73,6 +73,7 @@ class SlugOptions:
           `a-z` and `0-9`.
       clean_accents: Turn `é` into `e` before anything else.
       sanitize_replacement: What replaces every run of other characters.
+
   """
 
   encoding: str = 'unicode'
@@ -250,6 +251,7 @@ class Template:
       source: The template text.
       tags: The service tags used (`fields` stands for any field).
       fields: Names of the frontmatter fields used.
+
   """
 
   source: str
@@ -280,6 +282,7 @@ class Template:
 
     A missing value renders as an empty string (use `default(x)` to change
     that); nothing is evaluated.
+
     """
     fields = fields or {}
     out: list[str] = []
@@ -287,9 +290,10 @@ class Template:
       if isinstance(part, str):
         out.append(part)
         continue
-      value = (
-        fields.get(part.field) if part.tag == 'fields' else tags.get(part.tag)
-      )
+      if part.tag == 'fields':
+        value = fields.get(part.field) if part.field is not None else None
+      else:
+        value = tags.get(part.tag)
       for name, arg in part.filters:
         value = _apply_filter(name, arg, value)
       out.append(_format_value(value))
@@ -318,9 +322,7 @@ class Template:
         pattern += rf'(?P<seq>\d{{{width},}})'
       elif part.tag == 'title_slug':
         if 'title_slug' in captured:
-          raise ValueError(
-            'slug_template may contain {title_slug} only once'
-          )
+          raise ValueError('slug_template may contain {title_slug} only once')
         captured.add('title_slug')
         pattern += r'(?P<title_slug>[^/]+?)'
       elif part.tag in ('year', 'month', 'day'):
@@ -344,6 +346,7 @@ def parse_template(
 
   Raises:
       ValueError: If a tag or a filter is unknown, or a brace is stray.
+
   """
   if not isinstance(source, str):
     raise ValueError('a template must be a string')
@@ -394,11 +397,11 @@ def build_slug(
   schema has no date value. The caller must hold its collection's write lock
   while obtaining `existing_slugs` and persisting the returned slug.
   """
-  now = created_at or datetime.datetime.now(datetime.timezone.utc)
+  now = created_at or datetime.datetime.now(datetime.UTC)
   if now.tzinfo is None:
-    now = now.replace(tzinfo=datetime.timezone.utc)
+    now = now.replace(tzinfo=datetime.UTC)
   else:
-    now = now.astimezone(datetime.timezone.utc)
+    now = now.astimezone(datetime.UTC)
   moment = date_value or now
   if isinstance(moment, str):
     try:
@@ -407,11 +410,11 @@ def build_slug(
       moment = now
   if isinstance(moment, datetime.datetime):
     if moment.tzinfo is None:
-      moment = moment.replace(tzinfo=datetime.timezone.utc)
-    moment = moment.astimezone(datetime.timezone.utc)
+      moment = moment.replace(tzinfo=datetime.UTC)
+    moment = moment.astimezone(datetime.UTC)
   elif isinstance(moment, datetime.date):
     moment = datetime.datetime.combine(
-      moment, datetime.time(), tzinfo=datetime.timezone.utc
+      moment, datetime.time(), tzinfo=datetime.UTC
     )
   else:
     moment = now

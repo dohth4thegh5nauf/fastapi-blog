@@ -27,8 +27,8 @@ from fastapi_blog.admin.markdown_crud import (
 from fastapi_blog.admin.views import load_posts_for_home
 from fastapi_blog.config import CollectionSpec
 from fastapi_blog.templates import (
-  SUMMARY_TAGS,
   SLUG_TAGS_DEFAULT,
+  SUMMARY_TAGS,
   parse_template,
 )
 
@@ -155,7 +155,7 @@ def test_list_view_renders_collection_summary(posts_dir):
     MarkdownListView(posts_dir, 'en', EXTERNAL_SCHEMA, collection_spec=spec)
   )
   posts = {post['slug']: post for post in result['context']['posts']}
-  assert posts['a']['summary'] == 'Alpha — [\'x\', \'y\']'
+  assert posts['a']['summary'] == "Alpha — ['x', 'y']"
   assert posts['b']['summary'] == 'Beta — '
 
 
@@ -171,9 +171,7 @@ def test_create_view_exposes_generated_slug_option(posts_dir):
     ),
   )
   context = render(
-    MarkdownCreateView(
-      posts_dir, 'en', EXTERNAL_SCHEMA, collection_spec=spec
-    )
+    MarkdownCreateView(posts_dir, 'en', EXTERNAL_SCHEMA, collection_spec=spec)
   )['context']
   assert context['auto_slug'] is True
 

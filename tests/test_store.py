@@ -391,7 +391,9 @@ def test_on_change_reports_create_update_delete_with_etags_and_user(tmp_path):
   )
 
   created_etag = docs.write('hello', {'title': 'Hello'}, 'First\n', user=actor)
-  updated_etag = docs.write('hello', {'title': 'Updated'}, 'Second\n', user=actor)
+  updated_etag = docs.write(
+    'hello', {'title': 'Updated'}, 'Second\n', user=actor
+  )
   docs.delete('hello', user=actor)
 
   assert [(event.kind, event.collection, event.slug) for event in events] == [

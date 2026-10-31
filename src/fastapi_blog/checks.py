@@ -212,7 +212,9 @@ def _check_unique(
     for name in spec.unique:
       if name == 'seq':
         match = seq_regex.fullmatch(slug) if seq_regex else None
-        value = match.group('seq') if match and 'seq' in match.groupdict() else None
+        value = (
+          match.group('seq') if match and 'seq' in match.groupdict() else None
+        )
         if value is None:
           issues.append(
             Issue(
@@ -232,7 +234,9 @@ def _check_unique(
         continue
       # Canonical JSON representation makes lists/maps comparable without
       # relying on insertion order.
-      marker = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+      marker = json.dumps(
+        value, sort_keys=True, ensure_ascii=False, default=str
+      )
       previous = seen[name].get(marker)
       if previous is not None:
         issues.append(
@@ -246,7 +250,6 @@ def _check_unique(
         )
       else:
         seen[name][marker] = slug
-
 
 
 def _target_field(spec: CollectionSpec, field_name: str):
@@ -275,9 +278,14 @@ def _link_index(
   by_value: dict[str, str] = {}
   records: dict[str, dict[str, Any]] = {}
   schema = spec.schema
-  id_field = _target_field(spec, value_field) if value_field else (
-    next((field for field in schema.fields if field.key == '@id'), None)
-    if schema else None
+  id_field = (
+    _target_field(spec, value_field)
+    if value_field
+    else (
+      next((field for field in schema.fields if field.key == '@id'), None)
+      if schema
+      else None
+    )
   )
   for slug in sorted(documents.list()):
     try:
@@ -315,20 +323,30 @@ def _check_links(
       target_spec = collections.get(target_name)
       if target_spec is None:
         issues.append(
-          Issue('undefined', 'link.collection_unavailable',
-                f'Target collection {target_name!r} is not available', slug,
-                field.name)
+          Issue(
+            'undefined',
+            'link.collection_unavailable',
+            f'Target collection {target_name!r} is not available',
+            slug,
+            field.name,
+          )
         )
         continue
       target_field = (
         _target_field(target_spec, field.value_field)
-        if field.value_field else None
+        if field.value_field
+        else None
       )
       if field.value_field and target_field is None:
         issues.append(
-          Issue('undefined', 'link.value_field_unavailable',
-                f'Target field {field.value_field!r} is not defined in '
-                f'collection {target_name!r}', slug, field.name)
+          Issue(
+            'undefined',
+            'link.value_field_unavailable',
+            f'Target field {field.value_field!r} is not defined in '
+            f'collection {target_name!r}',
+            slug,
+            field.name,
+          )
         )
         continue
       # The default is @id when present, otherwise the target slug.
@@ -350,9 +368,14 @@ def _check_links(
           if parsed.scheme or link.startswith('//'):
             continue
           issues.append(
-            Issue(level, 'link.target_missing',
-                  f'Link target {link!r} does not exist in collection '
-                  f'{target_name!r}', slug, field.name)
+            Issue(
+              level,
+              'link.target_missing',
+              f'Link target {link!r} does not exist in collection '
+              f'{target_name!r}',
+              slug,
+              field.name,
+            )
           )
           continue
         if field.filters:
@@ -365,9 +388,14 @@ def _check_links(
               failed.append(rule['field'])
           if failed:
             issues.append(
-              Issue(level, 'link.target_filtered',
-                    f'Link target {link!r} does not satisfy filter(s): '
-                    f'{", ".join(failed)}', slug, field.name)
+              Issue(
+                level,
+                'link.target_filtered',
+                f'Link target {link!r} does not satisfy filter(s): '
+                f'{", ".join(failed)}',
+                slug,
+                field.name,
+              )
             )
 
 
@@ -394,9 +422,11 @@ def _check_files(
       if not field.media_dir:
         issues.append(
           Issue(
-            'undefined', 'file.media_dir_unavailable',
+            'undefined',
+            'file.media_dir_unavailable',
             'Cannot check this field because it has no `media_dir`',
-            slug, field.name,
+            slug,
+            field.name,
           )
         )
         continue
@@ -408,9 +438,11 @@ def _check_files(
       except ValueError:
         issues.append(
           Issue(
-            level, 'file.media_dir_unsafe',
+            level,
+            'file.media_dir_unsafe',
             f'media_dir {field.media_dir!r} resolves outside the project root',
-            slug, field.name,
+            slug,
+            field.name,
           )
         )
         continue
@@ -426,12 +458,16 @@ def _check_files(
           if public_value == public_path:
             relative = ''
           elif public_value.startswith(public_path + '/'):
-            relative = public_value[len(public_path) + 1:]
+            relative = public_value[len(public_path) + 1 :]
           else:
             issues.append(
-              Issue(level, 'file.public_path_mismatch',
-                    f'Path {item!r} is outside public_path {public_path!r}',
-                    slug, field.name)
+              Issue(
+                level,
+                'file.public_path_mismatch',
+                f'Path {item!r} is outside public_path {public_path!r}',
+                slug,
+                field.name,
+              )
             )
             continue
         else:
@@ -441,21 +477,31 @@ def _check_files(
           candidate.relative_to(media_dir)
         except ValueError:
           issues.append(
-            Issue(level, 'file.path_unsafe',
-                  f'Path {item!r} escapes media_dir {field.media_dir!r}',
-                  slug, field.name)
+            Issue(
+              level,
+              'file.path_unsafe',
+              f'Path {item!r} escapes media_dir {field.media_dir!r}',
+              slug,
+              field.name,
+            )
           )
           continue
         if not candidate.is_file():
           issues.append(
-            Issue(level, 'file.missing',
-                  f'File {item!r} does not exist in media_dir '
-                  f'{field.media_dir!r}', slug, field.name)
+            Issue(
+              level,
+              'file.missing',
+              f'File {item!r} does not exist in media_dir {field.media_dir!r}',
+              slug,
+              field.name,
+            )
           )
 
 
 def check_collection(
-  spec: CollectionSpec, *, root: str | pathlib.Path | None = None,
+  spec: CollectionSpec,
+  *,
+  root: str | pathlib.Path | None = None,
   collections: Mapping[str, CollectionSpec] | None = None,
 ) -> Report:
   """Check one collection: parsing, schema, uniqueness, links, files, context.
@@ -464,6 +510,8 @@ def check_collection(
       spec: The collection to check.
       root: Project root, where context files are looked up (default: the
           current directory).
+      collections: All collections of the project, keyed by name, used to
+          resolve `link` fields that point at another collection.
 
   Returns:
       The report (deterministically sorted issues).

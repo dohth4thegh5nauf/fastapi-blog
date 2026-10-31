@@ -1,7 +1,8 @@
 import pathlib
+import re
 import warnings
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import jinja2
@@ -221,14 +222,16 @@ def get_api_router(
 
   """
   api_router = APIRouter(tags=['editor'])
-  slug_path = Path(
-    pattern=(
-      collection_spec.to_collection().slug_pattern.pattern
-      if collection_spec is not None
-      else SLUG_PATTERN
-    ),
-    max_length=200 if collection_spec is not None else 100,
-  )
+  if collection_spec is not None:
+    slug_re = collection_spec.to_collection().slug_pattern
+    slug_pattern = (
+      slug_re.pattern if isinstance(slug_re, re.Pattern) else slug_re
+    )
+    slug_max_length = 200
+  else:
+    slug_pattern = SLUG_PATTERN
+    slug_max_length = 100
+  slug_path = Path(pattern=slug_pattern, max_length=slug_max_length)
   if collection_spec is not None:
     posts_dirname = str(collection_spec.dir)
     if frontmatter_schema is not None:
@@ -257,9 +260,7 @@ def get_api_router(
       return path
     return pathlib.Path(posts_dirname) / f'{slug}.md'
 
-  def _check_unique_on_create(
-    slug: str, frontmatter: dict[str, Any]
-  ) -> None:
+  def _check_unique_on_create(slug: str, frontmatter: dict[str, Any]) -> None:
     """Reject duplicate configured values before a new file is written."""
     if collection_spec is None or not collection_spec.unique:
       return
@@ -314,6 +315,20 @@ def get_api_router(
             ),
           )
 
+  def _remove_created(slug: str) -> None:
+    """Remove a file created by this request, even when deletes are off.
+
+    Rollback of a just-created document is not a user-facing delete, so a
+    collection with `delete: false` must not stop it.
+    """
+    target = docs.path_for(slug)
+    if target is None:
+      return
+    try:
+      docs.delete(slug, notify=False)
+    except store.OperationNotAllowedError:
+      target.unlink()
+
   def _write_validated(
     slug: str,
     frontmatter: dict[str, Any],
@@ -337,14 +352,19 @@ def get_api_router(
     with docs._lock:
       if previous_text is None and collection_spec is not None:
         _check_unique_on_create(slug, frontmatter)
-      etag = docs.write(
-        slug,
-        frontmatter,
-        body,
-        if_match=if_match,
-        user=_event_actor(user),
-        notify=False,
-      )
+      try:
+        etag = docs.write(
+          slug,
+          frontmatter,
+          body,
+          if_match=if_match,
+          user=_event_actor(user),
+          notify=False,
+        )
+      except store.OperationNotAllowedError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
     blocking = run_blocking(
       validators,
       collection_name=(collection_spec.name if collection_spec else 'posts'),
@@ -361,12 +381,12 @@ def get_api_router(
         user=_event_actor(user),
       )
       return etag
-    target = docs.path_for(slug)
     if previous_text is None:
+      _remove_created(slug)
+    else:
+      target = docs.path_for(slug)
       if target is not None:
-        docs.delete(slug, notify=False)
-    elif target is not None:
-      store.atomic_write_text(target, previous_text)
+        store.atomic_write_text(target, previous_text)
     helpers.clear_posts_cache()
     raise HTTPException(
       status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -415,10 +435,14 @@ def get_api_router(
         docs,
         fm_dump,
         _body(payload),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         user=_event_actor(user),
         notify=False,
       )
+    except store.OperationNotAllowedError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+      ) from exc
     except store.ConflictError as exc:
       raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except (ValueError, OSError) as exc:
@@ -435,7 +459,7 @@ def get_api_router(
       cwd=pathlib.Path.cwd(),
     )
     if blocking:
-      docs.delete(slug, notify=False)
+      _remove_created(slug)
       raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={'issues': [issue.to_dict() for issue in blocking]},
@@ -541,6 +565,10 @@ def get_api_router(
     _require_if_match(if_match)
     try:
       docs.delete(slug, if_match=if_match, user=_event_actor(user))
+    except store.OperationNotAllowedError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+      ) from exc
     except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

@@ -216,12 +216,24 @@ def document_to_jsonld(
           date_value = None
       if isinstance(date_value, datetime.datetime | datetime.date):
         tags.update(
-          year=date_value.year, month=f'{date_value.month:02d}',
+          year=date_value.year,
+          month=f'{date_value.month:02d}',
           day=f'{date_value.day:02d}',
         )
     template = parse_template(
       config.id_template,
-      ('base', 'collection', 'slug', 'title_slug', 'seq', 'year', 'month', 'day', 'dirname', 'filename'),
+      (
+        'base',
+        'collection',
+        'slug',
+        'title_slug',
+        'seq',
+        'year',
+        'month',
+        'day',
+        'dirname',
+        'filename',
+      ),
       field_values.keys(),
     )
     result['@id'] = template.render(tags, field_values)

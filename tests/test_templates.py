@@ -18,7 +18,9 @@ TAGS = ('seq', 'title_slug', 'year', 'month', 'day', 'slug', 'collection')
 
 def test_slug_template_renders_with_pad_and_title():
   template = parse_template('{seq|pad(4)}-{title_slug}', TAGS)
-  slug = template.render({'seq': 7, 'title_slug': make_slug_part('Use plain files!')})
+  slug = template.render(
+    {'seq': 7, 'title_slug': make_slug_part('Use plain files!')}
+  )
   assert slug == '0007-use-plain-files'
 
 
@@ -50,9 +52,7 @@ def test_build_slug_uses_first_save_utc_when_date_missing():
   slug = build_slug(
     template,
     title='Hello',
-    created_at=datetime.datetime(
-      2024, 2, 3, 23, 30, tzinfo=datetime.timezone.utc
-    ),
+    created_at=datetime.datetime(2024, 2, 3, 23, 30, tzinfo=datetime.UTC),
   )
   assert slug == '2024-02-03-hello'
 
@@ -64,7 +64,13 @@ def test_fields_filters_and_default():
     {'status', 'title', 'date', 'gone'},
   )
   text = template.render(
-    {}, {'status': 'live', 'title': 'hello world', 'date': '2026-10-01', 'gone': None}
+    {},
+    {
+      'status': 'live',
+      'title': 'hello world',
+      'date': '2026-10-01',
+      'gone': None,
+    },
   )
   assert text == 'LIVE hello 2026 none'
 
@@ -76,7 +82,16 @@ def test_fields_prefix_is_the_explicit_form_for_clashing_names():
 
 @pytest.mark.parametrize(
   'source',
-  ['{nope}', '{seq|zzz}', '{seq|pad}', '{seq|pad(x)}', '{seq', 'x}', '{fields.zzz}', '{slug|lower(1)}'],
+  [
+    '{nope}',
+    '{seq|zzz}',
+    '{seq|pad}',
+    '{seq|pad(x)}',
+    '{seq',
+    'x}',
+    '{fields.zzz}',
+    '{slug|lower(1)}',
+  ],
 )
 def test_bad_templates_fail_at_parse_time(source):
   with pytest.raises(ValueError):
@@ -90,7 +105,10 @@ def test_nothing_is_evaluated():
 
 def test_slug_options():
   assert make_slug_part('Café Déjà vu') == 'café-déjà-vu'
-  assert make_slug_part('Café Déjà vu', SlugOptions(clean_accents=True)) == 'cafe-deja-vu'
+  assert (
+    make_slug_part('Café Déjà vu', SlugOptions(clean_accents=True))
+    == 'cafe-deja-vu'
+  )
   assert make_slug_part('Привет мир') == 'привет-мир'
   assert make_slug_part('Привет', SlugOptions(encoding='ascii')) == 'untitled'
   assert make_slug_part('a  b', SlugOptions(sanitize_replacement='_')) == 'a_b'
