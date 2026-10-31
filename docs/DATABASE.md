@@ -87,7 +87,7 @@ from fastapi_blog.admin.models import User
 
 **Purpose**: Authentication and user management for admin panel.
 
-**Password Hashing**: Uses bcrypt via passlib for secure password storage.
+**Password Hashing**: Uses bcrypt directly (via `fastapi_blog.admin.passwords`) for secure password storage.
 
 ### Post Model
 
@@ -400,18 +400,19 @@ engine = create_async_engine(
 
 ### Password Hashing
 
-Passwords are hashed using **bcrypt** via `passlib`:
+Passwords are hashed using **bcrypt** directly (the unmaintained `passlib`
+wrapper was removed, see `fastapi_blog.admin.passwords`):
 
 ```python
-from passlib.context import CryptContext
+from fastapi_blog.admin.passwords import get_password_hasher
 
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+hasher = get_password_hasher()
 
 # Hash password
-hashed = pwd_context.hash('my_password')
+hashed = hasher.hash('my_password')
 
-# Verify
-is_valid = pwd_context.verify('my_password', hashed)
+# Verify (old `passlib` `$2b$...` hashes stay valid)
+is_valid = hasher.verify('my_password', hashed)
 ```
 
 **Validation**:

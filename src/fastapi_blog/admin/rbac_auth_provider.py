@@ -12,7 +12,7 @@ from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.exceptions import FormValidationError, LoginFailed
 
 from .models import User
-from .views import get_pwd_context
+from .passwords import get_password_hasher
 
 
 MIN_PASSWORD_LENGTH = 8
@@ -90,9 +90,9 @@ class RBACAuthProvider(AuthProvider):
 
   @property
   def pwd_context(self):
-    """Get password context (lazy initialization)."""
+    """Get password hasher (lazy initialization)."""
     if self._pwd_context is None:
-      self._pwd_context = get_pwd_context()
+      self._pwd_context = get_password_hasher()
     return self._pwd_context
 
   async def _get_user_by_email(self, email: str) -> User | None:

@@ -42,11 +42,9 @@ admin = [
   "sqlalchemy[asyncio]>=2.1.6",
   "aiosqlite>=0.22.1",
   "itsdangerous>=2.2.0",
-  "passlib[bcrypt]>=1.7.4",
-  # passlib 1.7.4 (unmaintained since 2020) crashes its bcrypt self-test on
-  # bcrypt>=4.1 (ValueError: password cannot be longer than 72 bytes); pin
-  # below that until passlib is fixed or replaced
-  "bcrypt<4.1",
+  # `passlib` (unmaintained since 2020) is replaced by direct `bcrypt`
+  # usage (see `admin/passwords.py`), which lifts the old `bcrypt<4.1` pin
+  "bcrypt>=5.0.0",
   "python-multipart>=0.0.32",
 ]
 # JSON-LD expansion and N-Quads output

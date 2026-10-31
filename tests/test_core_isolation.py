@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = pathlib.Path(fastapi_blog.__file__).resolve().parent.parent
 
 # Packages that only the `admin` extra may bring in
-BLOCKED = ('starlette_admin', 'sqlalchemy', 'passlib', 'aiosqlite', 'redis')
+BLOCKED = ('starlette_admin', 'sqlalchemy', 'aiosqlite', 'redis')
 
 
 def _run(script: str, tmp_path: pathlib.Path) -> subprocess.CompletedProcess:
@@ -129,7 +129,7 @@ def test_extras_are_declared():
     'project'
   ]
   core = ' '.join(project['dependencies']).lower()
-  for name in ('starlette-admin', 'sqlalchemy', 'aiosqlite', 'passlib'):
+  for name in ('starlette-admin', 'sqlalchemy', 'aiosqlite'):
     assert name not in core
   extras = project['optional-dependencies']
   assert set(extras) >= {'admin', 'jsonld', 'dev'}

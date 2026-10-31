@@ -11,25 +11,13 @@ from starlette_admin.contrib.sqla import ModelView
 from starlette_admin.routing import route
 
 from ..models import DEFAULT_SCHEMA, FrontmatterSchema
+from .passwords import get_password_hasher
 
-
-# Lazy import to avoid initialization errors
-_pwd_context = None
 
 # Password constraints
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 BCRYPT_MAX_BYTES = 72  # bcrypt limitation
-
-
-def get_pwd_context():
-  """Get or create password hashing context (lazy initialization)."""
-  global _pwd_context
-  if _pwd_context is None:
-    from passlib.context import CryptContext  # type: ignore[import-untyped]
-
-    _pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
-  return _pwd_context
 
 
 def validate_and_prepare_password(password: str) -> str:
@@ -100,7 +88,7 @@ class UserModelView(ModelView):
       # Validate and prepare password
       password = validate_and_prepare_password(data['hashed_password'])
       # Hash the plain text password
-      data['hashed_password'] = get_pwd_context().hash(password)
+      data['hashed_password'] = get_password_hasher().hash(password)
     await super().before_create(request, data, obj)
 
   async def before_edit(
@@ -113,7 +101,7 @@ class UserModelView(ModelView):
       if data['hashed_password'] != obj.hashed_password:
         # Validate and prepare password
         password = validate_and_prepare_password(data['hashed_password'])
-        data['hashed_password'] = get_pwd_context().hash(password)
+        data['hashed_password'] = get_password_hasher().hash(password)
     await super().before_edit(request, data, obj)
 
 

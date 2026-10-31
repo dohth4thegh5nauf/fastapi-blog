@@ -2,6 +2,7 @@
 
 import pytest
 
+from fastapi_blog.admin.passwords import get_password_hasher
 from fastapi_blog.admin.views import (
   BCRYPT_MAX_BYTES,
   MAX_PASSWORD_LENGTH,
@@ -145,3 +146,30 @@ def test_password_constants():
   assert MAX_PASSWORD_LENGTH == 128
   assert BCRYPT_MAX_BYTES == 72
   assert MIN_PASSWORD_LENGTH < BCRYPT_MAX_BYTES < MAX_PASSWORD_LENGTH
+
+
+# --- PasswordHasher (TODO 7.5: `passlib` replaced by direct `bcrypt`) ---------
+
+
+def test_password_hasher_round_trip():
+  hasher = get_password_hasher()
+  hashed = hasher.hash('correct horse battery staple')
+  assert hashed.startswith('$2b$')
+  assert hasher.verify('correct horse battery staple', hashed)
+  assert not hasher.verify('wrong password', hashed)
+
+
+def test_password_hasher_accepts_legacy_passlib_hashes():
+  """Passlib produced plain `$2b$` bcrypt hashes; they stay valid (7.5)."""
+  legacy = '$2b$12$SWoHzbu1rn0TItH36PNIRetjtCNdibSp59o/E/tJV4FD4ANg535ey'
+  assert get_password_hasher().verify('legacy-password', legacy)
+  assert not get_password_hasher().verify('other-password', legacy)
+
+
+def test_password_hasher_never_matches_bad_input():
+  hasher = get_password_hasher()
+  hashed = hasher.hash('short-password')
+  # More than 72 bytes never matches (bcrypt 5 raises; we answer False).
+  assert not hasher.verify('x' * 100, hashed)
+  # Malformed hashes never match either.
+  assert not hasher.verify('short-password', 'not-a-bcrypt-hash')

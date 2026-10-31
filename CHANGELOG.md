@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### External validators and checked writes (TODO 6.2, 6.3)
+
+- New `validators.py`: a validator runs a command without a shell (argument
+  list, whitelisted environment, capped output, timeout) and maps its exit
+  code to `ok`/`warning`/`error`/`undefined` via `exit_map`; a missing
+  command or a timeout yields the configurable `unavailable` outcome.
+  `{path}`/`{slug}`/`{collection}`/`{fields.NAME}` placeholders are checked
+  against a strict character set — a value like `a;rm` or a leading `-`
+  fails the check with `validator.NAME.unsafe_value` and the command never
+  runs
+- `check` runs the `validators:` of a collection (from `fastapi_blog.yaml`)
+  on every document; `blocking: [...]` lists the outcomes that refuse a
+  write through the REST API: the file is rolled back to its previous bytes
+  (a just-created file is removed) and the request gets HTTP 422 with the
+  findings. New `validators=` parameter of `get_api_router()` and
+  `add_blog_to_fastapi()` (the admin panel saves through the API, so it is
+  covered too); `add_blog_to_fastapi()` now also forwards
+  `require_if_match` (TODO 4.7)
+
+### Project file and the `check` command (TODO 6.1, first slice of phase D)
+
+- New project file `fastapi_blog.yaml` names the collections for the CLI:
+  `collections.<name>.dir/schema/slug_pattern/extension`, with the
+  precedence an explicit CLI flag > the project file > the built-in
+  defaults (`posts/` with the built-in schema). This supersedes the
+  earlier note that settled on `--posts-dir` because no collection
+  registry existed — the registry is the file now (the flags keep working
+  as overrides)
+- New `python -m fastapi_blog check [--collection NAME] [--json]
+  [--fail-on error|warning]`: every document is parsed, validated against
+  the schema and checked for JSON-LD context coverage (TODO 5.6); exit
+  codes `0` clean, `1` findings, `2` nothing found but something couldn't
+  be checked, `64` usage/configuration. A finding always wins over
+  `undefined`, and `undefined` is never reported as clean (П4)
+- New `issues.py` (`Issue`, levels `error`/`warning`/`undefined`) and
+  `checks.py` (`Report`, `check_collection`, `exit_code`): deterministically
+  sorted reports, modeled on the reference branch's three-level findings
+
+### Security: `passlib` replaced by direct `bcrypt` (TODO 7.5, early patch)
+
+- The unmaintained `passlib` dependency is gone: `admin/passwords.py`
+  hashes and verifies with `bcrypt` directly (`PasswordHasher`), and the
+  `bcrypt<4.1` pin is lifted (`bcrypt>=5.0.0` in the `admin` extra)
+- Hashes produced by `passlib` stay valid — they are plain `$2b$` bcrypt
+  hashes; `verify()` answers `False` for malformed hashes and passwords
+  over 72 bytes instead of raising
+
 ### SEO metadata resolution and page head (TODO 5.9.3–5.9.4, partial)
 
 - Added `seo.build_head()` for role-based title, description, canonical URL,

@@ -26,6 +26,7 @@ from .models import (
   FrontmatterSchema,
   payload_model,
 )
+from .validators import Validator, run_blocking
 
 
 async def require_authentication(request: Request) -> dict:
@@ -146,6 +147,7 @@ def get_api_router(
   frontmatter_schema: FrontmatterSchema | None = None,
   auth_dependency: Callable[..., Any] | None = None,
   require_if_match: bool = False,
+  validators: tuple[Validator, ...] = (),
 ) -> APIRouter:
   """Get REST API router for post management.
 
@@ -173,6 +175,9 @@ def get_api_router(
           missing (see TODO 4.7). `False` (default) makes the header
           optional: when sent, it's still checked; when not, the write goes
           through unconditionally like before.
+      validators: External validators run on every write (TODO 6.2). A
+          write whose outcome is in a validator's `blocking` list is rolled
+          back and answered with HTTP 422 carrying the `issues` (TODO 6.3).
 
   Returns:
       APIRouter with REST API endpoints
@@ -214,6 +219,51 @@ def get_api_router(
         status_code=status.HTTP_428_PRECONDITION_REQUIRED,
         detail='If-Match header is required',
       )
+
+  def _document_path(slug: str) -> pathlib.Path:
+    path = docs.path_for(slug)
+    if path is not None:
+      return path
+    return pathlib.Path(posts_dirname) / f'{slug}.md'
+
+  def _write_validated(
+    slug: str,
+    frontmatter: dict[str, Any],
+    body: str,
+    *,
+    previous_text: str | None,
+    if_match: str | None = None,
+  ) -> str:
+    """Write, run the blocking validators, roll back on a blocking outcome.
+
+    A blocking outcome restores the previous bytes (or removes a file that
+    was just created) and raises HTTP 422 with the findings. Between the
+    write and a rollback the new content is on disk and visible to
+    concurrent readers; checking a temporary copy first is out of scope
+    (TODO 6.3 documents this).
+    """
+    etag = docs.write(slug, frontmatter, body, if_match=if_match)
+    blocking = run_blocking(
+      validators,
+      collection_name='posts',
+      slug=slug,
+      path=_document_path(slug),
+      frontmatter=frontmatter,
+      cwd=pathlib.Path.cwd(),
+    )
+    if not blocking:
+      return etag
+    target = docs.path_for(slug)
+    if previous_text is None:
+      if target is not None:
+        docs.delete(slug)
+    elif target is not None:
+      store.atomic_write_text(target, previous_text)
+    helpers.clear_posts_cache()
+    raise HTTPException(
+      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+      detail={'issues': [issue.to_dict() for issue in blocking]},
+    )
 
   # Setup authentication dependency
   auth_func: Callable[..., Any]
@@ -273,7 +323,7 @@ def get_api_router(
         detail=f"Post '{slug}' already exists",
       )
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
-    etag = docs.write(slug, fm_dump, _body(payload))
+    etag = _write_validated(slug, fm_dump, _body(payload), previous_text=None)
     helpers.clear_posts_cache()
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
@@ -297,8 +347,18 @@ def get_api_router(
     fm_dump = _frontmatter_dump(
       payload, frontmatter_schema, is_create=False, existing=existing
     )
+    previous_path = docs.path_for(slug)
+    previous_text = (
+      previous_path.read_text(encoding='utf-8') if previous_path else None
+    )
     try:
-      etag = docs.write(slug, fm_dump, _body(payload), if_match=if_match)
+      etag = _write_validated(
+        slug,
+        fm_dump,
+        _body(payload),
+        previous_text=previous_text,
+        if_match=if_match,
+      )
     except store.ConflictError as exc:
       raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     helpers.clear_posts_cache()
@@ -355,7 +415,16 @@ def get_api_router(
     fm_dump = _frontmatter_dump(
       payload, frontmatter_schema, is_create=is_new, existing=existing
     )
-    etag = docs.write(slug, fm_dump, _body(payload))
+    if is_new:
+      previous_text = None
+    else:
+      previous_path = docs.path_for(slug)
+      previous_text = (
+        previous_path.read_text(encoding='utf-8') if previous_path else None
+      )
+    etag = _write_validated(
+      slug, fm_dump, _body(payload), previous_text=previous_text
+    )
     helpers.clear_posts_cache()
     response.headers['ETag'] = etag
 

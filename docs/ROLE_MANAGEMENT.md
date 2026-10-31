@@ -278,9 +278,9 @@ for locale, admin in admins.items():
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_blog.admin.models import Role, UserWithRoles
 from fastapi_blog.admin.models.role import create_default_roles
-from passlib.context import CryptContext
+from fastapi_blog.admin.passwords import get_password_hasher
 
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+hasher = get_password_hasher()
 
 
 async def create_user_with_roles(
@@ -295,7 +295,7 @@ async def create_user_with_roles(
   # Create user
   user = UserWithRoles(
     email=email,
-    hashed_password=pwd_context.hash(password),
+    hashed_password=hasher.hash(password),
     is_active=True,
   )
 

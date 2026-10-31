@@ -225,3 +225,125 @@ jsonld:
   lines = [line for line in text1.splitlines() if line]
   assert lines == sorted(lines)
   assert len(lines) >= 2
+
+
+# --- Project file and the `check` command (TODO 6.1, phase D) ----------------
+
+
+@pytest.fixture
+def project_dir(tmp_path, monkeypatch):
+  monkeypatch.chdir(tmp_path)
+  return tmp_path
+
+
+def _write_config(tmp_path, text):
+  (tmp_path / 'fastapi_blog.yaml').write_text(text, encoding='utf-8')
+
+
+def test_check_clean_default_collection_exits_zero(project_dir, capsys):
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'posts' / 'a.md').write_text(
+    '---\ntitle: A\ndate: "2024-01-01"\npublished: true\n---\nBody.\n',
+    encoding='utf-8',
+  )
+  assert main(['check']) == 0
+  assert 'no issues' in capsys.readouterr().out
+
+
+def test_check_malformed_file_exits_one(project_dir, capsys):
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'posts' / 'bad.md').write_text(
+    '---\ntitle: [unterminated\n---\n', encoding='utf-8'
+  )
+  assert main(['check']) == 1
+  assert 'file.malformed' in capsys.readouterr().out
+
+
+def test_check_json_output_and_fail_on_warning(project_dir, capsys):
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'posts' / 'a.md').write_text(
+    '---\ntitle: A\n---\n', encoding='utf-8'
+  )
+  _write_config(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n    schema: schema.yaml\n',
+  )
+  (project_dir / 'schema.yaml').write_text(
+    'extra: allow\nfields:\n  title: {required: true}\n  gone:\n',
+    encoding='utf-8',
+  )
+  assert main(['check', '--json']) == 0
+  report = json.loads(capsys.readouterr().out)
+  assert report['collections'][0]['documents'] == 1
+
+
+def test_check_uses_the_project_file_and_collection_flag(project_dir, capsys):
+  for name in ('posts', 'notes'):
+    (project_dir / name).mkdir()
+  (project_dir / 'notes' / 'bad.md').write_text(
+    '---\ntitle: [unterminated\n---\n', encoding='utf-8'
+  )
+  _write_config(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n  notes:\n    dir: notes\n',
+  )
+  # Default: the `posts` collection of the project file (clean).
+  assert main(['check']) == 0
+  # An explicit name checks that collection (findings).
+  assert main(['check', '--collection', 'notes']) == 1
+  assert main(['check', '--collection', 'missing']) == 64
+
+
+def test_check_requires_collection_choice_for_many(project_dir, capsys):
+  for name in ('a', 'b'):
+    (project_dir / name).mkdir()
+  _write_config(
+    project_dir, 'collections:\n  one:\n    dir: a\n  two:\n    dir: b\n'
+  )
+  # No `posts` and several collections: asking for a name is a usage error.
+  assert main(['check']) == 64
+  assert main(['check', '--collection', 'one']) == 0
+
+
+def test_export_uses_the_project_file_and_flag_overrides(project_dir, capsys):
+  (project_dir / 'content').mkdir()
+  (project_dir / 'content' / 'note.md').write_text(
+    '---\ntitle: Note\ndate: "2024-01-01"\npublished: true\n---\nBody.\n',
+    encoding='utf-8',
+  )
+  _write_config(
+    project_dir,
+    'collections:\n  notes:\n    dir: content\n',
+  )
+  # The project file names the directory; a single collection is the default.
+  assert main(['export']) == 0
+  graph = json.loads(capsys.readouterr().out)
+  assert graph['@graph'][0]['title'] == 'Note'
+  # A CLI flag beats the project file: --posts-dir points elsewhere.
+  (project_dir / 'other').mkdir()
+  (project_dir / 'other' / 'b.md').write_text(
+    '---\ntitle: Other\ndate: "2024-01-02"\npublished: true\n---\nBody.\n',
+    encoding='utf-8',
+  )
+  assert main(['export', '--posts-dir', 'other']) == 0
+  graph = json.loads(capsys.readouterr().out)
+  assert graph['@graph'][0]['title'] == 'Other'
+  assert main(['export', '--collection', 'notes']) == 0
+
+
+def test_check_runs_validators_from_the_project_file(project_dir, capsys):
+  import sys
+
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'posts' / 'a.md').write_text(
+    '---\ntitle: A\ndate: "2024-01-01"\npublished: true\n---\nBody.\n',
+    encoding='utf-8',
+  )
+  fail = f"['{sys.executable}', '-c', 'import sys; sys.exit(1)']"
+  _write_config(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n    validators:\n'
+    f'      - name: gate\n        argv: {fail}\n',
+  )
+  assert main(['check']) == 1
+  assert 'validator.gate' in capsys.readouterr().out

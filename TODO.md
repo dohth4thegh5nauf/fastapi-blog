@@ -9,7 +9,7 @@
 | Раздел | Статус | Сделано и осталось |
 | --- | --- | --- |
 | 3 (фаза A) | Выполнено | Ядро без extras `admin` и `jsonld`; ленивая админка (PEP 562), `setup_fastapi_blog(admin=False)`; кэш `list_posts` по подписи каталога; `redis` и `pyjwt` удалены; Basic-авторизация без `SessionMiddleware`, `secrets.compare_digest`; `ConfigurationError`; параметры `auth_dependency`; CI-матрица `core` и `all` |
-| Стек (вне ТЗ) | Выполнено | Подняты минимальные версии всех зависимостей; порт `starlette-admin` с 0.16 на 1.0.3; единая тема и переключатель языка на всех страницах админки (`admin/templates/layout.html`, собственный `login.html` удалён); `bcrypt<4.1` закреплён из-за `passlib`; `pytest` собирает только `tests/` |
+| Стек (вне ТЗ) | Выполнено | Подняты минимальные версии всех зависимостей; порт `starlette-admin` с 0.16 на 1.0.3; единая тема и переключатель языка на всех страницах админки (`admin/templates/layout.html`, собственный `login.html` удалён); `passlib` заменён на прямой `bcrypt>=5` (закрепление `bcrypt<4.1` снято, см. 7.5); `pytest` собирает только `tests/` |
 | 4.1, 4.2, 4.3, 4.4, 4.7 | Выполнено | `store.Collection` и `store.DocumentStore` (`list`, `read`, `write`, `delete`, `exists`, `etag`, `If-Match`, `ConflictError` 412/409, REST API отдаёт `ETag`, параметр `require_if_match` даёт 428); `Collection` намеренно не несёт `FrontmatterSchema`: валидация остаётся в `FrontmatterSchema.dump_for_write`; единый разбор и атомарная запись UTF-8; `safe_document_path` подключён везде, где путь строится из slug; вторая реализация `MarkdownPost` удалена |
 | 4.5 | Выполнено | `datetime.now()` убран; `on_create` (`today`, `now`, `uuid`) и `read_only` работают в REST API; перезапись сливается поверх файла: неизвестные ключи (`extra: 'allow'`) и порядок ключей сохраняются (`FrontmatterSchema._merge_for_rewrite`). Остаток «админка пишет без валидации по схеме» перенесён в 7.6 (фаза E) |
 | 4.6 | Выполнено | `depth: N` — вложенные коллекции (slug = относительный путь без расширения, каждый сегмент по шаблону); теги `{dirname}`/`{filename}` — подстановки одного сегмента в строковом `slug_pattern`; сахар `store.blog_collections()` над двумя `Collection` (публичный API по-прежнему принимает `posts_dirname: str`); страницы валидируются встроенной схемой (`helpers.PAGES_SCHEMA`, несовпадающие отдаются с сырым frontmatter); `POSTS_DIR` читается с `DeprecationWarning`; `posts_dirname` доходит и до админки |
@@ -25,10 +25,10 @@
 | 5.9.3–5.9.4 | Частично | Добавлены `seo.build_head()`, fallback значений, excerpt, переопределяемый `partials/_seo_head.html`, Open Graph, Twitter Cards и schema.org JSON-LD; `noindex_tags` даёт `noindex` страницам тегов; страница с чужим `canonical` не получает `hreflang`; экранирование JSON-LD (`\u0026`, `\u003c`, `\u003e`) исправлено и покрыто тестом. Каждая строка таблицы 5.9.3 покрыта тестом (`tests/test_seo_resolution.py`). Не сделано: находки `check` для `canonical`/`image` (5.9.7), поведение `image_alt` без `image` |
 | 5.9.5 | Частично | `seo_routes=True`: `sitemap.xml` (детерминированный, индекс карт от 50 000 URL, `lastmod` только в формате W3C), `robots.txt` с `seo.disallow`, `301` для `redirect_from` (GET/HEAD; слаг или путь; кэш по подписи каталога; живые адреса и собственный адрес документа не перехватываются; неопубликованные не создают редиректов), `ConfigurationError` без `site_url`; маршруты регистрируются до роутеров блога, поэтому работают и при `prefix=None`. Не сделано: редиректы для локалей с префиксом, конфликты `redirect_from` (находки `check` — 5.9.7) |
 | 5.9.7–5.9.8 | Не начато | Находки `check`; группировка полей в админке |
-| 6 (фаза D) | Не начато | Нет CLI `check` (`export` и `schema` есть, см. 5.2–5.4, 5.7), внешних проверок, языка шаблонов, нумерации |
-| 7 (фаза E) | Не начато | См. раздел 2: права, учётные данные по умолчанию, `passlib`, превью |
+| 6 (фаза D) | Частично | Проектный файл `fastapi_blog.yaml` (реестр коллекций: `dir`/`schema`/`slug_pattern`/`extension`), приоритет «CLI-флаг > файл > дефолт`; CLI `check` (разбор, схема, покрытие контекста 5.6, внешние проверки 6.2; `--collection`/`--json`/`--fail-on`; коды 0/1/2/64; `undefined` ≠ «ок»), `export`/`schema` на том же резолве; `issues.py` + `checks.py` + `validators.py`; запись с проверкой и откатом через REST API (6.3, админка покрыта — пишет через API). Не сделано: `check.links`/`check.files`, язык шаблонов и нумерация (6.4) |
+| 7 (фаза E) | Не начато | См. раздел 2: права, учётные данные по умолчанию, превью. Сделано раньше фазы: 7.5 — `passlib` заменён на прямой `bcrypt>=5` |
 
-**Стек (фактический).** Python не ниже 3.12 (CI: 3.12 и 3.13), зависимости зафиксированы в `pyproject.toml` и `uv.lock`, `setuptools>=84.2.1`. Ядро: `fastapi>=0.162`, `jinja2`, `jinja2-time`, `markdown>=3.11`, `nh3>=0.3`, `pydantic>=2.14`, `pyyaml`, `pymdown-extensions>=12`, `uvicorn>=0.54`. Extras: `admin` (`starlette-admin[i18n]>=1.0.3`, `sqlalchemy[asyncio]>=2.1`, `aiosqlite`, `itsdangerous`, `passlib[bcrypt]` с `bcrypt<4.1`, `python-multipart`), `jsonld` (`pyld>=3.3`), `dev` (`httpx`, `ruff>=0.17`, `pytest>=9`, `coverage`, `mypy>=2.4`, пакеты типов). Минимальные версии не понижать, новые зависимости в ядро не добавлять.
+**Стек (фактический).** Python не ниже 3.12 (CI: 3.12 и 3.13), зависимости зафиксированы в `pyproject.toml` и `uv.lock`, `setuptools>=84.2.1`. Ядро: `fastapi>=0.162`, `jinja2`, `jinja2-time`, `markdown>=3.11`, `nh3>=0.3`, `pydantic>=2.14`, `pyyaml`, `pymdown-extensions>=12`, `uvicorn>=0.54`. Extras: `admin` (`starlette-admin[i18n]>=1.0.3`, `sqlalchemy[asyncio]>=2.1`, `aiosqlite`, `itsdangerous`, `bcrypt>=5.0.0`, `python-multipart`), `jsonld` (`pyld>=3.3`), `dev` (`httpx`, `ruff>=0.17`, `pytest>=9`, `coverage`, `mypy>=2.4`, пакеты типов). Минимальные версии не понижать, новые зависимости в ядро не добавлять.
 
 ## 1. Цель и нормативные принципы
 
@@ -51,14 +51,14 @@
 - Схема: нет типов `link`, `object`, `file`, `image`; JSON-LD есть только как чистые функции (нет маршрутов, CLI `export`, контекста из файла, контроля потерянных терминов); нет `check`, внешних проверок и языка шаблонов.
 - Права: `has_permission` определён в `admin/rbac_auth_provider.py`, но не применяется к API и представлениям; после порта на starlette-admin 1.0.3 это не перепроверялось, нужен тест.
 - Учётные данные `admin` / `Admin123!` подставляются в `__init__.py`, `admin/__init__.py` и `admin/auth_provider.py`; слабый секрет сессии даёт предупреждение, а не ошибку.
-- `passlib` не поддерживается с 2020 года, из-за него закреплён `bcrypt<4.1`.
+- `passlib` заменён на прямое использование `bcrypt>=5` (`admin/passwords.py`); закрепление `bcrypt<4.1` снято, хэши `$2b$` прошлых лет остаются валидными.
 - SEO: нет Open Graph, `robots`, структурированных данных страницы, sitemap и `robots.txt`; канонический адрес вычисляется только по запросу (см. 5.9). Исправлено (5.9.6): роль `description` выводится в `<meta>`; `<html lang>` есть; `layouts/base.html` больше не содержит имени/фото/соцсетей автора исходного проекта.
 
 ## 3. Пакеты, импорты, кэш (фаза A, выполнена)
 
 **3.1 Состав зависимостей (выполнено).** Ядро: `fastapi`, `jinja2`, `jinja2-time`, `markdown`, `nh3`, `pydantic`, `pyyaml`, `pymdown-extensions`, `uvicorn` (версии — раздел 0). Extras:
 
-- `admin`: `starlette-admin[i18n]`, `sqlalchemy[asyncio]`, `aiosqlite`, `itsdangerous`, `passlib[bcrypt]` (временно с `bcrypt<4.1`, см. раздел 7), `python-multipart`.
+- `admin`: `starlette-admin[i18n]`, `sqlalchemy[asyncio]`, `aiosqlite`, `itsdangerous`, `bcrypt>=5.0.0` (вместо `passlib`, см. 7.5), `python-multipart`.
 - `jsonld`: `pyld`; объявлен, код начнёт его использовать в фазе C (5.4, 5.6).
 - `dev`: `httpx`, `ruff`, `pytest`, `coverage`, `mypy`, пакеты типов.
 
@@ -393,6 +393,6 @@ validators:
 2. Нужна ли межпроцессная блокировка записи (в ТЗ — нет).
 3. Синтаксис шаблонов: одиночные скобки `{имя}` (принято в ТЗ) или двойные `{{имя}}`, как в git-CMS. Выбрать один вариант и не поддерживать оба.
 4. Нужны ли типы `file` и `image` в первой версии или достаточно `str` (в ТЗ — SHOULD).
-5. Заменять ли `passlib` в фазе E или отдельным небольшим патчем раньше: закрепление `bcrypt<4.1` — временная мера.
+5. Заменять ли `passlib` в фазе E или отдельным небольшим патчем раньше: закрепление `bcrypt<4.1` — временная мера. — Решено: заменён патчем раньше фазы E (`admin/passwords.py`, `bcrypt>=5.0.0`).
 6. SEO: оставлять ли `sitemap.xml` и `robots.txt` в пакете под `seo_routes` (в ТЗ — да, по умолчанию выключено) или отдать хосту.
 7. SEO: какое значение `structured_data` по умолчанию при наличии секции `seo` — `blogposting` (в ТЗ) или `none`.

@@ -18,6 +18,7 @@ from .auth import ConfigurationError, add_startup_check, check_api_auth_config
 from .models import FrontmatterSchema, SeoConfig
 from .router import get_blog_router
 from .seo import build_head, resolve_seo_config
+from .validators import Validator
 
 
 # The sitemap protocol allows at most this many URLs in one file.
@@ -58,6 +59,8 @@ def add_blog_to_fastapi(
   api_auth_dependency: Callable[..., Any] | None = None,
   jsonld_routes: bool = False,
   seo_routes: bool = False,
+  require_if_match: bool = False,
+  validators: tuple[Validator, ...] = (),
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -97,6 +100,11 @@ def add_blog_to_fastapi(
                   redirects for the `redirect_from` role (TODO 5.9.5;
                   default: False). Needs `seo.site_url`: without it the app
                   fails at startup with `ConfigurationError`.
+      validators: External validators run on every write through the REST
+                  API (TODO 6.2/6.3); blocking outcomes roll the write back
+                  with HTTP 422.
+      require_if_match: Require the `If-Match` header on update/delete
+                  (TODO 4.7); see `get_api_router()`. Default: `False`.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
                           (title, date, published, tags, description) tell the
                           blog which field is which. Default: the built-in fields.
@@ -314,6 +322,8 @@ def add_blog_to_fastapi(
       admin_password=admin_password,
       frontmatter_schema=frontmatter_schema,
       auth_dependency=api_auth_dependency,
+      require_if_match=require_if_match,
+      validators=validators,
     )
     app.include_router(api_router, prefix=api_prefix, tags=['api'])
     add_startup_check(
