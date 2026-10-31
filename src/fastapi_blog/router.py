@@ -148,26 +148,39 @@ def get_blog_router(
     context['is_canonical'] = canonical_url == current_url
 
     if effective_seo is not None:
-      document = context.get('post') or context.get('page') or {}
-      if isinstance(document, dict) and isinstance(document.get('metadata'), dict):
-        document = {**document.get('metadata', {}), **document}
-      page_type = 'article' if context.get('post') else ('page' if context.get('page') else 'list')
-      seo_head = build_head(
-        document, schema=frontmatter_schema, config=effective_seo,
-        request_url=(effective_seo.site_url or str(request.base_url).rstrip('/')) + request.url.path,
-        locale=current_locale, page_type=page_type,
-        body=(document.get('content') or '') if isinstance(document, dict) else '',
+      page = context.get('page') or {}
+      post = context.get('post') or {}
+      metadata = page.get('metadata', {}) if isinstance(page, dict) else {}
+      document = {**metadata, **post} if isinstance(metadata, dict) else post
+      if not document and isinstance(context.get('post'), dict):
+        document = context['post']
+      page_type = (
+        'article' if post else
+        'page' if page else
+        'tag' if 'tag_id' in context else
+        'tags' if 'tags' in context else
+        'list' if 'posts' in context else 'index'
       )
-      context['seo_head'] = seo_head
-      # The SEO resolver is authoritative when enabled; legacy title/description
-      # remain untouched when no seo configuration is present.
-      if seo_head.get('title'):
-        context['title'] = seo_head['title']
-      if seo_head.get('description'):
-        context['description'] = seo_head['description']
-      if seo_head.get('canonical_url'):
-        context['canonical_url'] = seo_head['canonical_url']
-      context['lang'] = seo_head.get('lang', current_locale)
+      body = ''
+      if page:
+        body = page.get('markdown', '')
+      elif post:
+        body = post.get('markdown', '') or post.get('content', '')
+      request_url = (
+        effective_seo.site_url or str(request.base_url).rstrip('/')
+      ) + request.url.path
+      head = build_head(
+        document, config=effective_seo, request_url=request_url,
+        locale=current_locale, page_type=page_type, body=body,
+      )
+      context['seo_head'] = head
+      context['lang'] = head.get('lang', current_locale)
+      if head.get('title'):
+        context['title'] = head['title']
+      if head.get('description'):
+        context['description'] = head['description']
+      if head.get('canonical_url'):
+        context['canonical_url'] = head['canonical_url']
 
     return context
 

@@ -95,40 +95,41 @@ def test_seo_fields_schema_author_can_rename_fields():
   assert instance.social_image == '/pic.png'
 
 
-def test_build_head_resolves_seo_fallbacks_and_structured_data():
-  import json
-  from fastapi_blog.seo import build_head
-  from fastapi_blog.models import SeoConfig
 
-  result = build_head(
+def test_build_head_resolves_fallback_order_and_jsonld():
+  import json
+  from fastapi_blog.models import SeoConfig
+  from fastapi_blog.seo import build_head
+
+  head = build_head(
     {
-      'title': 'A post', 'description': '', 'date': '2026-01-02',
-      'updated': '2026-01-03', 'robots': ['noindex'], 'tags': ['python'],
-      'author': None, 'image': '/cover.png',
+      'seo_title': 'SEO title', 'title': 'Ordinary title',
+      'date': '2026-01-02', 'updated': '2026-01-03',
+      'robots': ['noindex'], 'tags': ['python'], 'image': '/cover.png',
     },
     config=SeoConfig(
       site_url='https://example.test', site_name='Example',
-      title_template='{title} - {site_name}', default_image='/default.png',
+      title_template='{title} - {site_name}', default_image='/fallback.png',
       default_author='Editor', default_robots=('nofollow',), og=True,
       twitter_card='summary_large_image', structured_data='blogposting',
     ),
-    request_url='https://request.invalid/blog/posts/a?utm=1', locale='en',
+    request_url='https://example.test/blog/post?utm=1',
+    locale='ru',
   )
-  assert result['title'] == 'A post - Example'
-  assert result['canonical_url'] == 'https://request.invalid/blog/posts/a'
-  assert result['og_image'] == 'https://example.test/cover.png'
-  assert result['robots'] == ['noindex', 'nofollow']
-  assert result['author'] == 'Editor'
-  assert json.loads(result['structured_data_json'])['keywords'] == ['python']
+  assert head['title'] == 'SEO title - Example'
+  assert head['canonical_url'] == 'https://example.test/blog/post'
+  assert head['og_image'] == 'https://example.test/cover.png'
+  assert head['robots'] == ['noindex', 'nofollow']
+  assert head['author'] == 'Editor'
+  assert json.loads(head['structured_data_json'])['keywords'] == ['python']
 
 
-def test_excerpt_fallback_strips_markup_and_truncates_on_word_boundary():
-  from fastapi_blog.seo import build_head
+def test_build_head_excerpt_is_plain_text_and_word_bounded():
   from fastapi_blog.models import SeoConfig
+  from fastapi_blog.seo import build_head
 
-  result = build_head(
+  head = build_head(
     {}, config=SeoConfig(description_fallback='excerpt', description_length=12),
     body='<p>Hello <strong>world</strong>, this is a <em>test</em>.</p>',
-    page_type='article',
   )
-  assert result['description'] == 'Hello world'
+  assert head['description'] == 'Hello world'
