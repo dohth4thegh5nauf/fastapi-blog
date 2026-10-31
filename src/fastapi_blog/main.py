@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 import jinja2
@@ -149,8 +149,6 @@ def add_blog_to_fastapi(
   templates = Jinja2Templates(env=env)
 
   # Add redirects
-  from starlette.responses import RedirectResponse
-
   # Only add root redirect when prefix is set
   # When prefix=None, the blog router itself handles /
   if prefix is not None:
@@ -233,7 +231,6 @@ def add_blog_to_fastapi(
       app.include_router(router, prefix=f'/{locale}', tags=['blog'])
 
   # Add middleware to redirect URLs with default locale to clean URLs
-  from starlette.middleware.base import BaseHTTPMiddleware
   from starlette.requests import Request as StarletteRequest
 
   class DefaultLocaleRedirectMiddleware(BaseHTTPMiddleware):
@@ -390,7 +387,8 @@ def _mount_seo_routes(
       absolute(f'{blog_path}/posts'): None,
     }
     tags: set[str] = set()
-    live = {post_path(post['slug']) for post in posts}
+    # Lookup keys use the decoded form: that is what `request.url.path` is.
+    live = {f'{blog_path}/posts/{post["slug"]}' for post in posts}
     reserved = {
       '/',
       '/robots.txt',
@@ -402,8 +400,8 @@ def _mount_seo_routes(
     }
     aliases: dict[str, str] = {}
     for post in posts:
-      own_path = post_path(post['slug'])
-      own_url = absolute(own_path)
+      own_path = f'{blog_path}/posts/{post["slug"]}'
+      own_url = absolute(post_path(post['slug']))
       head = build_head(
         post,
         config=config,
@@ -421,12 +419,12 @@ def _mount_seo_routes(
       if isinstance(raw_aliases, str):
         raw_aliases = [raw_aliases]
       for alias in raw_aliases:
-        text = str(alias).strip().strip('/')
+        text = unquote(str(alias).strip()).strip('/')
         if not text:
           continue
         # A bare word is a slug of the current URL scheme; anything with a
         # `/` is a site path (it may include the blog prefix itself).
-        path = f'/{text}' if '/' in text else post_path(text)
+        path = f'/{text}' if '/' in text else f'{blog_path}/posts/{text}'
         # A live address or the document's own never redirects (no loops, no
         # hijacked pages); two documents claiming one alias: the first wins.
         if path in live or path in reserved or path == own_path:

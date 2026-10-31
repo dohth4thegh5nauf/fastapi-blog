@@ -228,6 +228,26 @@ def test_redirect_from_never_loops_or_hides_a_live_post(monkeypatch):
     assert client.get('/').status_code == 302
 
 
+def test_redirect_from_matches_non_ascii_and_encoded_aliases(monkeypatch):
+  """Starlette matches the decoded path; the target URL stays encoded."""
+  posts = (
+    {
+      'slug': 'новый',
+      'title': 'N',
+      'redirect_from': ['старый', '/блог/путь', 'a%20b'],
+    },
+  )
+  monkeypatch.setattr(helpers, 'list_posts', lambda **kwargs: posts)
+  app = FastAPI()
+  add_blog_to_fastapi(app, seo=SeoConfig(site_url=SITE), seo_routes=True)
+  target = f'{SITE}/blog/posts/%D0%BD%D0%BE%D0%B2%D1%8B%D0%B9'
+  with TestClient(app, follow_redirects=False) as client:
+    for path in ('/blog/posts/старый', '/блог/путь', '/blog/posts/a%20b'):
+      response = client.get(path)
+      assert response.status_code == 301, path
+      assert response.headers['location'] == target
+
+
 def test_redirect_from_only_redirects_reads(monkeypatch):
   monkeypatch.setattr(
     helpers, 'list_posts', lambda **kwargs: _published_posts()

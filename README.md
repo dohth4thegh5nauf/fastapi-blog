@@ -370,7 +370,7 @@ Tests are scoped to `tests/` by the pytest configuration. CI workflows are defin
 
 ### Tests and quality
 
-The repository contains 36 test modules covering the core blog, storage, schema validation, REST API, authentication, admin behavior, SEO, JSON-LD and CLI. Run `make test` to execute the current suite; test counts and coverage are intentionally not hard-coded here because they change as the project evolves.
+The repository contains 37 test modules covering the core blog, storage, schema validation, REST API, authentication, admin behavior, SEO, JSON-LD and CLI. Run `make test` to execute the current suite; test counts and coverage are intentionally not hard-coded here because they change as the project evolves.
 
 ## Documentation
 

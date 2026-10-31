@@ -1,4 +1,4 @@
-"""Tests for `fastapi_blog.seo.seo_fields()` (TODO 5.9.1)."""
+"""Tests for `seo_fields()` (TODO 5.9.1) and `build_head()` (5.9.3-5.9.4)."""
 
 import pytest
 

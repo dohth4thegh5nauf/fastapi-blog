@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `hreflang` alternates (TODO 5.9.4).
 - `index_description` is used for the index and listing pages only, not for
   static pages.
+- Every row of the TODO 5.9.3 substitution table now has a test
+  (`tests/test_seo_resolution.py`).
 
 ### Sitemap, robots.txt and permanent redirects (TODO 5.9.5, partial)
 
@@ -40,7 +42,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   document's canonical address. A bare alias is a slug under
   `{prefix}/posts/`, one containing `/` is a site path. An alias equal to a
   live post address, a reserved address or the document's own is ignored, so
-  a redirect can't loop or hide a page. Unpublished documents create no
+  a redirect can't loop or hide a page. Aliases are matched against the
+  decoded request path, so non-ASCII and percent-encoded aliases work.
+  Unpublished documents create no
   redirects. The alias index and sitemap entries are cached until the posts
   directory changes.
 - The routes are registered before the blog routers, so they also work with
