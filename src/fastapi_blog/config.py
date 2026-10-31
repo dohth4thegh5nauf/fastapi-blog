@@ -267,6 +267,9 @@ def _collection_spec(
       slug_template = parse_template(
         str(entry['slug_template']), SLUG_TAGS_DEFAULT, field_names
       )
+      # Compile the filename matcher while loading configuration, so
+      # ambiguous repeated capture tags fail before the application starts.
+      slug_template.slug_regex()
     except ValueError as exc:
       raise ConfigError(f'Collection {name!r}: {exc}') from exc
   summary = None

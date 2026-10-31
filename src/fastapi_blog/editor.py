@@ -250,6 +250,63 @@ def get_api_router(
       return path
     return pathlib.Path(posts_dirname) / f'{slug}.md'
 
+  def _check_unique_on_create(
+    slug: str, frontmatter: dict[str, Any]
+  ) -> None:
+    """Reject duplicate configured values before a new file is written."""
+    if collection_spec is None or not collection_spec.unique:
+      return
+    schema = collection_spec.schema or frontmatter_schema
+    seq_regex = (
+      collection_spec.slug_template.slug_regex()
+      if collection_spec.slug_template is not None
+      else None
+    )
+    new_seq = None
+    if 'seq' in collection_spec.unique:
+      match = seq_regex.fullmatch(slug) if seq_regex is not None else None
+      if match is None or 'seq' not in match.groupdict():
+        raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST,
+          detail='Slug does not match the configured sequence template',
+        )
+      new_seq = match.group('seq')
+    new_values: dict[str, Any] = {}
+    for name in collection_spec.unique:
+      if name == 'seq':
+        new_values[name] = new_seq
+      else:
+        field = schema.get(name) if schema is not None else None
+        key = field.key if field is not None else name
+        new_values[name] = frontmatter.get(key)
+    for existing_slug in docs.list():
+      try:
+        existing = docs.read(existing_slug).frontmatter
+      except (store.ParseError, store.NotFoundError):
+        continue
+      for name, value in new_values.items():
+        if value is None or value == '':
+          continue
+        if name == 'seq':
+          match = seq_regex.fullmatch(existing_slug) if seq_regex else None
+          existing_value = (
+            match.group('seq')
+            if match is not None and 'seq' in match.groupdict()
+            else None
+          )
+        else:
+          field = schema.get(name) if schema is not None else None
+          key = field.key if field is not None else name
+          existing_value = existing.get(key)
+        if existing_value == value:
+          raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+              f'Value {value!r} of unique field {name!r} is already used '
+              f'by {existing_slug!r}'
+            ),
+          )
+
   def _write_validated(
     slug: str,
     frontmatter: dict[str, Any],
@@ -266,7 +323,13 @@ def get_api_router(
     concurrent readers; checking a temporary copy first is out of scope
     (TODO 6.3 documents this).
     """
-    etag = docs.write(slug, frontmatter, body, if_match=if_match)
+    # A configured `unique` constraint must be checked in the same critical
+    # section as the write. In particular, `unique: [seq]` applies to manual
+    # slugs too, not only to slugs produced by `POST /create`.
+    with docs._lock:
+      if previous_text is None and collection_spec is not None:
+        _check_unique_on_create(slug, frontmatter)
+      etag = docs.write(slug, frontmatter, body, if_match=if_match)
     blocking = run_blocking(
       validators,
       collection_name=(collection_spec.name if collection_spec else 'posts'),

@@ -114,6 +114,33 @@ def test_generated_slug_api_create(app_dir):
   assert (app_dir / 'posts' / '0001-hello-generated.md').is_file()
 
 
+def test_manual_slug_cannot_reuse_a_unique_sequence(app_dir):
+  (app_dir / 'posts' / '0001-existing.md').write_text(
+    '---\ntitle: Existing\n---\nBody\n', encoding='utf-8'
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title', 'date', 'published', 'tags', 'description'},
+    ),
+    unique=('seq',),
+  )
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  response = TestClient(app).post(
+    '/api/posts/create/0001-another', json=VALID_PAYLOAD
+  )
+  assert response.status_code == 409
+  assert 'unique field' in response.json()['detail']
+  assert not (app_dir / 'posts' / '0001-another.md').exists()
+
+
 def test_generated_slug_uses_utc_first_save_when_date_is_empty(
   app_dir, monkeypatch
 ):

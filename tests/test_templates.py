@@ -22,6 +22,12 @@ def test_slug_template_renders_with_pad_and_title():
   assert slug == '0007-use-plain-files'
 
 
+def test_slug_template_rejects_repeated_capture_tags():
+  template = parse_template('{seq}-{seq}-{title_slug}', TAGS)
+  with pytest.raises(ValueError, match='seq.*only once'):
+    template.slug_regex()
+
+
 def test_next_seq_is_highest_plus_one_and_ignores_other_names():
   template = parse_template('{seq|pad(4)}-{title_slug}', TAGS)
   assert next_seq(template, ['0001-a', '0009-b', 'junk', 'dir/0003-c']) == 10

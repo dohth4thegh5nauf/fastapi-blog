@@ -303,16 +303,25 @@ class Template:
     file names.
     """
     pattern = ''
+    captured: set[str] = set()
     for part in self._parts:
       if isinstance(part, str):
         pattern += re.escape(part)
       elif part.tag == 'seq':
+        if 'seq' in captured:
+          raise ValueError('slug_template may contain {seq} only once')
+        captured.add('seq')
         width = 1
         for name, arg in part.filters:
           if name == 'pad':
             width = max(width, int(arg or 1))
         pattern += rf'(?P<seq>\d{{{width},}})'
       elif part.tag == 'title_slug':
+        if 'title_slug' in captured:
+          raise ValueError(
+            'slug_template may contain {title_slug} only once'
+          )
+        captured.add('title_slug')
         pattern += r'(?P<title_slug>[^/]+?)'
       elif part.tag in ('year', 'month', 'day'):
         pattern += r'\d+'

@@ -17,7 +17,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `DocumentStore.write_generated()` allocates and writes the next numbered
   slug while holding the store's in-process re-entrant lock.
 - `unique` collection settings are validated at project load; `check`
-  reports duplicate configured fields and `{seq}` values.
+  reports duplicate configured fields and `{seq}` values. REST creation also
+  rejects duplicate configured values (including a repeated sequence in a
+  manually supplied slug) with HTTP 409, checking and writing under the same
+  store lock. Repeated `{seq}`/`{title_slug}` capture tags are rejected while
+  loading the project configuration.
 - `CollectionSpec.make_slug()` and `.summarize()` expose collection-aware
   slug and caption rendering. Human-readable `check` output includes
   configured summaries; JSON output remains backward compatible.
