@@ -152,14 +152,18 @@ def get_blog_router(
       post = context.get('post') or {}
       metadata = page.get('metadata', {}) if isinstance(page, dict) else {}
       document = {**metadata, **post} if isinstance(metadata, dict) else post
-      if not document and isinstance(context.get('post'), dict):
-        document = context['post']
       page_type = (
-        'article' if post else
-        'page' if page else
-        'tag' if 'tag_id' in context else
-        'tags' if 'tags' in context else
-        'list' if 'posts' in context else 'index'
+        'article'
+        if post
+        else 'page'
+        if page
+        else 'tag'
+        if 'tag_id' in context
+        else 'tags'
+        if 'tags' in context
+        else 'list'
+        if 'posts' in context
+        else 'index'
       )
       body = ''
       if page:
@@ -170,8 +174,12 @@ def get_blog_router(
         effective_seo.site_url or str(request.base_url).rstrip('/')
       ) + request.url.path
       head = build_head(
-        document, config=effective_seo, request_url=request_url,
-        locale=current_locale, page_type=page_type, body=body,
+        document,
+        config=effective_seo,
+        request_url=request_url,
+        locale=current_locale,
+        page_type=page_type,
+        body=body,
       )
       context['seo_head'] = head
       context['lang'] = head.get('lang', current_locale)
@@ -181,6 +189,10 @@ def get_blog_router(
         context['description'] = head['description']
       if head.get('canonical_url'):
         context['canonical_url'] = head['canonical_url']
+        # A page whose own `canonical` points elsewhere is a duplicate, and
+        # duplicates get no hreflang alternates (TODO 5.9.4).
+        if head['canonical_url'].rstrip('/') != request_url.rstrip('/'):
+          context['is_canonical'] = False
 
     return context
 

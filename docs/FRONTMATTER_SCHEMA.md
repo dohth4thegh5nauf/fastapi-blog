@@ -254,7 +254,8 @@ seo:
   structured_data: blogposting         # blogposting, article or none
   description_fallback: excerpt        # excerpt or none
   description_length: 160
-  noindex_tags: false
+  noindex_tags: false                  # tag pages get robots noindex
+  disallow: []                         # paths for robots.txt `Disallow`
 ```
 
 - Every key is optional. An empty section (`seo: {}`) is valid and means
@@ -265,9 +266,25 @@ seo:
   without a query or fragment; a trailing `/` is dropped. `default_image` is
   an `http(s)` URL or a path from the site root. `title_template` may only
   use `{title}` and `{site_name}`.
-- Today only `site_name` has a visible effect (the page header). The
-  substitution order and the `<head>` output that use the other settings are
-  still to come (TODO 5.9.3 and 5.9.4).
+- With a `seo` section (even an empty one) the page `<head>` is built by
+  `fastapi_blog.seo.build_head()`: title, description, canonical, robots,
+  author, Open Graph, Twitter Card and schema.org JSON-LD, using the
+  fallback order of TODO 5.9.3. A tag is printed only when it has a value.
+  Without a section only the 5.9.6 fixes apply (page title, description,
+  `<html lang>`). A document whose `canonical` points to another address gets
+  no `hreflang` alternates.
+- `disallow` entries must start with `/` and contain no whitespace.
+- `add_blog_to_fastapi(seo_routes=True)` (or the same argument of
+  `setup_fastapi_blog()`) adds `GET /sitemap.xml`, `GET /robots.txt` and
+  permanent `301` redirects for the `redirect_from` role. It needs
+  `seo.site_url`; without it the app fails at startup with
+  `ConfigurationError`. The sitemap lists published documents only, skips
+  `noindex` documents and documents whose `canonical` is another address,
+  lists tag pages unless `noindex_tags` is on, and becomes an index of
+  `sitemap-N.xml` files above 50,000 URLs. A `redirect_from` value without a
+  `/` is a slug under `{prefix}/posts/`; one with a `/` is a site path. An
+  alias that equals a live post address or the document's own is ignored.
+  Redirects apply to the default locale's URLs only.
 
 ## Built-in schemas
 

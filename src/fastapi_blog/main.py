@@ -1,14 +1,33 @@
 import os
+import re
 from collections.abc import Callable
+from datetime import date, datetime
 from typing import Any
+from urllib.parse import quote
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 import jinja2
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, RedirectResponse, Response
 
-from .auth import add_startup_check, check_api_auth_config
+from . import helpers
+from .auth import ConfigurationError, add_startup_check, check_api_auth_config
 from .models import FrontmatterSchema, SeoConfig
 from .router import get_blog_router
+from .seo import build_head, resolve_seo_config
+
+
+# The sitemap protocol allows at most this many URLs in one file.
+SITEMAP_URL_LIMIT = 50_000
+_SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9'
+# W3C Datetime as used by `<lastmod>`: a date, or a date and time with a zone.
+_W3C_DATETIME = re.compile(
+  r'\d{4}-\d{2}-\d{2}'
+  r'(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?'
+)
 
 
 def add_blog_to_fastapi(
@@ -38,6 +57,7 @@ def add_blog_to_fastapi(
   seo: SeoConfig | None = None,
   api_auth_dependency: Callable[..., Any] | None = None,
   jsonld_routes: bool = False,
+  seo_routes: bool = False,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -73,6 +93,10 @@ def add_blog_to_fastapi(
       jsonld_routes: Add `GET {prefix}/{slug}.jsonld` and
                      `GET {prefix}/index.jsonld` (default: False). Only
                      published posts are served; see `fastapi_blog.jsonld`.
+      seo_routes: Add `GET /sitemap.xml`, `GET /robots.txt` and permanent
+                  redirects for the `redirect_from` role (TODO 5.9.5;
+                  default: False). Needs `seo.site_url`: without it the app
+                  fails at startup with `ConfigurationError`.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
                           (title, date, published, tags, description) tell the
                           blog which field is which. Default: the built-in fields.
@@ -144,6 +168,19 @@ def add_blog_to_fastapi(
   # 1. Main router without locale prefix (uses default_locale)
   # 2. Routers for non-default locales with /{locale} prefix
   # 3. Redirect from /{default_locale} to clean URLs
+
+  # Registered before the blog routers: with `prefix=None` the router's
+  # `/{page_id}` catch-all would otherwise answer `/robots.txt` first.
+  if seo_routes:
+    _mount_seo_routes(
+      app,
+      seo=seo,
+      frontmatter_schema=frontmatter_schema,
+      prefix=prefix,
+      posts_dirname=posts_dirname,
+      strict=strict_frontmatter,
+      default_locale=default_locale,
+    )
 
   # Create main router for default locale (no locale in URL)
   main_router = get_blog_router(
@@ -294,3 +331,178 @@ def add_blog_to_fastapi(
     )
 
   return app
+
+
+def _lastmod(post: dict[str, Any]) -> str | None:
+  """Return the `updated`/`date` value as a W3C datetime, or `None`."""
+  value = post.get('updated') or post.get('date')
+  if isinstance(value, datetime):
+    # A time without a zone isn't valid W3C Datetime: keep the date only.
+    return value.isoformat() if value.tzinfo else value.date().isoformat()
+  if isinstance(value, date):
+    return value.isoformat()
+  if isinstance(value, str) and _W3C_DATETIME.fullmatch(value):
+    return value
+  return None
+
+
+def _mount_seo_routes(
+  app: FastAPI,
+  *,
+  seo: SeoConfig | None,
+  frontmatter_schema: FrontmatterSchema | None,
+  prefix: str | None,
+  posts_dirname: str,
+  strict: bool,
+  default_locale: str,
+) -> None:
+  """Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects (5.9.5).
+
+  Only published posts take part. The sitemap entries and the alias index
+  are built once per state of the posts directory (`helpers.list_posts`
+  returns the same tuple until a file changes), not once per request.
+  """
+  config = resolve_seo_config(seo, frontmatter_schema)
+  if config is None or not config.site_url:
+
+    def _require_site_url() -> None:
+      raise ConfigurationError(
+        '`seo_routes=True` requires seo.site_url to be configured.'
+      )
+
+    add_startup_check(app, _require_site_url)
+    return
+
+  site_url = config.site_url
+  blog_path = f'/{prefix}' if prefix is not None else ''
+
+  def absolute(path: str) -> str:
+    return site_url + '/' + path.lstrip('/')
+
+  def post_path(slug: Any) -> str:
+    return f'{blog_path}/posts/{quote(str(slug), safe="")}'
+
+  def build_snapshot(
+    posts: tuple[dict, ...],
+  ) -> tuple[list[tuple[str, str | None]], dict[str, str]]:
+    entries: dict[str, str | None] = {
+      absolute(f'{blog_path}/'): None,
+      absolute(f'{blog_path}/posts'): None,
+    }
+    tags: set[str] = set()
+    live = {post_path(post['slug']) for post in posts}
+    reserved = {
+      '/',
+      '/robots.txt',
+      '/sitemap.xml',
+      blog_path or '/',
+      f'{blog_path}/',
+      f'{blog_path}/posts',
+      f'{blog_path}/tags',
+    }
+    aliases: dict[str, str] = {}
+    for post in posts:
+      own_path = post_path(post['slug'])
+      own_url = absolute(own_path)
+      head = build_head(
+        post,
+        config=config,
+        request_url=own_url,
+        locale=default_locale,
+        page_type='article',
+      )
+      target = head.get('canonical_url') or own_url
+      robots = {str(item).lower() for item in head.get('robots') or []}
+      # Excluded: `noindex` documents and documents canonical elsewhere.
+      if 'noindex' not in robots and target.rstrip('/') == own_url:
+        entries[target] = _lastmod(post)
+        tags.update(str(tag) for tag in post.get('tags') or [])
+      raw_aliases = post.get('redirect_from') or []
+      if isinstance(raw_aliases, str):
+        raw_aliases = [raw_aliases]
+      for alias in raw_aliases:
+        text = str(alias).strip().strip('/')
+        if not text:
+          continue
+        # A bare word is a slug of the current URL scheme; anything with a
+        # `/` is a site path (it may include the blog prefix itself).
+        path = f'/{text}' if '/' in text else post_path(text)
+        # A live address or the document's own never redirects (no loops, no
+        # hijacked pages); two documents claiming one alias: the first wins.
+        if path in live or path in reserved or path == own_path:
+          continue
+        aliases.setdefault(path, target)
+    if not config.noindex_tags:
+      for tag in tags:
+        entries[absolute(f'{blog_path}/tags/{quote(tag, safe="")}')] = None
+    return sorted(entries.items()), aliases
+
+  state: dict[str, Any] = {'posts': None, 'snapshot': ([], {})}
+
+  def snapshot() -> tuple[list[tuple[str, str | None]], dict[str, str]]:
+    posts = helpers.list_posts(
+      posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
+    )
+    if state['posts'] is not posts:
+      state['snapshot'] = build_snapshot(posts)
+      state['posts'] = posts
+    return state['snapshot']
+
+  def urlset(entries: list[tuple[str, str | None]]) -> bytes:
+    root = Element('urlset', xmlns=_SITEMAP_NS)
+    for loc, lastmod in entries:
+      item = SubElement(root, 'url')
+      SubElement(item, 'loc').text = loc
+      if lastmod:
+        SubElement(item, 'lastmod').text = lastmod
+    return tostring(root, encoding='utf-8', xml_declaration=True)
+
+  @app.get('/sitemap.xml', include_in_schema=False)
+  async def seo_sitemap() -> Response:
+    entries, _ = snapshot()
+    if len(entries) <= SITEMAP_URL_LIMIT:
+      return Response(urlset(entries), media_type='application/xml')
+    root = Element('sitemapindex', xmlns=_SITEMAP_NS)
+    parts = -(-len(entries) // SITEMAP_URL_LIMIT)
+    for number in range(1, parts + 1):
+      node = SubElement(root, 'sitemap')
+      SubElement(node, 'loc').text = absolute(f'/sitemap-{number}.xml')
+    return Response(
+      tostring(root, encoding='utf-8', xml_declaration=True),
+      media_type='application/xml',
+    )
+
+  @app.get('/sitemap-{number}.xml', include_in_schema=False)
+  async def seo_sitemap_part(number: str) -> Response:
+    entries, _ = snapshot()
+    if (
+      not (number.isascii() and number.isdigit())
+      or int(number) < 1
+      or len(entries) <= SITEMAP_URL_LIMIT
+    ):
+      raise HTTPException(status_code=404)
+    start = (int(number) - 1) * SITEMAP_URL_LIMIT
+    chunk = entries[start : start + SITEMAP_URL_LIMIT]
+    if not chunk:
+      raise HTTPException(status_code=404)
+    return Response(urlset(chunk), media_type='application/xml')
+
+  @app.get('/robots.txt', include_in_schema=False)
+  async def seo_robots() -> PlainTextResponse:
+    lines = ['User-agent: *']
+    if config.disallow:
+      lines.extend(f'Disallow: {path}' for path in config.disallow)
+    else:
+      lines.append('Allow: /')
+    lines.extend(['', f'Sitemap: {absolute("/sitemap.xml")}'])
+    return PlainTextResponse('\n'.join(lines) + '\n')
+
+  class RedirectFromMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+      if request.method in ('GET', 'HEAD'):
+        target = snapshot()[1].get(request.url.path.rstrip('/') or '/')
+        if target is not None:
+          return RedirectResponse(target, status_code=301)
+      return await call_next(request)
+
+  app.add_middleware(RedirectFromMiddleware)

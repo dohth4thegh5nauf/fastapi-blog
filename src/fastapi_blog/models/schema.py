@@ -37,8 +37,9 @@ if TYPE_CHECKING:
 # robots directives), `image`/`image_alt` (social preview image),
 # `updated` (falls back to `date`), `author`, `lang` (falls back to the
 # request's interface locale) and `redirect_from` (previous URLs for a
-# document, TODO 5.9.5). None of them affect anything yet — `seo.py`
-# (not built yet either) is what will read them.
+# document, TODO 5.9.5). `fastapi_blog.seo.build_head()` reads them; a
+# role bound to a field changes the page only when a `SeoConfig` is in effect
+# (`redirect_from` additionally needs `seo_routes=True`).
 ROLES: tuple[str, ...] = (
   'title',
   'date',
@@ -569,7 +570,8 @@ class SeoConfig:
   With no `seo` section and no `seo=` argument the blog behaves as before
   TODO 5.9 (П6: only the 5.9.6 fixes apply). The substitution order and the
   `<head>`/social-tag output that consume these settings are TODO 5.9.3 and
-  5.9.4. Value errors carry the offending `seo.<key>` name.
+  5.9.4 (`fastapi_blog.seo.build_head`). Value errors carry the offending
+  `seo.<key>` name.
 
   Attributes:
       site_url: Base of absolute addresses; in production set it always.
@@ -590,6 +592,7 @@ class SeoConfig:
           of the plain-text body) or `none` (default).
       description_length: Length cap for the excerpt fallback.
       noindex_tags: Give tag pages a `robots` `noindex` directive.
+      disallow: URL paths emitted as `Disallow` directives in robots.txt.
 
   """
 
@@ -606,6 +609,7 @@ class SeoConfig:
   description_fallback: str = 'none'
   description_length: int = 160
   noindex_tags: bool = False
+  disallow: tuple[str, ...] = ()
 
   def __post_init__(self) -> None:
     if isinstance(self.default_robots, str) or not isinstance(
@@ -648,6 +652,21 @@ class SeoConfig:
       )
     if self.title_template is not None:
       _check_title_template(self.title_template)
+    if isinstance(self.disallow, str) or not isinstance(
+      self.disallow, (list, tuple)
+    ):
+      raise ValueError('`seo.disallow` must be a list of URL paths')
+    object.__setattr__(self, 'disallow', tuple(self.disallow))
+    for path in self.disallow:
+      if (
+        not isinstance(path, str)
+        or not path.startswith('/')
+        or any(char.isspace() for char in path)
+      ):
+        raise ValueError(
+          '`seo.disallow` entries must be URL paths from the site root '
+          f'without whitespace, got {path!r}'
+        )
     for directive in self.default_robots:
       if directive not in ROBOTS_DIRECTIVES:
         raise ValueError(
@@ -693,8 +712,9 @@ class SeoConfig:
     if unknown:
       raise ValueError(f'Unknown seo option(s): {sorted(unknown)}')
     values = dict(data)
-    if 'default_robots' in values and values['default_robots'] is None:
-      values['default_robots'] = ()
+    for key in ('default_robots', 'disallow'):
+      if key in values and values[key] is None:
+        values[key] = ()
     return cls(**values)
 
 

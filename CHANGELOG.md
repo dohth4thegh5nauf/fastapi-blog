@@ -16,8 +16,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   and schema.org BlogPosting/Article output. JSON-LD escapes HTML-sensitive
   characters before embedding in a script element.
 - Integrated SEO metadata into blog route template context while preserving
-  the legacy output when SEO configuration is absent. Sitemap, robots.txt,
-  redirects, check diagnostics and admin grouping remain outstanding.
+  the legacy output when SEO configuration is absent.
+- Fixed JSON-LD escaping: `&`, `<` and `>` were written as `\\u0026` etc.
+  (two backslashes), so a JSON parser returned that text instead of the
+  character. They are now valid JSON escapes (`\u0026`) that still cannot
+  close the `script` element.
+- `seo.noindex_tags` now adds `noindex` to the robots directives of tag
+  pages (the setting was only read by the sitemap before).
+- A document whose `canonical` points to another address no longer gets
+  `hreflang` alternates (TODO 5.9.4).
+- `index_description` is used for the index and listing pages only, not for
+  static pages.
+
+### Sitemap, robots.txt and permanent redirects (TODO 5.9.5, partial)
+
+- Added opt-in `seo_routes=True` (`add_blog_to_fastapi`, `setup_fastapi_blog`):
+  deterministic `GET /sitemap.xml` and `GET /robots.txt`, `seo.disallow`
+  (paths for `Disallow`), and a sitemap index (`sitemap-N.xml`) above 50,000
+  URLs. The sitemap lists published documents, skips `noindex` ones and ones
+  with a foreign `canonical`, and writes `lastmod` only as a valid W3C
+  datetime.
+- Added `301` redirects from `redirect_from` aliases (GET/HEAD only) to the
+  document's canonical address. A bare alias is a slug under
+  `{prefix}/posts/`, one containing `/` is a site path. An alias equal to a
+  live post address, a reserved address or the document's own is ignored, so
+  a redirect can't loop or hide a page. Unpublished documents create no
+  redirects. The alias index and sitemap entries are cached until the posts
+  directory changes.
+- The routes are registered before the blog routers, so they also work with
+  `prefix=None`, where the router's `/{page_id}` would otherwise answer
+  `/robots.txt` and `/sitemap.xml` with a 404 page.
+- Enabling `seo_routes` without `seo.site_url` fails at startup with
+  `ConfigurationError`.
+- Not covered yet: redirects under non-default locale prefixes and the
+  conflict diagnostics of `check` (TODO 5.9.7).
 
 
 ### Site-wide SEO settings: `SeoConfig` and the `seo:` section (TODO 5.9.2)

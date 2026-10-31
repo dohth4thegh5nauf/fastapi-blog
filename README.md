@@ -1,371 +1,564 @@
 # FastAPI Blog
 
-> A file-based Markdown blog and content-management toolkit for FastAPI.
+> **Note:** This is a development fork. Original project: [pydanny/fastapi-blog](https://github.com/pydanny/fastapi-blog)
 
-**Package version:** `0.9.0` (development release; see [CHANGELOG.md](CHANGELOG.md))  
-**Python:** 3.12+  
-**Platforms:** Ubuntu (latest LTS), as specified by the project guidelines.
+A simple, easy-to-use blog application built with FastAPI.
 
-FastAPI Blog adds a public blog to an existing FastAPI application. Posts and pages are Markdown files with YAML frontmatter; an optional admin interface and an optional authenticated REST API provide content-management workflows.
-
-This repository is a development fork of [pydanny/fastapi-blog](https://github.com/pydanny/fastapi-blog).
-
-## Features
-
-### Public blog
-
-- Markdown posts with YAML frontmatter and HTML sanitization.
-- Static pages from a separate `pages/` directory.
-- Tag, post-list, post-detail and page routes.
-- Configurable URL prefix, locale list, default locale and favorite posts.
-- Jinja2 templates that can be overridden with a custom loader.
-- Responsive templates, dark-mode styling and code syntax highlighting.
-- Configurable frontmatter schemas, including semantic roles for title, date, publication status, tags and description.
-- Optional SEO metadata resolution and page-head output when SEO settings are configured.
-
-### Content management
-
-- Optional Starlette Admin web interface (installed with the `admin` extra).
-- User authentication and management, with optional role-management views.
-- Markdown post CRUD operations and custom admin form fields.
-- English and Russian admin translations.
-- Optional REST API for creating, reading, updating and deleting Markdown posts.
-- API authentication through session middleware, HTTP Basic credentials or a custom FastAPI dependency.
-- Optional `If-Match` concurrency checks for update and delete operations.
-
-The admin panel is an HTML web application and does not appear in FastAPI's OpenAPI docs. The REST API is a separate feature and is included in `/docs` when enabled.
-
-### Schemas, storage and export
-
-- `FrontmatterSchema` and `FieldSpec` let applications define field names, aliases, types, validation, defaults and semantic roles.
-- Built-in strict and loose schemas preserve the legacy frontmatter behavior.
-- `DocumentStore` provides file-backed document operations, nested collections, safe slug-to-path handling, ETags and specific storage errors.
-- Optional JSON-LD projection and collection export, including local and allow-listed remote contexts.
-- A command-line interface for schema inspection and JSON-LD export.
-
-## Installation
-
-The core package provides the public blog, file-backed storage, schema support and optional REST API. The admin interface and JSON-LD expansion have separate extras.
+## 🚀 Quick Start
 
 ```bash
-# Core package
-pip install fastapi-blog
-
-# Optional admin interface and session-based authentication
-pip install "fastapi-blog[admin]"
-
-# Optional JSON-LD expansion and N-Quads output
-pip install "fastapi-blog[jsonld]"
-
-# Development dependencies
-pip install "fastapi-blog[dev]"
-```
-
-You can combine extras, for example `pip install "fastapi-blog[admin,jsonld]"`.
-
-The admin package is imported lazily. Importing `fastapi_blog` does not require the `admin` extra; calling `add_admin_to_app()` or using `setup_fastapi_blog()` with its default `admin=True` does.
-
-## Quick start
-
-### Blog only
-
-```python
-from fastapi import FastAPI
-from fastapi_blog import add_blog_to_fastapi
-
-app = FastAPI()
-add_blog_to_fastapi(app, prefix='blog')
-```
-
-Create a post at `posts/hello-world.md`:
-
-```markdown
----
-title: Hello, world
-date: 2026-10-31
-published: true
-tags:
-  - fastapi
-  - markdown
-description: My first post.
----
-
-# Hello
-
-This post is written in **Markdown**.
-```
-
-Run the application with Uvicorn:
-
-```bash
-uvicorn main:app --reload
-```
-
-With the default `prefix='blog'`, the blog is available at `/blog/`. The package also serves Markdown pages from `pages/` (for example, `pages/about.md` is available at `/blog/about`).
-
-### Blog and admin panel
-
-Install the `admin` extra, then configure both components:
-
-```python
-from fastapi import FastAPI
-from fastapi_blog import add_admin_to_app, add_blog_to_fastapi
-
-app = FastAPI()
-
-add_blog_to_fastapi(app, prefix='blog')
-add_admin_to_app(
-    app,
-    admin_username='admin',
-    admin_password='change-this-password',
-    secret_key='replace-with-a-random-secret',
-)
-```
-
-The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). Configure credentials and a strong session secret for your deployment; do not use example or default credentials in production.
-
-### Unified setup
-
-`setup_fastapi_blog()` configures the blog and, optionally, the admin panel together. It passes a shared frontmatter schema to both.
-
-```python
-from fastapi import FastAPI
-from fastapi_blog import setup_fastapi_blog
-
-app = FastAPI()
-
-setup_fastapi_blog(
-    app,
-    posts_dirname='posts',
-    include_api=True,
-    locales=['en', 'ru'],
-    default_locale='en',
-    admin_username='admin',
-    admin_password='change-this-password',
-    secret_key='replace-with-a-random-secret',
-    enable_role_management=False,
-)
-```
-
-The admin panel is enabled by default and therefore requires the `admin` extra. To run without the admin dependency, set `admin=False`; the function then adds the public blog and, if requested, the REST API, and returns an empty dictionary.
-
-See [QUICKSTART.md](QUICKSTART.md) for runnable examples and [demo.sh](demo.sh) for the repository demo.
-
-## REST API
-
-Enable the post-management API with `include_api=True`:
-
-```python
-from fastapi import FastAPI
-from fastapi_blog import add_blog_to_fastapi
-
-app = FastAPI()
-
-add_blog_to_fastapi(
-    app,
-    include_api=True,
-    api_prefix='/api/posts',
-    api_require_auth=True,
-    admin_username='writer',
-    admin_password='use-a-long-unique-password',
-)
-```
-
-The API routes are documented in `/docs`. Authentication is required by default. Supply credentials, a custom `api_auth_dependency`, or a session middleware. A custom dependency replaces the built-in session and Basic-auth checks:
-
-```python
-from fastapi import HTTPException, Request
-
-def check_token(request: Request) -> dict:
-    if request.headers.get('X-Token') != 'replace-this-token':
-        raise HTTPException(status_code=403)
-    return {'username': 'automation'}
-```
-
-Pass it as `api_auth_dependency=check_token`. If authentication is required but no usable authentication mechanism is configured, the application reports a configuration error at startup rather than silently exposing an unusable or unprotected API.
-
-The API supports Markdown post CRUD, raw-document retrieval, and optional conditional writes. Set `require_if_match=True` on `get_api_router()` to require an `If-Match` header for update and delete requests; the ETag is obtained from the raw-document response.
-
-## Frontmatter schemas
-
-The built-in schema supports the conventional fields `title`, `date`, `published`, `tags` and `description`. For a project with different frontmatter keys, define a `FrontmatterSchema` and assign semantic roles to the fields:
-
-```python
-from fastapi_blog.models import FieldSpec, FrontmatterSchema
-
-schema = FrontmatterSchema(
-    fields=(
-        FieldSpec('heading', role='title'),
-        FieldSpec('pubDate', type='date', role='date'),
-        FieldSpec('visible', type='bool', role='published', default=True),
-        FieldSpec('labels', type='list[str]', role='tags'),
-        FieldSpec('summary', role='description'),
-    )
-)
-```
-
-Pass the same schema to the blog, REST API and admin setup. `setup_fastapi_blog()` does this automatically:
-
-```python
-setup_fastapi_blog(app, frontmatter_schema=schema)
-```
-
-For separate setup, pass `frontmatter_schema=schema` to `add_blog_to_fastapi()` and `add_admin_to_app()`. The API router also accepts it through `get_api_router()`.
-
-Schemas can be loaded from YAML or JSON with `FrontmatterSchema.from_file()`. They support aliases, field validation, defaults, read-only and create-time values, extra-key policies, and roles. See [Frontmatter Schema](docs/FRONTMATTER_SCHEMA.md) for the full format and behavior.
-
-### Built-in semantic roles
-
-| Role | Expected value | Purpose |
-| --- | --- | --- |
-| `title` | string | Document title; falls back to the slug when absent |
-| `date` | string, date or datetime | Sorting and displayed publication date |
-| `published` | boolean | Published/draft filtering |
-| `tags` | list of strings | Tag list and tag routes |
-| `description` | string | Short description in listings and metadata |
-
-A schema may also define SEO-specific roles. `fastapi_blog.seo.seo_fields()` returns field specifications for `seo_title`, `canonical`, `robots`, `image`, `image_alt`, `updated`, `author`, `lang` and `redirect_from`.
-
-## JSON-LD
-
-JSON-LD routes are opt-in:
-
-```python
-from fastapi_blog import add_blog_to_fastapi
-
-add_blog_to_fastapi(
-    app,
-    jsonld_routes=True,
-    frontmatter_schema=schema,
-)
-```
-
-This adds JSON-LD representations for published posts and the collection index. JSON-LD configuration can define a context, identifiers, types and document limits. Contexts may be inline, loaded from files inside the project root, or fetched from explicitly allow-listed URLs. Remote contexts require the `jsonld` extra and are subject to size and redirect restrictions.
-
-The CLI can export a collection:
-
-```bash
-# Export compact JSON-LD to stdout
-python -m fastapi_blog export --posts-dir posts
-
-# Export with a project schema and write to a file
-python -m fastapi_blog export --posts-dir posts --schema frontmatter.yaml --out posts.jsonld
-
-# Expanded JSON-LD and N-Quads require the jsonld extra
-python -m fastapi_blog export --format expanded
-python -m fastapi_blog export --format nquads
-```
-
-Inspect the generated JSON Schema for frontmatter:
-
-```bash
-python -m fastapi_blog schema --json-schema
-python -m fastapi_blog schema --schema frontmatter.yaml --json-schema --out frontmatter.schema.json
-```
-
-## Configuration
-
-### Main integration options
-
-| Option | Default | Description |
-| --- | --- | --- |
-| `prefix` | `'blog'` | Public blog URL prefix; use `None` to mount at the application root |
-| `posts_dirname` | `'posts'` | Directory containing Markdown posts |
-| `pages_dirname` | `'pages'` | Directory containing Markdown pages |
-| `include_api` | `False` (or environment setting) | Include the post-management REST API |
-| `api_prefix` | `'/api/posts'` | REST API URL prefix |
-| `api_require_auth` | `True` | Require API authentication |
-| `locales` | `['en']` | Supported locales |
-| `default_locale` | `'en'` | Fallback locale |
-| `strict_frontmatter` | `True` | Use strict built-in validation; ignored when a custom schema is supplied |
-| `sanitize_html` | `True` | Sanitize HTML in Markdown content |
-| `frontmatter_schema` | built-in schema | Custom post frontmatter schema |
-| `seo` | `None` | Site-wide SEO configuration; overrides the schema's `seo` section |
-
-`add_blog_to_fastapi()` also accepts a Jinja2 loader and extensions, favorite post slugs, an API authentication dependency, and the `jsonld_routes` switch. See its function signature and docstring for the complete API.
-
-### Environment variables
-
-The package recognizes `FASTAPI_BLOG_INCLUDE_API`, `FASTAPI_BLOG_ADMIN_LOGIN` and `FASTAPI_BLOG_ADMIN_PASSWORD`. Admin/database deployment settings are described in [Environment Variables](docs/ENVIRONMENT_VARIABLES.md).
-
-Generate a session secret rather than reusing a password:
-
-```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
-```
-
-## Templates and static assets
-
-The blog uses Jinja2 templates. Supply a custom loader to `add_blog_to_fastapi()` to override package templates while falling back to the built-in templates. The package includes templates and translation resources as package data.
-
-The admin interface has its own templates and translations, separate from the public blog templates.
-
-## Development
-
-### Requirements and setup
-
-The project targets Python 3.12+ and follows the repository's Ubuntu latest-LTS development guideline. The recommended development workflow uses `uv` and the Makefile:
-
-```bash
+# Clone and install
 git clone https://github.com/pydanny/fastapi-blog.git
 cd fastapi-blog
 make install
+
+# Run demo
+./demo.sh quickstart
 ```
 
-### Common commands
+Then open http://localhost:8000/admin (login: `admin` / `Admin123!`)
+
+📚 **[See Full Quick Start Guide](QUICKSTART.md)** - includes all examples and detailed instructions
+
+---
+
+## Features
+
+### Blog Features
+- 📝 Write blog posts in Markdown with YAML frontmatter
+- 🎨 Syntax highlighting for code blocks
+- 📱 Responsive design
+- 🌙 Dark mode
+- 🎯 Overloadable templates
+- 🔍 SEO-friendly with sitemap generation
+- 🏷️ Tags and categories
+- 📚 [Live examples](tests/examples/)
+
+### Admin Panel Features
+- ✨ Modern, beautiful admin UI (powered by starlette-admin)
+- 👥 User management with role-based access control
+- 📝 Visual post editor with Markdown support
+- 🌍 Internationalization (English/Russian)
+- 🔒 Secure authentication with bcrypt
+- 📦 Custom fields (Markdown, Tags, Slugs)
+- 🔍 Search, filtering, and pagination
+
+### Developer Experience
+- ⚡ Fast performance with FastAPI
+- 🔒 Modern security practices
+- 🧪 Comprehensive test coverage (450+ tests)
+- 🚀 Python 3.12+ and 3.13 support
+- 🐳 Docker support
+
+## Architecture Overview
+
+### Understanding the Three Types of Endpoints
+
+FastAPI Blog provides three distinct systems:
+
+#### 1. 📖 Public Blog (`/blog`)
+- **Purpose**: Read-only public blog posts
+- **Access**: Public (no authentication)
+- **Documentation**: ✅ Visible in `/docs` (Swagger)
+- **Type**: REST API endpoints
+
+#### 2. 🎨 Admin Panel (`/admin`)
+- **Purpose**: Web-based content management interface
+- **Access**: Requires login (username/password)
+- **Documentation**: ❌ Not in `/docs` — it's a UI, not an API!
+- **Type**: HTML web application (powered by starlette-admin)
+- **Use for**: Visual editing, user management, content creation
+
+#### 3. 🔧 REST API (`/api/posts`)
+- **Purpose**: Programmatic post management
+- **Access**: Requires authentication
+- **Documentation**: ✅ Visible in `/docs` **only if** `include_api=True`
+- **Type**: REST API endpoints
+- **Use for**: Scripts, automation, integrations
+
+### Why isn't the Admin Panel in /docs?
+
+The admin panel is a **web application** (like WordPress Admin or Django Admin), not a REST API. It uses HTML forms, sessions, and cookies for humans to interact with. Swagger/OpenAPI documents REST APIs, not web UIs.
+
+**If you need programmatic access**, enable the REST API:
+
+```python
+fastapi_blog.add_blog_to_fastapi(
+  app,
+  include_api=True,  # ← This adds REST API to /docs
+)
+```
+
+---
+
+## Basic Usage
+
+### Recommended: Unified Setup (One Function)
+
+```python
+from fastapi import FastAPI
+import fastapi_blog
+
+app = FastAPI()
+
+# Single function configures everything
+fastapi_blog.setup_fastapi_blog(
+  app,
+  posts_dirname='posts',
+  include_api=False,  # Set True for REST API
+  locales=['en', 'ru'],  # Multiple languages
+  default_locale='en',
+  admin_username='admin',
+  admin_password='change-me-in-production',
+  secret_key='your-secret-key-here',
+  enable_role_management=False,  # Set True for RBAC
+)
+
+
+@app.get('/')
+async def index() -> dict:
+  return {
+    'message': 'Visit /blog for posts, /admin for management',
+    'blog': 'http://localhost:8000/blog',
+    'admin': 'http://localhost:8000/admin',
+  }
+```
+
+That's it! Now you have:
+- 📝 Blog at `/blog`
+- ⚙️ Admin panel at `/admin/en` and `/admin/ru`
+- 🔒 Automatic database initialization
+- 🌍 Multi-language admin panel
+
+### Alternative: Separate Setup (More Control)
+
+```python
+from fastapi import FastAPI
+import fastapi_blog
+
+app = FastAPI()
+
+# Add blog functionality
+fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
+
+# Add admin panel
+fastapi_blog.add_admin_to_app(app)
+
+
+@app.get('/')
+async def index() -> dict:
+  return {
+    'message': 'Visit /blog for posts, /admin for management',
+    'blog': 'http://localhost:8000/blog',
+    'admin': 'http://localhost:8000/admin',
+  }
+```
+
+That's it! Now you have:
+- 📝 Blog at `/blog`
+- ⚙️ Admin panel at `/admin`
+- 🔒 Automatic database initialization
+
+### Setup with REST API (for programmatic access)
+
+```python
+from fastapi import FastAPI
+import fastapi_blog
+
+app = FastAPI()
+
+# Add blog with REST API enabled
+fastapi_blog.add_blog_to_fastapi(
+  app,
+  prefix='blog',
+  include_api=True,  # ← Enable REST API
+  api_prefix='/api/posts',
+  api_require_auth=True,
+)
+
+# Add admin panel for authentication (needs the `admin` extra)
+fastapi_blog.add_admin_to_app(app)
+```
+
+Now you have:
+- 📝 Blog at `/blog`
+- ⚙️ Admin panel at `/admin` (web UI)
+- 🔧 REST API at `/api/posts/*` (visible in `/docs`)
+
+### REST API without the admin panel (core install)
+
+The REST API is part of the core install and needs no extra. Authenticate it with
+Basic credentials, or with your own dependency:
+
+```python
+from fastapi import FastAPI, HTTPException, Request
+import fastapi_blog
+
+app = FastAPI()
+
+
+def check_token(request: Request) -> dict:
+  if request.headers.get('X-Token') != 'change-me':
+    raise HTTPException(status_code=403)
+  return {'username': 'service'}
+
+
+fastapi_blog.add_blog_to_fastapi(
+  app,
+  include_api=True,
+  # either Basic credentials ...
+  # admin_username="writer", admin_password="a-long-secret",
+  # ... or a dependency of your own
+  api_auth_dependency=check_token,
+)
+```
+
+With `api_require_auth=True` (the default) and no credentials, no dependency and no
+`SessionMiddleware`, the app fails at startup with `ConfigurationError` instead of
+serving an API nobody can use (or one that is open). Session auth needs a
+`SessionMiddleware`, which the `admin` extra provides.
+
+The post list is re-read whenever the files in the posts directory change, so you can
+edit files while the app runs.
+
+### Basic Setup (Blog Only)
+
+```python
+from fastapi_blog import add_blog_to_fastapi
+from fastapi import FastAPI
+
+app = FastAPI()
+app = add_blog_to_fastapi(app)
+```
+
+3. Add the first blog entry
+
+Assuming your FastAPI app is defined in a `main.py` module at the root of your project, create a file at `posts/first-blog-post.md`:
+
+```markdown
+---
+date: "2024-03-21T22:20:50.52Z"
+published: true
+tags:
+  - fastapi
+  - fastapi-blog
+title: First blog post
+description: This is the first blog post entry.
+---
+
+Exciting times in the world of fastapi-blog are ahead!
+
+## This is a markdown header
+
+And this is a markdown paragraph with a [link](https://github.com/pydanny/fastapi-blog).
+```
+
+4. Add the first page
+
+Assuming your FastAPI app is defined in a `main.py` module at the root of your project, create a file at `pages/about.md`:
+
+```markdown
+---
+title: "About Me"
+description: "A little bit of background about me"
+author: "Daniel Roy Greenfeld"
+---
+
+## Intro about me
+
+I'm probably best known as "[pydanny](https://www.google.com/search?q=pydanny)", one of the authors of Two Scoops of Django.
+
+I love to hang out with my [wife](https://audrey.feldroy.com/), play with my [daughter](/tags/uma), do [Brazilian Jiu-Jitsu](https://academyofbrazilianjiujitsu.com/), write [books](/books), and read books.
+
+- [Mastodon](https://fosstodon.org/@danielfeldroy)
+- [LinkedIn](https://www.linkedin.com/in/danielfeldroy/)
+- [Twitter](https://twitter.com/pydanny)
+
+## About this site
+
+This site is written in:
+
+- Python
+- FastAPI
+- fastapi-blog
+- Sakura minimal CSS framework
+- Markdown
+- Vanilla HTML
+```
+
+
+## Advanced Usage
+
+fastapi_blog is configurable through the `add_blog_to_fastapi` function.
+
+### Adding app-controlled static media
+
+Change the main app to mount StaticFiles:
+
+```python
+from fastapi_blog import add_blog_to_fastapi
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+
+app = FastAPI()
+app = add_blog_to_fastapi(app)
+app.mount('/static', StaticFiles(directory='static'), name='static')
+
+
+@app.get('/')
+async def index() -> dict:
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/blog',
+  }
+```
+
+### Replacing the default templates
+
+This example is Django-like in that your local templates will overload the default ones.
+
+```python
+import fastapi_blog
+import jinja2
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+
+django_style_jinja2_loader = jinja2.ChoiceLoader(
+  [
+    jinja2.FileSystemLoader('templates'),
+    jinja2.PackageLoader('fastapi_blog', 'templates'),
+  ]
+)
+
+app = FastAPI()
+app = fastapi_blog.add_blog_to_fastapi(
+  app, prefix=prefix, jinja2_loader=django_style_jinja2_loader
+)
+app.mount('/static', StaticFiles(directory='static'), name='static')
+
+
+@app.get('/')
+async def index() -> dict:
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': f'http://localhost:8000/blog',
+  }
+```
+
+
+### Changing the location of the blog url
+
+Perhaps you want to have the blog at the root?
+
+```python
+import fastapi_blog
+from fastapi import FastAPI
+
+
+app = FastAPI()
+app = fastapi_blog.add_blog_to_fastapi(app, prefix='change')
+
+
+@app.get('/api')
+async def index() -> dict:
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/change',
+  }
+```
+
+## Blog at root URL
+
+This is for when your blog/CMS needs to be at the root of the project
+
+```python
+import fastapi_blog
+from fastapi import FastAPI
+
+
+app = FastAPI()
+
+
+@app.get('/api')
+async def index() -> dict:
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000',
+  }
+
+
+# Because the prefix is None, the call to add_blog_to_fastapi
+# needs to happen after the other view functions are defined.
+app = fastapi_blog.add_blog_to_fastapi(app, prefix=None)
+```
+
+
+## Add favorite articles to the homepage
+
+```python
+import fastapi_blog
+from fastapi import FastAPI
+
+
+favorite_post_ids = {
+  'code-code-code',
+  'thirty-minute-rule',
+  '2023-11-three-years-at-kraken-tech',
+}
+
+app = FastAPI()
+app = fastapi_blog.add_blog_to_fastapi(app, favorite_post_ids=favorite_post_ids)
+
+
+@app.get('/')
+async def index() -> dict:
+  return {
+    'message': 'Check out the blog at the URL',
+    'url': 'http://localhost:8000/blog',
+  }
+```
+
+### Add page not in the blog list of posts
+
+In the `pages` directory of your blog, add markdown files with frontmatter. You can then find it by going to the URL with that name. For example, adding this `pages/about.md` to the default config would make this appear at http://localhost:8000/blog/about.
+
+```markdown
+---
+title: "About Daniel Roy Greenfeld"
+description: "A little bit of background about Daniel Roy Greenfeld"
+author: "Daniel Roy Greenfeld"
+---
+
+I'm probably best known as "[pydanny](https://www.google.com/search?q=pydanny)", one of the authors of [Two Scoops of Django](/books/tech).
+```
+
+
+## Installation and Running Example Sites
+
+### Option 1: Local Development Setup (Recommended)
+
+**Requirements:** Python 3.12+ (tested with Python 3.13.7)
 
 ```bash
-make test       # Run the test suite with coverage
-make lint       # Run Ruff checks
-make format     # Format/fix with Ruff
-make mypy       # Run mypy
-make all        # Run the configured quality checks
+# Clone the repository
+git clone https://github.com/pydanny/fastapi-blog.git
+cd fastapi-blog
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install the project in development mode (this handles uv installation automatically)
+make install
+
+# Run the example blog
+make run
 ```
 
-Tests are scoped to `tests/` by the pytest configuration. CI workflows are defined under `.github/workflows/`.
+### Option 2: Install from PyPI
 
-### Repository layout
+```bash
+# Core: the blog and the optional REST API. Needs only files, no database
+pip install fastapi-blog
 
-```text
-.
-├── src/fastapi_blog/
-│   ├── admin/          # Optional Starlette Admin integration
-│   ├── models/         # Frontmatter and API models
-│   ├── templates/      # Public Jinja2 templates
-│   ├── main.py         # FastAPI integration and unified setup
-│   ├── router.py       # Public blog routes
-│   ├── editor.py       # Post-management REST API
-│   ├── store.py        # File-backed collections and documents
-│   ├── jsonld.py       # JSON-LD projection and contexts
-│   ├── seo.py          # SEO roles, configuration and head metadata
-│   └── helpers.py      # Markdown and post helpers
-├── tests/              # Unit and integration tests
-│   └── examples/       # Runnable example applications
-├── docs/               # Architecture and feature documentation
-├── .github/workflows/  # CI workflows
-├── pyproject.toml      # Package metadata and dependencies
-├── CHANGELOG.md        # Release history
-├── QUICKSTART.md       # Guided setup and examples
-└── Makefile            # Development tasks
+# Optional extras
+pip install "fastapi-blog[admin]"   # admin panel (starlette-admin, SQLAlchemy)
+pip install "fastapi-blog[jsonld]"  # JSON-LD expansion and N-Quads output
 ```
 
-### Tests and quality
+The admin panel is loaded lazily: `import fastapi_blog` never imports it. Without
+the `admin` extra, `setup_fastapi_blog(app, admin=False)` still works, and
+`add_admin_to_app` raises an `ImportError` that names the extra to install.
 
-The repository contains 34 test modules covering the core blog, storage, schema validation, REST API, authentication, admin behavior, SEO, JSON-LD and CLI. Run `make test` to execute the current suite; test counts and coverage are intentionally not hard-coded here because they change as the project evolves.
+### Option 3: Docker (Local Dockerfile)
 
-## Documentation
+Or into a Docker container using the local Dockerfile:
 
-- [Quick Start](QUICKSTART.md) — demos, setup and common workflows.
-- [Frontmatter Schema](docs/FRONTMATTER_SCHEMA.md) — schema fields, roles, validation and JSON-LD/SEO configuration.
-- [Architecture](docs/ARCHITECTURE.md) — components and request/data flow.
-- [Database](docs/DATABASE.md) — database models and setup.
-- [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) — environment-based configuration.
-- [Role Management](docs/ROLE_MANAGEMENT.md) — optional RBAC functionality.
-- [Changelog](CHANGELOG.md) — changes in version `0.9.0` and earlier.
+```bash
+docker build -t fastapi-blog .
+docker run -d -p 8000:8000 fastapi-blog
+```
 
-## License
+### Option 4: Docker (Prebuilt)
 
-See [LICENSE.md](LICENSE.md).
+Or using a prebuilt Docker image from GitHub Container Registry:
+
+```bash
+docker run -d -p 8000:8000 ghcr.io/pydanny/fastapi-blog:latest
+```
+
+This is if you just want to run the application without building it yourself.
+
+## Development
+
+### Running Tests and Quality Checks
+
+```bash
+# Run all tests with coverage
+make test
+
+# Run linting and formatting checks
+make lint
+
+# Auto-fix linting issues
+make format
+
+# Run type checking
+make mypy
+
+# Run all quality checks
+make all
+```
+
+### Project Structure
+
+```
+fastapi-blog/
+├── src/fastapi_blog/          # Main package
+│   ├── main.py               # Core FastAPI integration
+│   ├── router.py             # Blog routes and views
+│   ├── helpers.py            # Markdown parsing, post listing
+│   ├── models/               # FrontmatterSchema, FieldSpec, API models
+│   ├── store.py              # Collection/DocumentStore (ETag, locking)
+│   ├── editor.py             # REST API router (add_editor_to_app)
+│   ├── admin/                # Optional admin panel (needs `admin` extra)
+│   └── templates/            # Jinja2 templates
+├── tests/                    # Test suite (450+ tests)
+│   └── examples/             # Example configurations
+├── docs/                     # Documentation
+├── .github/workflows/        # CI/CD workflows
+└── pyproject.toml           # Project configuration
+```
+
+## Releasing a new version
+
+1. Update the version in `pyproject.toml` and `fastapi_blog/__init__.py`
+
+2. Update `CHANGELOG.md`
+
+3. Build the distribution locally:
+
+```bash
+rm -rf dist
+pip install -U build
+python -m build
+```
+
+4. Upload the distribution to PyPI:
+
+```bash
+pip install -U twine
+python -m twine upload dist/*
+```
+
+5. Create a new release on GitHub and tag the release:
+
+```bash
+git commit -am "Release for vXYZ"
+make tag
+```
 
 ## Contributors
 
@@ -385,7 +578,6 @@ See [LICENSE.md](LICENSE.md).
             <br />
             <sub><b>Audrey Roy Greenfeld</b></sub>
         </a>
-    </td>
-</tr>
+    </td></tr>
 </table>
 <!-- readme: contributors -end -->

@@ -70,6 +70,7 @@ def setup_fastapi_blog(
   enable_role_management: bool = False,
   frontmatter_schema: FrontmatterSchema | None = None,
   seo: SeoConfig | None = None,
+  seo_routes: bool = False,
   admin: bool = True,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
@@ -95,6 +96,8 @@ def setup_fastapi_blog(
       frontmatter_schema: Custom schema of the post frontmatter.
       seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
           own `seo` section.
+      seo_routes: Add `sitemap.xml`, `robots.txt` and `redirect_from`
+          redirects (TODO 5.9.5). Requires `seo.site_url`. Default: `False`.
       admin: Add the admin panel (needs the `admin` extra). Default: `True`.
 
   Returns:
@@ -128,6 +131,7 @@ def setup_fastapi_blog(
     admin_password=admin_password,
     frontmatter_schema=frontmatter_schema,
     seo=seo,
+    seo_routes=seo_routes,
   )
   if add_admin is None:
     return {}

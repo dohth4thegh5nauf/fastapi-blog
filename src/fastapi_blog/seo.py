@@ -9,12 +9,17 @@ the field name, nothing more.
 `SeoConfig` (in `models/schema.py`) holds the site-wide settings: the
 `seo:` section of a schema file or the `seo=` argument of
 `add_blog_to_fastapi()`/`setup_fastapi_blog()`. `resolve_seo_config()` picks
-the effective one. The substitution order (5.9.3) and the full
-`<head>`/social-tag output (5.9.4) aren't built yet, so most of these roles
-and settings still have no visible effect on a rendered page (only
-`site_name` reaches the page header).
+the effective one. `build_head()` applies the substitution order (5.9.3) and
+collects the values the `partials/_seo_head.html` fragment prints (5.9.4);
+with no `SeoConfig` it returns an empty mapping and the page keeps its
+legacy title, description and canonical output.
 """
 
+import datetime as _dt
+import html.parser as _html_parser
+import json as _json
+import re as _re
+import urllib.parse as _url
 from typing import Any
 
 from .models import ROBOTS_DIRECTIVES, FieldSpec, FrontmatterSchema, SeoConfig
@@ -139,61 +144,76 @@ def resolve_seo_config(
   return None
 
 
-import datetime as _dt
-import html.parser as _html_parser
-import json as _json
-import re as _re
-import urllib.parse as _url
-
-
 def _excerpt(source: str, limit: int) -> str:
   class Text(_html_parser.HTMLParser):
     def __init__(self):
       super().__init__()
       self.parts, self.hidden = [], 0
+
     def handle_starttag(self, tag, attrs):
-      if tag in ('script', 'style'): self.hidden += 1
+      if tag in ('script', 'style'):
+        self.hidden += 1
+
     def handle_endtag(self, tag):
-      if tag in ('script', 'style') and self.hidden: self.hidden -= 1
+      if tag in ('script', 'style') and self.hidden:
+        self.hidden -= 1
+
     def handle_data(self, data):
-      if not self.hidden: self.parts.append(data)
+      if not self.hidden:
+        self.parts.append(data)
+
   parser = Text()
   parser.feed(source or '')
   value = ' '.join(parser.parts)
   value = _re.sub(r'!?(?:\[[^\]]*\])\([^)]*\)', ' ', value)
   value = _re.sub(r'[`*_>#~]+', ' ', value)
   value = ' '.join(value.split())
-  if len(value) <= limit: return value
-  value = value[:limit + 1]
-  return value.rsplit(' ', 1)[0].rstrip(' ,.;:!?') if ' ' in value else value[:limit]
+  if len(value) <= limit:
+    return value
+  value = value[: limit + 1]
+  return (
+    value.rsplit(' ', 1)[0].rstrip(' ,.;:!?') if ' ' in value else value[:limit]
+  )
 
 
 def _valid_url(value: Any) -> str | None:
-  if not isinstance(value, str) or not value: return None
+  if not isinstance(value, str) or not value:
+    return None
   parts = _url.urlsplit(value)
-  if parts.scheme.lower() in ('http', 'https') and parts.netloc: return value
-  if value.startswith('/') and not value.startswith('//'): return value
+  if parts.scheme.lower() in ('http', 'https') and parts.netloc:
+    return value
+  if value.startswith('/') and not value.startswith('//'):
+    return value
   return None
 
 
 def _iso(value: Any) -> str | None:
-  if isinstance(value, (_dt.date, _dt.datetime)): return value.isoformat()
+  if isinstance(value, (_dt.date, _dt.datetime)):
+    return value.isoformat()
   return value if isinstance(value, str) and value else None
 
 
-def build_head(document: dict[str, Any] | None = None, *,
-               config: SeoConfig | None = None, request_url: str = '',
-               locale: str = 'en', page_type: str = 'article',
-               body: str = '') -> dict[str, Any]:
+def build_head(
+  document: dict[str, Any] | None = None,
+  *,
+  config: SeoConfig | None = None,
+  request_url: str = '',
+  locale: str = 'en',
+  page_type: str = 'article',
+  body: str = '',
+) -> dict[str, Any]:
   """Resolve frontmatter SEO roles according to TODO 5.9.3."""
-  if config is None: return {}
+  if config is None:
+    return {}
   doc = document or {}
   title = doc.get('seo_title') or doc.get('title')
   if title and config.title_template:
-    title = config.title_template.format(title=title, site_name=config.site_name or '')
+    title = config.title_template.format(
+      title=title, site_name=config.site_name or ''
+    )
   title = title or config.site_name
   description = doc.get('description')
-  if not description and page_type in ('index', 'list', 'tags', 'tag', 'page'):
+  if not description and page_type in ('index', 'list', 'tags', 'tag'):
     description = config.index_description
   if not description and config.description_fallback == 'excerpt':
     description = _excerpt(body, config.description_length)
@@ -212,31 +232,63 @@ def build_head(document: dict[str, Any] | None = None, *,
   updated = _iso(doc.get('updated')) or _iso(doc.get('date'))
   author = doc.get('author') or config.default_author
   authors = author if isinstance(author, list) else ([author] if author else [])
-  robots = list(dict.fromkeys([*(doc.get('robots') or []), *config.default_robots]))
+  robots = [*(doc.get('robots') or []), *config.default_robots]
+  if config.noindex_tags and page_type in ('tag', 'tags'):
+    robots.append('noindex')
+  robots = list(dict.fromkeys(robots))
   language = doc.get('lang') or locale
   tags, published = doc.get('tags') or [], _iso(doc.get('date'))
   structured = None
   if config.structured_data != 'none' and page_type == 'article':
     structured = {
       '@context': 'https://schema.org',
-      '@type': 'BlogPosting' if config.structured_data == 'blogposting' else 'Article',
-      'headline': title, 'description': description, 'image': image,
-      'datePublished': published, 'dateModified': updated,
+      '@type': 'BlogPosting'
+      if config.structured_data == 'blogposting'
+      else 'Article',
+      'headline': title,
+      'description': description,
+      'image': image,
+      'datePublished': published,
+      'dateModified': updated,
       'author': [{'@type': 'Person', 'name': x} for x in authors],
-      'inLanguage': language, 'mainEntityOfPage': canonical, 'keywords': tags,
+      'inLanguage': language,
+      'mainEntityOfPage': canonical,
+      'keywords': tags,
     }
-    structured = {k: v for k, v in structured.items() if v not in (None, [], '')}
-  jsonld = _json.dumps(structured, ensure_ascii=False).replace('&', r'\\u0026').replace('<', r'\\u003c').replace('>', r'\\u003e') if structured else None
+    structured = {
+      k: v for k, v in structured.items() if v not in (None, [], '')
+    }
+  jsonld = (
+    _json.dumps(structured, ensure_ascii=False)
+    .replace('&', r'\u0026')
+    .replace('<', r'\u003c')
+    .replace('>', r'\u003e')
+    if structured
+    else None
+  )
   return {
-    'title': title, 'description': description, 'canonical_url': canonical,
-    'robots': robots, 'author': ', '.join(map(str, authors)) or None,
-    'og_enabled': config.og, 'og_type': 'article' if page_type == 'article' else 'website',
-    'og_title': title, 'og_description': description, 'og_url': canonical,
-    'og_image': image, 'og_image_alt': doc.get('image_alt'),
-    'og_site_name': config.site_name, 'og_locale': language,
-    'og_published_time': published, 'og_modified_time': updated, 'og_tags': tags,
-    'twitter_card': config.twitter_card, 'twitter_title': title,
-    'twitter_description': description, 'twitter_image': image,
-    'twitter_image_alt': doc.get('image_alt'), 'structured_data_json': jsonld,
+    'title': title,
+    'description': description,
+    'canonical_url': canonical,
+    'robots': robots,
+    'author': ', '.join(map(str, authors)) or None,
+    'og_enabled': config.og,
+    'og_type': 'article' if page_type == 'article' else 'website',
+    'og_title': title,
+    'og_description': description,
+    'og_url': canonical,
+    'og_image': image,
+    'og_image_alt': doc.get('image_alt'),
+    'og_site_name': config.site_name,
+    'og_locale': language,
+    'og_published_time': published,
+    'og_modified_time': updated,
+    'og_tags': tags,
+    'twitter_card': config.twitter_card,
+    'twitter_title': title,
+    'twitter_description': description,
+    'twitter_image': image,
+    'twitter_image_alt': doc.get('image_alt'),
+    'structured_data_json': jsonld,
     'lang': language,
   }

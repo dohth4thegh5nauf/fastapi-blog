@@ -344,3 +344,24 @@ def test_site_name_reaches_non_default_locale_pages_too():
   ) as client:
     assert _header(client.get('/blog/').text, 'Example Notes')
     assert _header(client.get('/ru/blog/').text, 'Example Notes')
+
+
+def test_seo_disallow_accepts_paths_and_null():
+  from fastapi_blog.models import SeoConfig
+
+  assert SeoConfig(disallow=['/admin', '/a/b']).disallow == ('/admin', '/a/b')
+  assert SeoConfig.from_dict({'disallow': None}).disallow == ()
+  assert SeoConfig.from_dict({'disallow': ['/x']}).to_dict() == {
+    'disallow': ('/x',)
+  }
+
+
+@pytest.mark.parametrize(
+  'value',
+  ['/admin', 'admin', ['admin'], ['/a b'], ['/a\nUser-agent: x'], [1], ['']],
+)
+def test_seo_disallow_rejects_bad_values(value):
+  from fastapi_blog.models import SeoConfig
+
+  with pytest.raises(ValueError, match='seo.disallow'):
+    SeoConfig(disallow=value)
