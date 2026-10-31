@@ -116,10 +116,10 @@ app = FastAPI()
 
 add_blog_to_fastapi(app, prefix='blog')
 add_admin_to_app(
-    app,
-    admin_username='admin',
-    admin_password='change-this-password',
-    secret_key='replace-with-a-random-secret',
+  app,
+  admin_username='admin',
+  admin_password='change-this-password',
+  secret_key='replace-with-a-random-secret',
 )
 ```
 
@@ -136,15 +136,15 @@ from fastapi_blog import setup_fastapi_blog
 app = FastAPI()
 
 setup_fastapi_blog(
-    app,
-    posts_dirname='posts',
-    include_api=True,
-    locales=['en', 'ru'],
-    default_locale='en',
-    admin_username='admin',
-    admin_password='change-this-password',
-    secret_key='replace-with-a-random-secret',
-    enable_role_management=False,
+  app,
+  posts_dirname='posts',
+  include_api=True,
+  locales=['en', 'ru'],
+  default_locale='en',
+  admin_username='admin',
+  admin_password='change-this-password',
+  secret_key='replace-with-a-random-secret',
+  enable_role_management=False,
 )
 ```
 
@@ -163,12 +163,12 @@ from fastapi_blog import add_blog_to_fastapi
 app = FastAPI()
 
 add_blog_to_fastapi(
-    app,
-    include_api=True,
-    api_prefix='/api/posts',
-    api_require_auth=True,
-    admin_username='writer',
-    admin_password='use-a-long-unique-password',
+  app,
+  include_api=True,
+  api_prefix='/api/posts',
+  api_require_auth=True,
+  admin_username='writer',
+  admin_password='use-a-long-unique-password',
 )
 ```
 
@@ -177,10 +177,11 @@ The API routes are documented in `/docs`. Authentication is required by default.
 ```python
 from fastapi import HTTPException, Request
 
+
 def check_token(request: Request) -> dict:
-    if request.headers.get('X-Token') != 'replace-this-token':
-        raise HTTPException(status_code=403)
-    return {'username': 'automation'}
+  if request.headers.get('X-Token') != 'replace-this-token':
+    raise HTTPException(status_code=403)
+  return {'username': 'automation'}
 ```
 
 Pass it as `api_auth_dependency=check_token`. If authentication is required but no usable authentication mechanism is configured, the application reports a configuration error at startup rather than silently exposing an unusable or unprotected API.
@@ -195,13 +196,13 @@ The built-in schema supports the conventional fields `title`, `date`, `published
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 
 schema = FrontmatterSchema(
-    fields=(
-        FieldSpec('heading', role='title'),
-        FieldSpec('pubDate', type='date', role='date'),
-        FieldSpec('visible', type='bool', role='published', default=True),
-        FieldSpec('labels', type='list[str]', role='tags'),
-        FieldSpec('summary', role='description'),
-    )
+  fields=(
+    FieldSpec('heading', role='title'),
+    FieldSpec('pubDate', type='date', role='date'),
+    FieldSpec('visible', type='bool', role='published', default=True),
+    FieldSpec('labels', type='list[str]', role='tags'),
+    FieldSpec('summary', role='description'),
+  )
 )
 ```
 
@@ -236,9 +237,9 @@ from fastapi_blog import add_blog_to_fastapi
 from fastapi_blog.models import SeoConfig
 
 add_blog_to_fastapi(
-    app,
-    seo=SeoConfig(site_url='https://example.org', disallow=['/admin']),
-    seo_routes=True,
+  app,
+  seo=SeoConfig(site_url='https://example.org', disallow=['/admin']),
+  seo_routes=True,
 )
 ```
 
@@ -252,9 +253,9 @@ JSON-LD routes are opt-in:
 from fastapi_blog import add_blog_to_fastapi
 
 add_blog_to_fastapi(
-    app,
-    jsonld_routes=True,
-    frontmatter_schema=schema,
+  app,
+  jsonld_routes=True,
+  frontmatter_schema=schema,
 )
 ```
 
