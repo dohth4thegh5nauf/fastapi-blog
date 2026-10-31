@@ -93,3 +93,42 @@ def test_seo_fields_schema_author_can_rename_fields():
   schema = FrontmatterSchema(fields=(renamed,))
   instance = schema.model()(image='/pic.png')
   assert instance.social_image == '/pic.png'
+
+
+def test_build_head_resolves_seo_fallbacks_and_structured_data():
+  import json
+  from fastapi_blog.seo import build_head
+  from fastapi_blog.models import SeoConfig
+
+  result = build_head(
+    {
+      'title': 'A post', 'description': '', 'date': '2026-01-02',
+      'updated': '2026-01-03', 'robots': ['noindex'], 'tags': ['python'],
+      'author': None, 'image': '/cover.png',
+    },
+    config=SeoConfig(
+      site_url='https://example.test', site_name='Example',
+      title_template='{title} - {site_name}', default_image='/default.png',
+      default_author='Editor', default_robots=('nofollow',), og=True,
+      twitter_card='summary_large_image', structured_data='blogposting',
+    ),
+    request_url='https://request.invalid/blog/posts/a?utm=1', locale='en',
+  )
+  assert result['title'] == 'A post - Example'
+  assert result['canonical_url'] == 'https://request.invalid/blog/posts/a'
+  assert result['og_image'] == 'https://example.test/cover.png'
+  assert result['robots'] == ['noindex', 'nofollow']
+  assert result['author'] == 'Editor'
+  assert json.loads(result['structured_data_json'])['keywords'] == ['python']
+
+
+def test_excerpt_fallback_strips_markup_and_truncates_on_word_boundary():
+  from fastapi_blog.seo import build_head
+  from fastapi_blog.models import SeoConfig
+
+  result = build_head(
+    {}, config=SeoConfig(description_fallback='excerpt', description_length=12),
+    body='<p>Hello <strong>world</strong>, this is a <em>test</em>.</p>',
+    page_type='article',
+  )
+  assert result['description'] == 'Hello world'

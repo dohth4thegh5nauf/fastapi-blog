@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### SEO page metadata: resolver and head output (TODO 5.9.3–5.9.4, partial)
+
+- Added `seo.build_head()` to resolve role-based title, description, canonical,
+  image, updated/date, author, robots and language values in the specified
+  fallback order. Excerpt fallback strips HTML/Markdown-like syntax and cuts
+  at a deterministic word boundary.
+- Added the overridable `partials/_seo_head.html` fragment and wired it through
+  the `seo_head` block in `layouts/base.html`. When SEO configuration is absent,
+  the legacy title, description and canonical output remains in place.
+- Added optional Open Graph, Twitter Card and schema.org BlogPosting/Article
+  output. JSON-LD embedded in the script element escapes `<`, `>` and `&`.
+- Remaining: finish canonical/hreflang response-header integration, broaden
+  route-level coverage for pages and listing pages, and implement 5.9.5,
+  5.9.7 and 5.9.8.
+
+
 ### Site-wide SEO settings: `SeoConfig` and the `seo:` section (TODO 5.9.2)
 
 - `SeoConfig` (`fastapi_blog.models`) holds the settings from TODO 5.9.2:

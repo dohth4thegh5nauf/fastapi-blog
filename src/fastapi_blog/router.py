@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from . import helpers, jsonld, store
 from .i18n import Translator
 from .models import SLUG_RE, FrontmatterSchema, SeoConfig
-from .seo import resolve_seo_config
+from .seo import build_head, resolve_seo_config
 
 
 def get_blog_router(
@@ -146,6 +146,28 @@ def get_blog_router(
     # Check if current page is canonical (not a duplicate)
     current_url = str(request.url).split('?')[0]  # Remove query string
     context['is_canonical'] = canonical_url == current_url
+
+    if effective_seo is not None:
+      document = context.get('post') or context.get('page') or {}
+      if isinstance(document, dict) and isinstance(document.get('metadata'), dict):
+        document = {**document.get('metadata', {}), **document}
+      page_type = 'article' if context.get('post') else ('page' if context.get('page') else 'list')
+      seo_head = build_head(
+        document, schema=frontmatter_schema, config=effective_seo,
+        request_url=(effective_seo.site_url or str(request.base_url).rstrip('/')) + request.url.path,
+        locale=current_locale, page_type=page_type,
+        body=(document.get('content') or '') if isinstance(document, dict) else '',
+      )
+      context['seo_head'] = seo_head
+      # The SEO resolver is authoritative when enabled; legacy title/description
+      # remain untouched when no seo configuration is present.
+      if seo_head.get('title'):
+        context['title'] = seo_head['title']
+      if seo_head.get('description'):
+        context['description'] = seo_head['description']
+      if seo_head.get('canonical_url'):
+        context['canonical_url'] = seo_head['canonical_url']
+      context['lang'] = seo_head.get('lang', current_locale)
 
     return context
 
