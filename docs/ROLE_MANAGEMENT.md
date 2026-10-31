@@ -1,6 +1,6 @@
 # Role Management
 
-FastAPI Blog includes an optional role-based access control (RBAC) system for more granular user permissions.
+FastAPI Blog includes a built-in role-based access policy shared by the REST API and admin panel. The same `authorize(request, resource, action)` callback can be supplied to replace the policy.
 
 ## Overview
 
@@ -10,11 +10,11 @@ The role management system provides:
 - **Many-to-Many Relationship:** Users can have multiple roles
 - **Admin Views:** Manage roles and users through admin panel
 - **Flexible Permissions:** Control access at the view and action level
-- **Root-Only Access:** Role management is only visible and accessible to the root admin user
+- **Shared Authorization:** REST API routes and admin views consult the same resource/action policy
 
 ## Access URLs
 
-When role management is enabled, the following URLs are available **only to the root admin user**:
+When role management is enabled, the following URLs require the `admin` role by default:
 
 - **English Admin:**
   - Role management section: `/admin/en` (in sidebar under "Access Control")
@@ -73,6 +73,7 @@ from fastapi_blog.admin import UserWithRoles
 ### Basic Setup
 
 ```python
+import os
 from fastapi import FastAPI
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
@@ -86,7 +87,8 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 admins = fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='Admin123!',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 
 # Add role management views to admin
@@ -116,10 +118,32 @@ async with session_factory() as session:
   await create_default_roles(session)
 ```
 
-This creates three default roles:
-- **admin:** Full access to all features
-- **editor:** Can create and edit content
-- **viewer:** Read-only access
+The built-in policy has three roles (assigned to login accounts through
+`auth_users`):
+
+- **admin:** Full access to posts, users, settings, and role management.
+- **editor:** Can create, read, update, and publish posts; can read users and
+  settings; cannot delete posts or manage accounts/roles.
+- **viewer:** Can read posts only.
+
+```python
+admins = fastapi_blog.add_admin_to_app(
+  app,
+  admin_username='root',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
+  auth_users={
+    'writer': {'password': os.environ['EDITOR_PASSWORD'], 'role': 'editor'},
+    'reader': {'password': os.environ['VIEWER_PASSWORD'], 'role': 'viewer'},
+  },
+)
+```
+
+The primary `admin_username`/`admin_password` account always receives the
+`admin` role. Additional `auth_users` are panel login identities; the role is
+stored in the signed session and is preserved when that cookie authenticates
+REST API calls. Unknown or missing roles are denied. The `insecure_dev=True`
+flag enables legacy development credentials only as an explicit local opt-in.
 
 ## Usage
 
@@ -148,34 +172,29 @@ async def admin_dashboard(db: AsyncSession = Depends(get_db)):
   return {'error': 'Access denied'}
 ```
 
-### Custom Permissions in Views
+### Custom authorization callback
+
+Pass the same callback to `setup_fastapi_blog()`, `add_blog_to_fastapi()` or
+`add_admin_to_app()`. It receives the request, resource name and action, and
+must return `bool`. Unknown combinations should be denied.
 
 ```python
-from starlette.requests import Request
-from starlette_admin.contrib.sqla import ModelView
-from fastapi_blog.admin.models import UserWithRoles
+from fastapi import Request
 
 
-class MyModelView(ModelView):
-  def can_create(self, request: Request) -> bool:
-    """Only admins and editors can create."""
-    user_email = request.session.get('user')
-    if not user_email:
-      return False
-
-    # Get user from database
-    user = get_user_by_email(user_email)  # Implement this
-    return user.has_any_role('admin', 'editor')
-
-  def can_delete(self, request: Request) -> bool:
-    """Only admins can delete."""
-    user_email = request.session.get('user')
-    if not user_email:
-      return False
-
-    user = get_user_by_email(user_email)
-    return user.has_role('admin')
+def authorize(request: Request, resource: str, action: str) -> bool:
+  principal = getattr(request.state, 'blog_user', None) or {}
+  role = principal.get('role')
+  if role == 'owner':
+    return True
+  return role == 'writer' and resource == 'posts' and action in {
+    'read', 'create', 'update', 'publish',
+  }
 ```
+
+Starlette Admin's synchronous ModelView permission hooks require a synchronous
+callback. Async callbacks are supported by REST and Markdown custom routes;
+ModelView hooks fail closed for an awaitable result.
 
 ## Admin Views
 

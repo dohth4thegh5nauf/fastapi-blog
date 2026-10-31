@@ -845,3 +845,96 @@ def test_schema_round_trip_with_link_and_file_fields():
   restored = FrontmatterSchema.from_dict(schema.to_dict())
   assert restored.to_dict() == schema.to_dict()
   assert restored.fields[0].filters == ({'field': 'kind', 'values': ['a']},)
+
+
+# --- Nested object fields (TODO 5.1.2) ---------------------------------------
+
+
+def test_nested_object_and_list_object_validate_and_dump_aliases():
+  schema = FrontmatterSchema.from_dict({
+    'fields': {
+      'metadata': {
+        'type': 'object',
+        'fields': {
+          'identifier': {'alias': '@id', 'type': 'str'},
+          'rating': {'type': 'int'},
+        },
+      },
+      'offers': {
+        'type': 'list[object]',
+        'min_items': 1,
+        'fields': {
+          'name': {'type': 'str', 'required': True},
+          'price': {'type': 'float'},
+        },
+      },
+    },
+  })
+  instance = schema.model().model_validate({
+    'metadata': {'@id': 'note:1', 'rating': 5},
+    'offers': [{'name': 'Standard', 'price': 12.5}],
+  })
+  assert schema.dump(instance, by_alias=True) == {
+    'metadata': {'@id': 'note:1', 'rating': 5},
+    'offers': [{'name': 'Standard', 'price': 12.5}],
+  }
+  assert schema.to_dict()['fields']['metadata']['fields']['identifier']['alias'] == '@id'
+
+
+def test_nested_object_rejects_depth_greater_than_three():
+  with pytest.raises(ValueError, match='maximum depth of 3'):
+    FieldSpec(
+      'one', type='object', fields=(
+        FieldSpec('two', type='object', fields=(
+          FieldSpec('three', type='object', fields=(
+            FieldSpec('four'),
+          )),
+        )),
+      ),
+    )
+
+
+def test_nested_object_rejects_semantic_roles_and_alias_collisions():
+  with pytest.raises(ValueError, match='cannot bind a semantic role'):
+    FieldSpec('meta', type='object', fields=(FieldSpec('title', role='title'),))
+  with pytest.raises(ValueError, match='clashes'):
+    FieldSpec('meta', type='object', fields=(
+      FieldSpec('one', alias='same'), FieldSpec('two', alias='same'),
+    ))
+
+
+def test_nested_read_only_values_are_preserved_or_rejected():
+  schema = FrontmatterSchema(fields=(
+    FieldSpec('meta', type='object', fields=(
+      FieldSpec('identifier', read_only=True),
+      FieldSpec('label'),
+    )),
+  ))
+  model = schema.model()
+  original = {'meta': {'identifier': 'fixed', 'label': 'Before'}}
+  unchanged = model.model_validate({'meta': {'label': 'After'}})
+  dumped = schema.dump_for_write(unchanged, is_create=False, existing=original)
+  assert dumped['meta']['identifier'] == 'fixed'
+  changed = model.model_validate({'meta': {'identifier': 'other', 'label': 'After'}})
+  with pytest.raises(ValueError, match='read-only'):
+    schema.dump_for_write(changed, is_create=False, existing=original)
+
+  list_schema = FrontmatterSchema(fields=(
+    FieldSpec('items', type='list[object]', fields=(
+      FieldSpec('identifier', read_only=True),
+      FieldSpec('label'),
+    )),
+  ))
+  list_model = list_schema.model()
+  list_existing = {'items': [
+    {'identifier': 'fixed-1', 'label': 'First'},
+    {'identifier': 'fixed-2', 'label': 'Second'},
+  ]}
+  omitted = list_model.model_validate({})
+  assert list_schema.dump_for_write(
+    omitted, is_create=False, existing=list_existing
+  )['items'] == list_existing['items']
+  partial = list_model.model_validate({'items': [{'label': 'Changed'}]})
+  assert list_schema.dump_for_write(
+    partial, is_create=False, existing=list_existing
+  )['items'] == [{'identifier': 'fixed-1', 'label': 'Changed'}]

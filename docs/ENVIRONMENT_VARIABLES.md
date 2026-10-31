@@ -31,7 +31,8 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 # This is equivalent to: add_blog_to_fastapi(app, prefix='blog', include_api=True)
 ```
 
-**Priority:** Explicit parameter > environment variable > default value
+**Priority:** Explicit parameter > environment variable. There is no default
+password.
 
 ```python
 # Explicit parameter takes priority
@@ -65,11 +66,12 @@ admins = fastapi_blog.add_admin_to_app(app)
 
 #### `FASTAPI_BLOG_ADMIN_PASSWORD`
 
-Default admin password for login.
+Admin password for login. It is required when the admin panel is enabled.
 
-**Default:** `Admin123!`
+**Default:** unset. No password is generated or supplied by the package.
 
-**Security Warning:** ⚠️ Change this in production! Never commit passwords to version control.
+**Security Warning:** Store this value in a secret manager or environment file
+excluded from version control. Never commit passwords.
 
 **Example:**
 ```bash
@@ -80,23 +82,27 @@ export FASTAPI_BLOG_ADMIN_PASSWORD=MySecurePassword123!
 ```python
 import fastapi_blog
 
-# Uses password from environment variable
+# Uses password and SECRET_KEY from environment variables
 admins = fastapi_blog.add_admin_to_app(app)
-# This is equivalent to: add_admin_to_app(app, admin_password='MySecurePassword123!')
+# This is equivalent to passing both required values explicitly.
 ```
 
-**Priority:** Explicit parameter > environment variable > default value
+**Priority:** Explicit parameter > environment variable. Passwords and
+session secrets have no default; username alone falls back to `admin`.
 
 ```python
-# Explicit parameters take priority
+import os
+
+# Explicit values can be loaded from a secret manager.
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='custom',
-  admin_password='CustomPass123!',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 
-# Environment variables used if parameters not specified
-fastapi_blog.add_admin_to_app(app)  # Uses env vars if set
+# Environment variables are used when parameters are omitted.
+fastapi_blog.add_admin_to_app(app)
 ```
 
 ### Database Configuration
@@ -129,11 +135,14 @@ See [DATABASE.md](DATABASE.md) for more details on database configuration.
 
 #### `SECRET_KEY`
 
-Secret key for session encryption.
+Secret key for session encryption. It is required when the admin panel is
+enabled and must contain at least 32 characters. Known placeholder values are
+rejected.
 
-**Default:** `change-me-in-production-please-use-strong-secret`
+**Default:** unset. There is no fallback session secret.
 
-**Security Warning:** ⚠️ Always set this in production! Use a strong random value.
+**Security Warning:** Generate a cryptographically random value and keep it
+private. Do not reuse a public example value.
 
 **Example:**
 ```bash
@@ -158,15 +167,15 @@ admins = fastapi_blog.add_admin_to_app(app)
 # Blog configuration
 FASTAPI_BLOG_INCLUDE_API=true
 
-# Admin credentials (development only)
+# Admin credentials (required when the admin panel is enabled)
 FASTAPI_BLOG_ADMIN_LOGIN=admin
-FASTAPI_BLOG_ADMIN_PASSWORD=Admin123!
+FASTAPI_BLOG_ADMIN_PASSWORD=replace-with-a-unique-password
 
 # Database
 DATABASE_URL=sqlite+aiosqlite:///./dev.db
 
-# Session encryption
-SECRET_KEY=dev-secret-key-change-in-production
+# Session encryption (generate a unique random value)
+SECRET_KEY=replace-with-at-least-32-random-characters
 ```
 
 ### Production (.env.production)
@@ -207,6 +216,14 @@ app = FastAPI()
 fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 admins = fastapi_blog.add_admin_to_app(app)
 ```
+
+For a local-only throwaway demo, `insecure_dev=True` explicitly enables the
+legacy development credentials and emits a warning. Never use it in a deployed
+application. `https_only=True` sets the session cookie's `Secure` flag; enable
+it when the application is served over HTTPS. Session cookies use
+`SameSite=Lax` by default. Cookie-authenticated write requests must carry a
+same-origin `Origin` header; clients without browser cookies can use Basic auth
+or a custom authentication dependency.
 
 ## Docker Example
 

@@ -1,6 +1,7 @@
 """Authentication provider for starlette-admin."""
 
-from collections.abc import Callable
+import secrets
+from collections.abc import Callable, Mapping
 
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
@@ -11,6 +12,7 @@ from starlette_admin.exceptions import FormValidationError, LoginFailed
 from starlette_admin.helpers import HTTP_422, index_url, safe_redirect_url
 
 from ..i18n import load_translations
+from ..permissions import ADMIN
 
 
 def _yaml_translator(locale: str) -> Callable[[str], str]:
@@ -39,16 +41,16 @@ def _yaml_translator(locale: str) -> Callable[[str], str]:
 class SimpleAuthProvider(AuthProvider):
   """Simple authentication provider for admin panel.
 
-  Uses hardcoded credentials for initial setup.
-  In production, integrate with database users.
+  Uses explicitly configured credentials and assigns a role to each session.
   """
 
   def __init__(
     self,
-    username: str = 'admin',
-    password: str = 'Admin123!',  # nosec B107 - default dev password, override in production
+    username: str,
+    password: str,
     redirect_after_login: str = '/dashboard/user/list',
     locale: str = 'en',
+    users: Mapping[str, Mapping[str, str]] | None = None,
   ):
     """Initialize auth provider with credentials and redirect URL."""
     super().__init__()
@@ -56,6 +58,7 @@ class SimpleAuthProvider(AuthProvider):
     self.password = password
     self.redirect_after_login = redirect_after_login
     self.locale = locale
+    self.users = dict(users or {})
 
   async def login(
     self,
@@ -64,17 +67,50 @@ class SimpleAuthProvider(AuthProvider):
     remember_me: bool,
     request: Request,
   ) -> Response | None:
-    # Simple hardcoded check - replace with database lookup in production
-    if username == self.username and password == self.password:
-      request.session.update({'user': username, 'is_admin': True})
-      # Redirect to configured page after successful login
-      return RedirectResponse(url=self.redirect_after_login, status_code=303)
+    role = None
+    username_ok = secrets.compare_digest(
+      username.encode(), self.username.encode()
+    )
+    password_ok = secrets.compare_digest(
+      password.encode(), self.password.encode()
+    )
+    if username_ok and password_ok:
+      role = ADMIN
+    else:
+      account = self.users.get(username)
+      if account is not None:
+        expected_password = account.get('password', '')
+        expected_role = account.get('role', '')
+        password_ok = secrets.compare_digest(
+          password.encode(), expected_password.encode()
+        )
+        if password_ok and expected_role in ('admin', 'editor', 'viewer'):
+          role = expected_role
 
-    raise LoginFailed('Invalid username or password')
+    if role is None:
+      raise LoginFailed('Invalid username or password')
+
+    request.session.update({
+      'user': username,
+      'is_admin': role == ADMIN,
+      'role': role,
+    })
+    request.state.blog_user = {
+      'username': username, 'role': role, 'is_admin': role == ADMIN
+    }
+    return RedirectResponse(url=self.redirect_after_login, status_code=303)
 
   async def authenticate(self, request: Request) -> AdminUser | None:
     user = request.session.get('user')
-    return AdminUser(username=user) if user else None
+    if not user:
+      return None
+    role = request.session.get('role')
+    if role is None and request.session.get('is_admin'):
+      role = ADMIN
+    request.state.blog_user = {
+      'username': user, 'role': role, 'is_admin': role == ADMIN
+    }
+    return AdminUser(username=user)
 
   async def logout(self, request: Request) -> Response | None:
     request.session.clear()

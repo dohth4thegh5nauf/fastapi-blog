@@ -153,163 +153,47 @@ fastapi_blog
 
 ## Security Architecture
 
-### Authentication Flow
+### Authentication and authorization
 
-```
-1. User submits login credentials
-2. Auth Provider validates against database
-3. Session created with signed cookie (itsdangerous)
-4. Subsequent requests verify session
-5. Logout clears session
-```
+Admin login uses explicitly configured credentials (`admin_password` or
+`FASTAPI_BLOG_ADMIN_PASSWORD`) and a session secret (`secret_key` or
+`SECRET_KEY`). The secret must be at least 32 characters and must not be a
+known placeholder. Missing credentials or a weak secret raise
+`ConfigurationError`; the package does not create a production password.
+`insecure_dev=True` is the explicit local-development escape hatch and emits a
+warning. `https_only=True` sets the session cookie's `Secure` attribute;
+`SameSite=Lax` is the default. If the application already has a
+`SessionMiddleware`, it must use the exact same secret and `SameSite=Lax` or
+`Strict`; `https_only=True` additionally requires that middleware to set
+`https_only=True`. Startup rejects mismatched external session configuration.
 
-### Authorization (RBAC)
+A single authorization callback has the shape
+`authorize(request, resource, action) -> bool`. It is used by the REST API,
+Markdown `CustomView` routes and SQLAlchemy `ModelView` hooks. Without a custom
+callback, the policy grants:
 
-```
-Request → Session → User Object
-            ↓
-        Role Check → RoleModelView.is_accessible()
-            ↓
-      Grant/Deny Access
-```
+| Role | Posts | Users/settings | Role management |
+| --- | --- | --- | --- |
+| `admin` | create/read/update/delete/publish | full access | full access |
+| `editor` | create/read/update/publish | read only | denied |
+| `viewer` | read only | denied | denied |
 
-## Database Schema
+Missing or unknown roles, resources and actions are denied. A session role is
+preserved when the session cookie is also used for REST API authentication.
+Starlette Admin's built-in CSRF protection continues to guard its own forms.
+Cookie-authenticated unsafe requests to admin and API paths additionally
+require an `Origin` whose scheme and authority exactly match the request
+scheme and `Host`; missing, duplicate or malformed Origin/Host headers are
+rejected. The guard also rejects protocol-relative and opaque Origins.
+Basic-auth and other non-cookie requests are not subject to this Origin gate.
 
-### Users Table
+Starlette Admin's synchronous `ModelView` hooks accept a synchronous custom
+authorizer. REST and Markdown custom routes also accept awaitable callbacks;
+ModelView hooks deny an awaitable result rather than treating it as permission.
 
-```sql
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    hashed_password VARCHAR NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    is_admin BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-```
+### Storage and request boundaries
 
-### Posts Table (Optional)
-
-```sql
-CREATE TABLE posts (
-    id INTEGER PRIMARY KEY,
-    slug VARCHAR(255) UNIQUE NOT NULL,
-    title VARCHAR(500) NOT NULL,
-    content TEXT,
-    description VARCHAR(1000),
-    tags JSON,
-    published BOOLEAN DEFAULT FALSE,
-    publish_date TIMESTAMP,
-    created_at TIMESTAMP,
-    updated_at TIMESTAMP
-);
-```
-
-### Roles Table (RBAC)
-
-```sql
-CREATE TABLE roles (
-    id INTEGER PRIMARY KEY,
-    name VARCHAR(100) UNIQUE NOT NULL,
-    description VARCHAR(500)
-);
-
-CREATE TABLE user_roles (
-    user_id INTEGER,
-    role_id INTEGER,
-    PRIMARY KEY (user_id, role_id),
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (role_id) REFERENCES roles(id)
-);
-```
-
-## Deployment Architecture
-
-### Development
-
-```
-FastAPI (uvicorn) → SQLite → Markdown Files (local)
-     ↑
-Port 8000 (localhost)
-```
-
-### Production
-
-```
-              ┌─────────────┐
-              │   Nginx     │ (Reverse Proxy)
-              └──────┬──────┘
-                     │
-                     ▼
-              ┌─────────────┐
-              │   Uvicorn   │ (Multiple workers)
-              └──────┬──────┘
-                     │
-         ┌───────────┴───────────┐
-         ▼                       ▼
-  ┌─────────────┐        ┌─────────────┐
-  │ PostgreSQL  │        │  Markdown   │
-  │  Database   │        │   Files     │
-  └─────────────┘        └─────────────┘
-```
-
-### Docker Deployment
-
-```
-Docker Container
-├── FastAPI Application
-├── SQLite Database (volume mount)
-└── Markdown Files (volume mount)
-```
-
-## Scaling Considerations
-
-### Horizontal Scaling
-
-**Challenge:** Session storage across multiple instances
-
-**Solution:**
-- Database-backed sessions
-- Signed cookies with the same secret key on every instance
-
-### Performance Optimization
-
-**Blog:**
-- Cache rendered markdown
-- Pre-generate static pages
-- CDN for static assets
-
-**Admin:**
-- Database connection pooling
-- Async SQLAlchemy queries
-- Pagination for large datasets
-
----
-
-**See also:**
-- [CODEBASE_SUMMARY_RU.md](CODEBASE_SUMMARY_RU.md) - Detailed codebase analysis (Russian)
-- [DATABASE.md](DATABASE.md) - Database architecture details
-- [ROLE_MANAGEMENT.md](ROLE_MANAGEMENT.md) - RBAC implementation
-
-
-## Project collection settings and generated slugs
-
-`config.py` parses `fastapi_blog.yaml` into `Project` and `CollectionSpec`
-objects. The CLI resolves these settings for `check`, `schema` and `export`.
-Applications can opt into the same collection behavior explicitly:
-
-```python
-from fastapi_blog import load_project, setup_fastapi_blog
-
-posts = load_project('fastapi_blog.yaml').collections['posts']
-setup_fastapi_blog(app, collection_spec=posts, include_api=True)
-```
-
-`CollectionSpec` stays outside the storage layer. It binds the frontmatter
-schema and shared template language to `DocumentStore`; the store only
-allocates and writes the generated slug while holding its in-process
-collection lock. The REST API and admin create form use that operation, while
-updates retain the existing slug. The admin list renders the collection's
-summary template. If the date-role field is empty, date tags use the UTC
-first-save timestamp supplied by the creation caller.
+The public blog reads Markdown documents through `DocumentStore`. The REST API
+and admin Markdown views share the same collection configuration and the
+frontmatter schema. The optional SQL database stores admin accounts and role
+management data; it is not a mirror of Markdown content.

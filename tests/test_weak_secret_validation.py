@@ -1,99 +1,76 @@
-"""Test validation of weak secret_key."""
-
-import warnings
+"""Fail-closed admin credential and session-secret validation."""
 
 import pytest
 from fastapi import FastAPI
 
 import fastapi_blog
+from fastapi_blog import ConfigurationError
 
 
-def test_weak_secret_key_warns():
-  """Verify that weak secret_key generates UserWarning."""
-  app = FastAPI()
+def test_admin_setup_requires_password_and_secret():
+  with pytest.raises(ConfigurationError, match='no admin password'):
+    fastapi_blog.add_admin_to_app(FastAPI())
 
-  with pytest.warns(UserWarning, match='secret_key is weak'):
+
+@pytest.mark.parametrize(
+  'secret',
+  ['short', 'test-secret-key', 'change-me-in-production-please-use-strong-secret'],
+)
+def test_weak_secret_is_rejected(secret):
+  with pytest.raises(ConfigurationError, match='session secret is weak'):
     fastapi_blog.add_admin_to_app(
-      app,
-      secret_key='short',
-      database_url='sqlite+aiosqlite:///:memory:',
-      locales=['en'],
-      default_locale='en',
+      FastAPI(), admin_password='safe-test-password', secret_key=secret
     )
 
 
-def test_default_secret_key_warns():
-  """Verify that default secret_key generates UserWarning."""
-  app = FastAPI()
-
-  with pytest.warns(UserWarning, match='secret_key is weak'):
+def test_empty_secret_is_rejected():
+  with pytest.raises(ConfigurationError, match='no session secret'):
     fastapi_blog.add_admin_to_app(
-      app,
-      secret_key='change-me-in-production-please-use-strong-secret',
-      database_url='sqlite+aiosqlite:///:memory:',
-      locales=['en'],
-      default_locale='en',
+      FastAPI(), admin_password='safe-test-password', secret_key=''
     )
 
 
-def test_test_secret_key_warns():
-  """Verify that test-secret-key generates UserWarning."""
-  app = FastAPI()
-
-  with pytest.warns(UserWarning, match='secret_key is weak'):
+def test_insecure_dev_explicitly_enables_development_credentials():
+  with pytest.warns(UserWarning, match='insecure_dev=True'):
     fastapi_blog.add_admin_to_app(
-      app,
-      secret_key='test-secret-key',
-      database_url='sqlite+aiosqlite:///:memory:',
-      locales=['en'],
-      default_locale='en',
+      FastAPI(), insecure_dev=True, init_database=False
     )
 
 
-def test_strong_secret_key_no_warning():
-  """Verify that strong secret_key does not generate warning."""
-  app = FastAPI()
+def test_insecure_dev_with_supplied_values_still_warns():
+  with pytest.warns(UserWarning, match='insecure_dev=True'):
+    fastapi_blog.add_admin_to_app(
+      FastAPI(), admin_username='test-admin',
+      admin_password='safe-test-password', secret_key='a' * 64,
+      insecure_dev=True, init_database=False,
+    )
 
-  # Generate a strong secret (64 chars)
-  strong_secret = 'a' * 64
+
+def test_strong_secret_and_password_are_accepted_without_warning():
+  import warnings
 
   with warnings.catch_warnings():
-    warnings.simplefilter('error')  # Turn warnings into errors
-    try:
-      fastapi_blog.add_admin_to_app(
-        app,
-        secret_key=strong_secret,
-        database_url='sqlite+aiosqlite:///:memory:',
-        locales=['en'],
-        default_locale='en',
-      )
-    except UserWarning:
-      pytest.fail('Strong secret_key should not generate warning')
-
-
-def test_empty_secret_key_warns():
-  """Verify that empty secret_key generates UserWarning."""
-  app = FastAPI()
-
-  with pytest.warns(UserWarning, match='secret_key is weak'):
+    warnings.simplefilter('error')
     fastapi_blog.add_admin_to_app(
-      app,
-      secret_key='',
-      database_url='sqlite+aiosqlite:///:memory:',
-      locales=['en'],
-      default_locale='en',
+      FastAPI(), admin_username='test-admin',
+      admin_password='safe-test-password', secret_key='a' * 64,
+      init_database=False,
     )
 
 
-def test_warning_message_includes_example():
-  """Verify that warning message includes generation example."""
-  app = FastAPI()
+def test_setup_rejects_missing_credentials_before_adding_routes(monkeypatch):
+  monkeypatch.delenv('FASTAPI_BLOG_ADMIN_LOGIN', raising=False)
+  monkeypatch.delenv('FASTAPI_BLOG_ADMIN_PASSWORD', raising=False)
+  monkeypatch.delenv('SECRET_KEY', raising=False)
+  from types import SimpleNamespace
 
-  with pytest.warns(UserWarning, match='secrets.token_hex\\(32\\)'):
-    fastapi_blog.add_admin_to_app(
-      app,
-      secret_key='weak',
-      database_url='sqlite+aiosqlite:///:memory:',
-      locales=['en'],
-      default_locale='en',
-    )
+  monkeypatch.setattr(
+    fastapi_blog,
+    '_import_admin',
+    lambda: SimpleNamespace(add_admin_to_app=lambda *_args, **_kwargs: {}),
+  )
+  app = FastAPI()
+  route_count = len(app.routes)
+  with pytest.raises(ConfigurationError, match='no admin password'):
+    fastapi_blog.setup_fastapi_blog(app)
+  assert len(app.routes) == route_count

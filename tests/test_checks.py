@@ -185,3 +185,119 @@ def test_check_reports_duplicate_unique_fields_and_sequence(tmp_path):
     len([issue for issue in report.issues if issue.code == 'unique.duplicate'])
     == 2
   )
+
+
+# --- SEO integrity checks (TODO 5.9.7) --------------------------------------
+
+
+def test_seo_check_reports_length_missing_and_invalid_values(tmp_path):
+  from fastapi_blog.models import SeoCheckConfig, SeoConfig
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', role='title'),
+      FieldSpec('description', role='description'),
+      FieldSpec('canonical', role='canonical'),
+      FieldSpec('robots', type='list[str]', role='robots'),
+      FieldSpec('image', role='image'),
+      FieldSpec('image_alt', role='image_alt'),
+    ),
+    seo=SeoConfig(check=SeoCheckConfig(title_max=5, description_max=7)),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(
+    spec.dir, 'one',
+    '---\ntitle: A very long title\ndescription: too long description\n'
+    'canonical: javascript:alert(1)\nrobots: [unknown]\nimage: /missing.png\n---\n',
+  )
+  report = checks.check_collection(spec, root=tmp_path)
+  assert {(issue.level, issue.code) for issue in report.issues} == {
+    ('warning', 'seo.title_too_long'),
+    ('warning', 'seo.description_too_long'),
+    ('error', 'seo.canonical_invalid'),
+    ('error', 'seo.robots_invalid'),
+    ('error', 'seo.image_alt_required'),
+  }
+
+
+def test_seo_check_reports_duplicates_and_respects_levels(tmp_path):
+  from fastapi_blog.models import SeoCheckConfig, SeoConfig
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', role='title'),
+      FieldSpec('description', role='description'),
+    ),
+    seo=SeoConfig(check=SeoCheckConfig(
+      title_max=100, description_max=200,
+      missing_description='off', duplicate_title='error',
+      duplicate_description='warn',
+    )),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: Same\ndescription: Shared\n---\n')
+  _write(spec.dir, 'b', '---\ntitle: Same\ndescription: Shared\n---\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert [(issue.level, issue.code, issue.slug) for issue in report.issues] == [
+    ('error', 'seo.duplicate_title', 'b'),
+    ('warning', 'seo.duplicate_description', 'b'),
+  ]
+
+
+def test_seo_check_reports_redirect_collisions_chains_and_loops(tmp_path):
+  from fastapi_blog.models import SeoConfig
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('canonical', role='canonical'),
+      FieldSpec('redirect_from', type='list[str]', role='redirect_from'),
+    ),
+    seo=SeoConfig(),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(
+    spec.dir,
+    'live',
+    '---\nredirect_from: [legacy, /posts/current, //evil.example, '
+    '../escape, https://evil.example/x]\n---\n',
+  )
+  _write(spec.dir, 'current', '---\nredirect_from: [legacy]\n---\n')
+  # The canonical destinations form a two-node redirect cycle.
+  _write(
+    spec.dir, 'cycle-a',
+    '---\ncanonical: /posts/old-b\nredirect_from: [old-a]\n---\n',
+  )
+  _write(
+    spec.dir, 'cycle-b',
+    '---\ncanonical: /posts/old-a\nredirect_from: [old-b]\n---\n',
+  )
+  report = checks.check_collection(spec, root=tmp_path)
+  codes = [issue.code for issue in report.issues]
+  assert 'seo.redirect_from_duplicate' in codes
+  assert 'seo.redirect_from_live_conflict' in codes
+  assert 'seo.redirect_from_chain' in codes
+  assert 'seo.redirect_from_loop' in codes
+  assert 'seo.redirect_from_invalid' in codes
+
+
+def test_seo_check_reports_malformed_urls_without_crashing(tmp_path):
+  from fastapi_blog.models import SeoConfig
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('canonical', role='canonical'),
+      FieldSpec('redirect_from', type='list[str]', role='redirect_from'),
+    ),
+    seo=SeoConfig(),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(
+    spec.dir,
+    'malformed',
+    "---\ncanonical: 'https://['\nredirect_from: ['https://[', 'a//b']\n---\n",
+  )
+
+  report = checks.check_collection(spec, root=tmp_path)
+
+  assert 'seo.canonical_invalid' in [issue.code for issue in report.issues]
+  assert 'seo.redirect_from_invalid' in [issue.code for issue in report.issues]

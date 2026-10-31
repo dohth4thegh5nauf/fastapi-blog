@@ -17,9 +17,10 @@ Then open:
 
 Login credentials (from environment variables):
     Username: myuser (or default 'admin')
-    Password: mypass123 (or default 'Admin123!')
+    Password: set FASTAPI_BLOG_ADMIN_PASSWORD before running
 """
 
+import os
 import sys  # noqa: I001
 from pathlib import Path
 
@@ -57,9 +58,9 @@ fastapi_blog.add_blog_to_fastapi(
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
-  # admin_username not specified - will use FASTAPI_BLOG_ADMIN_LOGIN env var or default 'admin'
-  # admin_password not specified - will use FASTAPI_BLOG_ADMIN_PASSWORD env var or default 'Admin123!'
-  secret_key='change-me-in-production',
+  # admin_username not specified - uses FASTAPI_BLOG_ADMIN_LOGIN or 'admin' as a username
+  # Credentials and the session secret must be supplied through the environment.
+  secret_key=os.environ.get('SECRET_KEY'),
   locales=['en', 'ru'],
   default_locale='en',
 )
@@ -83,7 +84,7 @@ async def root():
       'FASTAPI_BLOG_ADMIN_LOGIN': admin_login,
       'FASTAPI_BLOG_ADMIN_PASSWORD': '***'
       if os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
-      else 'default',
+      else 'unset',
     },
     'links': {
       'blog': 'http://localhost:8000/blog',

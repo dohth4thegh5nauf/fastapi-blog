@@ -292,6 +292,45 @@ def test_edit_template_renders_every_schema_field():
   assert '<select class="form-select" id="field-is_public"' in html
 
 
+def test_form_groups_seo_fields_and_shows_configured_counters():
+  from fastapi_blog.models import SeoCheckConfig, SeoConfig
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', role='title'),
+      FieldSpec('summary', role='description'),
+      FieldSpec('metadata', type='object', fields=(
+        FieldSpec('source_url', type='link', alias='url'),
+      )),
+      FieldSpec('references', type='list[object]', fields=(
+        FieldSpec('label'),
+        FieldSpec('href', alias='url'),
+      )),
+    ),
+    seo=SeoConfig(check=SeoCheckConfig(title_max=55, description_max=145)),
+  )
+  fields, html = _edit_page(
+    schema,
+    {
+      'title': 'Example',
+      'summary': 'Description',
+      'metadata': {'url': 'https://example.org/source'},
+      'references': [{'label': 'Reference', 'url': 'https://example.org/ref'}],
+    },
+  )
+  by_name = {field['name']: field for field in fields}
+  assert by_name['title']['group'] == 'SEO'
+  assert by_name['title']['counter_max'] == 55
+  assert by_name['summary']['group'] == 'SEO'
+  assert by_name['summary']['counter_max'] == 145
+  assert by_name['metadata__source_url']['path'] == ['metadata', 'url']
+  assert by_name['references']['kind'] == 'json'
+  assert 'SEO' in html
+  assert 'data-counter-max="55"' in html
+  assert 'data-counter-max="145"' in html
+  assert 'field-references' in html
+
+
 def test_edit_template_escapes_values():
   frontmatter = {'title': 'A "quoted" <b>', 'date': '2024-01-01'}
   _, html = _edit_page(DEFAULT_SCHEMA, frontmatter)
@@ -566,3 +605,24 @@ def test_posts_dirname_argument_skips_the_deprecation_warning(
   with warnings.catch_warnings():
     warnings.simplefilter('error')
     assert get_posts_directory('explicit-dir') == 'explicit-dir'
+
+
+def test_hidden_and_read_only_object_parent_are_respected_in_admin_form():
+  schema = FrontmatterSchema(fields=(
+    FieldSpec('private', type='object', hidden=True, fields=(
+      FieldSpec('value'),
+    )),
+    FieldSpec('locked', type='object', read_only=True, fields=(
+      FieldSpec('identifier'),
+      FieldSpec('label'),
+    )),
+  ))
+  fields = build_form_fields(
+    schema,
+    {'private': {'value': 'secret'}, 'locked': {'identifier': 'id', 'label': 'A'}},
+    {},
+  )
+  by_name = {field['name']: field for field in fields}
+  assert by_name['private']['kind'] == 'hidden'
+  assert by_name['locked__identifier']['read_only'] is True
+  assert by_name['locked__label']['read_only'] is True

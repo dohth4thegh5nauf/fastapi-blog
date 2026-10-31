@@ -28,7 +28,11 @@ import fastapi_blog
 app = FastAPI(title='Blog with Optional API')
 
 # Add session middleware for authentication
-app.add_middleware(SessionMiddleware, secret_key='change-me-in-production')
+app.add_middleware(
+  SessionMiddleware,
+  secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
+  same_site='lax',
+)
 
 # Add blog with REST API enabled
 fastapi_blog.add_blog_to_fastapi(
@@ -47,7 +51,8 @@ fastapi_blog.add_admin_to_app(
   title='Blog Admin',
   admin_username='admin',
   admin_password='Admin123!',
-  secret_key='change-me-in-production',
+  secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
+  insecure_dev=True,
   add_session_middleware=False,  # Already added above
 )
 

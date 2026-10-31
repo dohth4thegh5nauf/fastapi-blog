@@ -29,6 +29,14 @@ from .models import (
   FrontmatterSchema,
   payload_model,
 )
+from .permissions import (
+  ADMIN,
+  Authorizer,
+  default_authorize,
+  ensure_allowed,
+  user_from_session,
+)
+from .security import install_origin_check_middleware
 from .validators import Validator, run_blocking
 
 
@@ -58,13 +66,9 @@ async def require_authentication(request: Request) -> dict:
   """
   # Check session cookie (set by the admin panel or any SessionMiddleware)
   # Only check session if SessionMiddleware is installed
-  if 'session' in request.scope:
-    user = request.session.get('user')
-    if user:
-      return {
-        'username': user,
-        'is_admin': request.session.get('is_admin', False),
-      }
+  session_user = user_from_session(request)
+  if session_user:
+    return session_user
 
   # No valid session found
   raise HTTPException(
@@ -85,15 +89,7 @@ async def optional_authentication(request: Request) -> dict | None:
 
   """
   # Check if session exists (SessionMiddleware installed)
-  if 'session' not in request.scope:
-    return None
-  user = request.session.get('user')
-  if user:
-    return {
-      'username': user,
-      'is_admin': request.session.get('is_admin', False),
-    }
-  return None
+  return user_from_session(request)
 
 
 def _post_path(slug: str, posts_dirname: str) -> pathlib.Path:
@@ -159,6 +155,7 @@ def get_api_router(
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
   collection_spec: CollectionSpec | None = None,
+  authorize: Authorizer | None = None,
 ) -> APIRouter:
   """Get REST API router for post management.
 
@@ -191,6 +188,8 @@ def get_api_router(
           back and answered with HTTP 422 carrying the `issues` (TODO 6.3).
       collection_spec: Optional project collection settings. When it has a
           `slug_template`, POST /create and POST /save can generate a slug.
+      authorize: Shared permission callback; defaults to the built-in RBAC
+          policy and may be synchronous or asynchronous.
 
   Returns:
       APIRouter with REST API endpoints
@@ -404,12 +403,17 @@ def get_api_router(
       from .auth import require_current_user
 
       async def _unified_auth(request: Request) -> dict[str, Any]:
+        # Session identities retain their assigned role; Basic auth is the
+        # separately configured administrator credential.
+        session_user = user_from_session(request)
+        if session_user is not None:
+          return session_user
         username = await require_current_user(
           request,
           admin_username=admin_username,
           admin_password=admin_password,
         )
-        return {'username': username}
+        return {'username': username, 'role': ADMIN, 'is_admin': True}
 
       auth_func = _unified_auth
     else:
@@ -417,6 +421,30 @@ def get_api_router(
       auth_func = require_authentication
   else:
     auth_func = optional_authentication
+
+  permission_check = authorize or default_authorize
+
+  def _guard(action: str):
+    async def guard(
+      request: Request, user: dict[str, Any] | None = Depends(auth_func)
+    ) -> dict[str, Any] | None:
+      principal: dict[str, Any] | None
+      if isinstance(user, dict):
+        principal = dict(user)
+      elif user is None:
+        principal = None
+      else:
+        principal = {'username': str(user), 'role': None}
+      if principal is not None:
+        principal.setdefault(
+          'role', ADMIN if principal.get('is_admin') else None
+        )
+      request.state.blog_user = principal
+      if not require_auth and authorize is None:
+        return principal
+      await ensure_allowed(permission_check, request, 'posts', action)
+      return principal
+    return guard
 
   def _create_generated(
     payload: Any, user: dict[str, Any] | None = None
@@ -472,7 +500,7 @@ def get_api_router(
   async def create_generated_post(
     payload: Payload,  # type: ignore[valid-type]
     response: Response,
-    user: dict | None = Depends(auth_func),
+    user: dict | None = Depends(_guard('create')),
   ) -> dict[str, str]:
     slug, etag = _create_generated(payload, user=user)
     response.headers['ETag'] = etag
@@ -482,7 +510,7 @@ def get_api_router(
   async def get_raw(
     response: Response,
     slug: str = slug_path,
-    user: dict | None = Depends(auth_func),
+    user: dict | None = Depends(_guard('read')),
   ) -> dict[str, Any]:
     try:
       record = docs.read(slug)
@@ -503,7 +531,7 @@ def get_api_router(
     payload: Payload,  # type: ignore[valid-type]
     response: Response,
     slug: str = slug_path,
-    user: dict | None = Depends(auth_func),
+    user: dict | None = Depends(_guard('create')),
   ) -> dict[str, str]:
     if docs.exists(slug):
       raise HTTPException(
@@ -523,7 +551,7 @@ def get_api_router(
     payload: Payload,  # type: ignore[valid-type]
     response: Response,
     slug: str = slug_path,
-    user: dict | None = Depends(auth_func),
+    user: dict | None = Depends(_guard('update')),
     if_match: str | None = Header(None, alias='If-Match'),
   ) -> dict[str, str]:
     _require_if_match(if_match)
@@ -559,7 +587,7 @@ def get_api_router(
   @api_router.delete('/delete/{slug}', status_code=status.HTTP_204_NO_CONTENT)
   async def delete_post(
     slug: str = slug_path,
-    user: dict | None = Depends(auth_func),
+    user: dict | None = Depends(_guard('delete')),
     if_match: str | None = Header(None, alias='If-Match'),
   ) -> None:
     _require_if_match(if_match)
@@ -600,6 +628,8 @@ def get_api_router(
         detail=f'Invalid payload: {str(e)}',
       ) from e
 
+    is_new = not slug or not docs.exists(slug)
+    await _guard('create' if is_new else 'update')(request, user)
     if not slug:
       generated_slug, etag = _create_generated(payload, user=user)
       response.headers['ETag'] = etag
@@ -608,7 +638,6 @@ def get_api_router(
         status_code=status.HTTP_201_CREATED,
       )
 
-    is_new = not docs.exists(slug)
     existing = None if is_new else docs.read(slug).frontmatter
     fm_dump = _frontmatter_dump(
       payload, frontmatter_schema, is_create=is_new, existing=existing
@@ -648,6 +677,7 @@ def add_editor_to_app(
   auth_dependency: Callable[..., Any] | None = None,
   require_if_match: bool = False,
   collection_spec: CollectionSpec | None = None,
+  authorize: Authorizer | None = None,
 ) -> FastAPI:
   """Add editor REST API and optional UI to FastAPI app.
 
@@ -738,8 +768,10 @@ def add_editor_to_app(
     auth_dependency=auth_dependency,
     require_if_match=require_if_match,
     collection_spec=collection_spec,
+    authorize=authorize,
   )
   app.include_router(api_router, prefix=prefix)
+  install_origin_check_middleware(app, (prefix,))
   add_startup_check(
     app,
     lambda: check_api_auth_config(
@@ -759,6 +791,7 @@ def add_editor_to_app(
       posts_dirname=posts_dirname,
       strict=strict,
       require_auth=require_auth,
+      authorize=authorize,
     )
 
   return app
@@ -770,6 +803,7 @@ def _add_ui_routes(
   posts_dirname: str,
   strict: bool,
   require_auth: bool,
+  authorize: Authorizer | None = None,
 ) -> None:
   """Add deprecated UI routes for editor."""
   ui_router = APIRouter(prefix=ui_prefix, tags=['editor-ui'])
@@ -777,6 +811,16 @@ def _add_ui_routes(
   auth_func = (
     require_authentication if require_auth else optional_authentication
   )
+  permission_check = authorize or default_authorize
+
+  async def _require_ui_permission(
+    request: Request, user: dict[str, Any] | None, action: str
+  ) -> None:
+    principal = dict(user) if isinstance(user, dict) else None
+    request.state.blog_user = principal
+    if not require_auth and authorize is None:
+      return
+    await ensure_allowed(permission_check, request, 'posts', action)
 
   # Prep templates
   env = jinja2.Environment(
@@ -793,6 +837,7 @@ def _add_ui_routes(
     request: Request,
     user: dict | None = Depends(auth_func),
   ) -> Any:
+    await _require_ui_permission(request, user, 'read')
     posts = helpers.list_posts(
       posts_dirname=posts_dirname, strict=strict, published=True
     )
@@ -810,6 +855,7 @@ def _add_ui_routes(
     request: Request,
     user: dict | None = Depends(auth_func),
   ) -> Any:
+    await _require_ui_permission(request, user, 'create')
     return templates.TemplateResponse(
       request=request,
       name='admin/edit.html',
@@ -828,6 +874,7 @@ def _add_ui_routes(
     slug: str = slug_path,
     user: dict | None = Depends(auth_func),
   ) -> Any:
+    await _require_ui_permission(request, user, 'update')
     path = _post_path(slug, posts_dirname)
     if not path.is_file():
       raise HTTPException(

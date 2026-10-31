@@ -68,7 +68,7 @@ schema = FrontmatterSchema.from_file('schema.yaml')
 
 | Option | Meaning |
 | --- | --- |
-| `type` | `str` (default), `int`, `float`, `bool`, `datetime`, `date`, `list[str]`, `list[int]`, `link`, `list[link]`, `file`, `image`, `dict`, `any` |
+| `type` | `str` (default), `int`, `float`, `bool`, `datetime`, `date`, `list[str]`, `list[int]`, `link`, `list[link]`, `object`, `list[object]`, `file`, `image`, `dict`, `any` |
 | `required` | The field must be present. A required field can't have a `default` |
 | `default` | Value for an absent field. Without it: `False` for `bool`, empty for `list`/`dict`, `None` otherwise |
 | `alias` | Key in the markdown file when it differs from the internal name. Both are accepted on input |
@@ -77,6 +77,37 @@ schema = FrontmatterSchema.from_file('schema.yaml')
 | `description` | Free text |
 | `collection`, `value_field`, `filters` | For `link` fields: the target collection (default: the same one), the target field whose value is stored (default: the `@id` field, else the slug), and `[{field, values}]` filters on valid targets |
 | `media_dir`, `public_path` | For `file`/`image` fields: the files' directory (relative to the project root, no `..`) and the prefix of the stored path (default: `media_dir`) |
+| `fields` | Required non-empty child field definitions for `object` and `list[object]`; recursive depth is limited to 3 |
+| `group` | Optional admin form group label; does not affect validation or storage |
+
+### Nested objects
+
+`object` and `list[object]` require a non-empty `fields` mapping or list. Child
+fields use the same `FieldSpec` options, including aliases, defaults,
+validation, and read-only rules. Nesting is limited to three object levels;
+child semantic roles are not supported. `list[object]` items all share the same
+child schema. Object aliases are written to the Markdown frontmatter at every
+level.
+
+```yaml
+fields:
+  author:
+    type: object
+    fields:
+      name: {required: true}
+      profile_url: {alias: url, type: link}
+  references:
+    type: list[object]
+    fields:
+      label: {required: true}
+      href: {alias: url, type: link}
+```
+
+In the admin editor, an `object` is expanded into child inputs. A
+`list[object]` is edited as JSON, with validation performed by the same schema
+used by the REST API. The optional `group` setting can place a field into a
+named form section; by default, nested children are grouped beneath their
+object path and SEO semantic fields are grouped under `SEO`.
 
 Field names must be Python identifiers that don't start with `_` or `model_` and
 don't clash with `pydantic.BaseModel` attributes (for example `json` or `copy`).
@@ -221,11 +252,16 @@ The markdown posts section of the admin is built from the schema:
   | `date` (or `str` with the `date` role) | date picker |
   | `datetime` | date and time picker (the time zone is dropped) |
   | `list[str]`, `list[int]` | comma-separated text |
-  | `dict`, `any` | JSON text area |
+  | `dict`, `any`, `list[object]` | JSON text area |
+  | `object` | Expanded child fields, grouped under the object label |
 
   Labels of fields with a role are translated (`Title`, `Date`, ...). Other fields
   use their `description`, or their name. Required `str`, number and date fields
   are required in the browser as well.
+- **SEO form helpers:** fields bound to SEO roles are grouped under `SEO`;
+  `seo_title` and `description` show live character counters when `seo.check`
+  is configured, using `title_max` and `description_max` respectively. An
+  explicit `FieldSpec.group` overrides the default group.
 - **Saving** goes through the REST API (`POST /api/posts/save`) with the schema
   keys (aliases), so the API must be enabled with the same schema:
   `add_blog_to_fastapi(include_api=True, frontmatter_schema=schema)`.
@@ -377,3 +413,28 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
    and `add_blog_to_fastapi`.
 4. **Done:** the admin forms, list and dashboard are built from the schema;
    `frontmatter_schema` parameter of `add_admin_to_app` and `setup_fastapi_blog`.
+
+### SEO integrity checks
+
+The optional `seo.check` section controls diagnostics emitted by
+`python -m fastapi_blog check`. Defaults are `title_max: 60`,
+`description_max: 160`, `missing_description: warn`, `missing_image: off`,
+`duplicate_title: warn`, `duplicate_description: warn`, and
+`image_alt_required: error`. The level values are `off`, `warn`, or `error`.
+Canonical values must be HTTP(S) URLs or root-relative paths, robots directives
+must be known, and redirect aliases must not collide with live URLs, duplicate
+another alias, or form chains/loops. `check.files` separately controls whether
+missing referenced media is checked. These findings do not change write-time
+validation.
+
+```yaml
+seo:
+  check:
+    title_max: 60
+    description_max: 160
+    missing_description: warn
+    missing_image: off
+    duplicate_title: warn
+    duplicate_description: warn
+    image_alt_required: error
+```

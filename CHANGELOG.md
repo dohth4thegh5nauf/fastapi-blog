@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Security and authorization (TODO phase E, 7.1–7.4)
+
+- Added a shared `authorize(request, resource, action)` policy for REST API
+  routes, Markdown admin views and Starlette Admin model views. The default
+  policy denies unknown roles, resources and actions; built-in `admin`,
+  `editor` and `viewer` permissions are explicit. Session roles are preserved
+  when the same signed cookie authenticates REST API requests.
+- Removed implicit admin passwords and session-secret fallbacks. Admin setup
+  now requires an explicit password and a non-placeholder secret of at least
+  32 characters. The old development credentials are available only through
+  `insecure_dev=True`, which warns loudly.
+- Session cookies use `SameSite=Lax`; `https_only` configures the `Secure`
+  flag. Cookie-authenticated writes require a same-origin `Origin` matching
+  `Host`, including REST endpoints; requests with missing or invalid origins
+  fail closed. Starlette Admin's built-in CSRF protection remains enabled.
+
+### SEO integrity checks and admin form grouping (TODO 5.9.7–5.9.8)
+
+- Added configurable `seo.check` levels and thresholds for title/description
+  lengths, missing descriptions/images, duplicate titles/descriptions and
+  required image alt text.
+- `check` reports invalid canonical/robots values and conflicting
+  `redirect_from` aliases, including live URL collisions, duplicate claims,
+  redirect chains and loops.
+- Admin forms group semantic SEO fields and nested object fields, and display
+  live character counters using `seo.check.title_max` and
+  `seo.check.description_max`.
+
+### Nested frontmatter types (TODO 5.1.2)
+
+- Added recursive `object` and `list[object]` schema fields with aliases,
+  validation, serialization and nested read-only protection (maximum depth 3).
+- The admin editor expands `object` fields and edits `list[object]` values as
+  JSON; schemas reject unsupported child semantic roles and alias collisions.
+
+
 ### Review fixes: collection flags, rollback and docs (TODO 4.6/6.3/6.4)
 
 - The project file accepts `create: false` and `delete: false` per

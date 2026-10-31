@@ -27,6 +27,7 @@ from pydantic import ValidationError
 
 from . import jsonld, store
 from .config import CollectionSpec
+from .models import ROBOTS_DIRECTIVES, SeoCheckConfig, is_http_url_or_root_path
 from .issues import Issue
 from .validators import run_validator
 
@@ -498,6 +499,287 @@ def _check_files(
           )
 
 
+
+def _seo_field_value(
+  schema: Any, frontmatter: Mapping[str, Any], role: str
+) -> Any:
+  """Return a role-bound value, supporting external aliases."""
+  field = schema.field_for_role(role) if schema is not None else None
+  if field is None:
+    return None
+  return frontmatter.get(field.key, frontmatter.get(field.name))
+
+
+def _redirect_path(value: Any) -> str | None:
+  """Normalize a redirect alias using the runtime route convention."""
+  if not isinstance(value, str) or value != value.strip():
+    return None
+  decoded = urllib.parse.unquote(value)
+  if (
+    not decoded
+    or decoded.startswith('//')
+    or '\\' in decoded
+    or any(char.isspace() or ord(char) < 32 for char in decoded)
+    or '?' in decoded
+    or '#' in decoded
+  ):
+    return None
+  try:
+    parsed = urllib.parse.urlsplit(decoded)
+  except ValueError:
+    return None
+  if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+    return None
+  text = decoded.strip('/')
+  if not text or any(
+    part in ('', '.', '..') for part in text.split('/')
+  ):
+    return None
+  return f'/posts/{text}' if '/' not in text else f'/{text}'
+
+
+def _canonical_path(value: Any) -> str | None:
+  """Return a local path from a canonical URL, if it has one."""
+  if not isinstance(value, str) or not value:
+    return None
+  try:
+    parsed = urllib.parse.urlsplit(value)
+  except ValueError:
+    return None
+  if parsed.scheme or parsed.netloc:
+    return parsed.path or '/'
+  return value if value.startswith('/') and not value.startswith('//') else None
+
+
+def _check_seo(
+  spec: CollectionSpec, documents: store.DocumentStore, issues: list[Issue]
+) -> None:
+  """Check SEO metadata and redirects across the collection (TODO 5.9.7)."""
+  schema = spec.schema
+  if schema is None:
+    return
+  seo_roles = {
+    'title', 'description', 'seo_title', 'canonical', 'robots', 'image',
+    'image_alt', 'redirect_from',
+  }
+  if schema.seo is None and not any(
+    field.role in seo_roles for field in schema.fields
+  ):
+    return
+  config = (
+    schema.seo.check
+    if schema.seo and schema.seo.check else SeoCheckConfig()
+  )
+  seen_titles: dict[str, str] = {}
+  seen_descriptions: dict[str, str] = {}
+  live_paths = {f'/posts/{slug}': slug for slug in documents.list()}
+  aliases: dict[str, tuple[str, str]] = {}
+  redirect_edges: dict[str, str] = {}
+
+  def add_configured(
+    level: str, code: str, message: str, slug: str, field: str
+  ) -> None:
+    if level != 'off':
+      issues.append(
+        Issue(
+          'warning' if level == 'warn' else 'error',
+          code, message, slug, field,
+        )
+      )
+
+  for slug in sorted(documents.list()):
+    try:
+      frontmatter = documents.read(slug).frontmatter
+    except (store.ParseError, store.NotFoundError):
+      continue
+    title = (
+      _seo_field_value(schema, frontmatter, 'seo_title')
+      or _seo_field_value(schema, frontmatter, 'title')
+    )
+    description = _seo_field_value(schema, frontmatter, 'description')
+    image = _seo_field_value(schema, frontmatter, 'image')
+    image_alt = _seo_field_value(schema, frontmatter, 'image_alt')
+    canonical = _seo_field_value(schema, frontmatter, 'canonical')
+    robots = _seo_field_value(schema, frontmatter, 'robots') or []
+
+    if isinstance(title, str) and title.strip():
+      clean_title = ' '.join(title.split())
+      if len(clean_title) > config.title_max:
+        title_field = (
+          'seo_title'
+          if _seo_field_value(schema, frontmatter, 'seo_title')
+          else 'title'
+        )
+        issues.append(
+          Issue(
+            'warning',
+            'seo.title_too_long',
+            f'Title has {len(clean_title)} characters; recommended maximum '
+            f'is {config.title_max}',
+            slug,
+            title_field,
+          )
+        )
+      marker = clean_title.casefold()
+      previous = seen_titles.get(marker)
+      if previous is not None:
+        add_configured(
+          config.duplicate_title, 'seo.duplicate_title',
+          f'Title is also used by {previous!r}', slug, 'seo_title',
+        )
+      else:
+        seen_titles[marker] = slug
+
+    if isinstance(description, str) and description.strip():
+      clean_description = ' '.join(description.split())
+      if len(clean_description) > config.description_max:
+        issues.append(
+          Issue(
+            'warning',
+            'seo.description_too_long',
+            f'Description has {len(clean_description)} characters; '
+            f'recommended maximum is {config.description_max}',
+            slug,
+            'description',
+          )
+        )
+      marker = clean_description.casefold()
+      previous = seen_descriptions.get(marker)
+      if previous is not None:
+        add_configured(
+          config.duplicate_description, 'seo.duplicate_description',
+          f'Description is also used by {previous!r}', slug, 'description',
+        )
+      else:
+        seen_descriptions[marker] = slug
+    else:
+      add_configured(
+        config.missing_description, 'seo.missing_description',
+        'SEO description is missing', slug, 'description',
+      )
+
+    if image in (None, ''):
+      add_configured(
+        config.missing_image, 'seo.missing_image',
+        'Social preview image is missing', slug, 'image',
+      )
+    elif image_alt in (None, ''):
+      add_configured(
+        config.image_alt_required, 'seo.image_alt_required',
+        'Image alt text is required when an image is set', slug, 'image_alt',
+      )
+
+    canonical_valid = True
+    if canonical not in (None, ''):
+      try:
+        canonical_valid = is_http_url_or_root_path(canonical)
+      except ValueError:
+        canonical_valid = False
+      if not canonical_valid:
+        issues.append(Issue(
+          'error', 'seo.canonical_invalid',
+          'Canonical must be an absolute HTTP(S) URL or a root-relative path',
+          slug, 'canonical',
+        ))
+    if isinstance(robots, str):
+      robots = [robots]
+    if isinstance(robots, (list, tuple)):
+      for directive in robots:
+        if directive not in ROBOTS_DIRECTIVES:
+          issues.append(
+            Issue(
+              'error',
+              'seo.robots_invalid',
+              f'Unknown robots directive {directive!r}; allowed: '
+              f'{", ".join(ROBOTS_DIRECTIVES)}',
+              slug,
+              'robots',
+            )
+          )
+
+    raw_aliases = _seo_field_value(schema, frontmatter, 'redirect_from') or []
+    if isinstance(raw_aliases, str):
+      raw_aliases = [raw_aliases]
+    target = (
+      _canonical_path(canonical) if canonical_valid else None
+    ) or f'/posts/{slug}'
+    aliases_for_post = (
+      raw_aliases if isinstance(raw_aliases, (list, tuple)) else []
+    )
+    for raw_alias in aliases_for_post:
+      source = _redirect_path(raw_alias)
+      if source is None:
+        issues.append(Issue(
+          'error', 'seo.redirect_from_invalid',
+          f'Redirect source {raw_alias!r} is not a valid slug or site path',
+          slug, 'redirect_from',
+        ))
+        continue
+      previous = aliases.get(source)
+      if previous is not None:
+        issues.append(Issue(
+          'error', 'seo.redirect_from_duplicate',
+          f'Redirect source {source!r} is already claimed by {previous[0]!r}',
+          slug, 'redirect_from',
+        ))
+      else:
+        aliases[source] = (slug, target)
+        redirect_edges[source] = target
+      live_slug = live_paths.get(source)
+      if live_slug is not None:
+        issues.append(
+          Issue(
+            'error',
+            'seo.redirect_from_live_conflict',
+            f'Redirect source {source!r} is the live URL of document '
+            f'{live_slug!r}',
+            slug,
+            'redirect_from',
+          )
+        )
+
+  # A redirect whose destination is another redirect source creates a chain.
+  # A cycle in those edges is a loop and receives its own stable finding.
+  for source, (slug, target) in sorted(aliases.items()):
+    if target == source:
+      issues.append(
+        Issue(
+          'error',
+          'seo.redirect_from_loop',
+          f'Redirect source {source!r} points to itself',
+          slug,
+          'redirect_from',
+        )
+      )
+    elif target in aliases:
+      issues.append(
+        Issue(
+          'error',
+          'seo.redirect_from_chain',
+          f'Redirect target {target!r} is itself a redirect source',
+          slug,
+          'redirect_from',
+        )
+      )
+
+  for start, (slug, _target) in sorted(aliases.items()):
+    visited: set[str] = set()
+    node = start
+    while node in redirect_edges and node not in visited:
+      visited.add(node)
+      node = redirect_edges[node]
+    if node in visited:
+      issues.append(
+        Issue(
+          'error',
+          'seo.redirect_from_loop',
+          f'Redirect chain starting at {start!r} contains a loop',
+          slug,
+          'redirect_from',
+        )
+      )
+
+
 def check_collection(
   spec: CollectionSpec,
   *,
@@ -544,6 +826,7 @@ def check_collection(
   _check_unique(spec, documents, issues)
   _check_links(spec, documents, issues, collections or {spec.name: spec})
   _check_files(spec, documents, base, issues)
+  _check_seo(spec, documents, issues)
   _check_context(spec, base, issues)
   _check_validators(spec, base, issues)
   issues.sort(key=Issue.sort_key)

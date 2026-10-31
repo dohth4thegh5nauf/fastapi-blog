@@ -110,6 +110,7 @@ With the default `prefix='blog'`, the blog is available at `/blog/`. The package
 Install the `admin` extra, then configure both components:
 
 ```python
+import os
 from fastapi import FastAPI
 from fastapi_blog import add_admin_to_app, add_blog_to_fastapi
 
@@ -118,9 +119,9 @@ app = FastAPI()
 add_blog_to_fastapi(app, prefix='blog')
 add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password='change-this-password',
-  secret_key='replace-with-a-random-secret',
+  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
@@ -131,6 +132,7 @@ The admin interface is available under `/admin` (with locale-specific paths when
 `setup_fastapi_blog()` configures the blog and, optionally, the admin panel together. It passes a shared frontmatter schema to both.
 
 ```python
+import os
 from fastapi import FastAPI
 from fastapi_blog import setup_fastapi_blog
 
@@ -142,9 +144,9 @@ setup_fastapi_blog(
   include_api=True,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_username='admin',
-  admin_password='change-this-password',
-  secret_key='replace-with-a-random-secret',
+  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
   enable_role_management=False,
 )
 ```
@@ -219,6 +221,7 @@ storage boundary.
 Enable the post-management API with `include_api=True`:
 
 ```python
+import os
 from fastapi import FastAPI
 from fastapi_blog import add_blog_to_fastapi
 
@@ -230,7 +233,7 @@ add_blog_to_fastapi(
   api_prefix='/api/posts',
   api_require_auth=True,
   admin_username='writer',
-  admin_password='use-a-long-unique-password',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
 )
 ```
 

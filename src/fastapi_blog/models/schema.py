@@ -17,7 +17,7 @@ import re
 import string
 import urllib.parse
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Any, Self, get_args
 
 import yaml
 
@@ -95,6 +95,8 @@ _TYPES: dict[str, Any] = {
   'file': str,
   'image': str,
   'dict': dict[str, Any],
+  'object': dict[str, Any],
+  'list[object]': list[dict[str, Any]],
   'any': Any,
 }
 
@@ -115,6 +117,8 @@ _CONTAINER_TYPES: tuple[str, ...] = (
   'list[int]',
   'list[link]',
   'dict',
+  'object',
+  'list[object]',
 )
 
 # Allowed field types for each role.
@@ -160,7 +164,9 @@ _CHOICE_TYPES: tuple[str, ...] = (
 _MIN_MAX_TYPES: tuple[str, ...] = ('int', 'float')
 
 # Types `min_items`/`max_items` are supported for.
-_ITEMS_TYPES: tuple[str, ...] = ('list[str]', 'list[int]', 'list[link]')
+_ITEMS_TYPES: tuple[str, ...] = (
+  'list[str]', 'list[int]', 'list[link]', 'list[object]'
+)
 
 
 class _Missing:
@@ -259,6 +265,8 @@ class FieldSpec:
   filters: tuple[dict[str, Any], ...] | None = None
   media_dir: str | None = None
   public_path: str | None = None
+  fields: tuple['FieldSpec', ...] | None = None
+  group: str | None = None
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -371,6 +379,30 @@ class FieldSpec:
       )
     self._check_link_options()
     self._check_file_options()
+    self._check_object_fields()
+    if self.group is not None and (
+      not isinstance(self.group, str) or not self.group.strip()
+    ):
+      raise ValueError(
+        f'`group` of field {self.name!r} must be a non-empty string'
+      )
+
+  def _check_object_fields(self) -> None:
+    """Validate the child schema of object and list[object] fields."""
+    if self.type not in ('object', 'list[object]'):
+      if self.fields is not None:
+        raise ValueError(
+          f'`fields` needs type object or list[object] (field {self.name!r})'
+        )
+      return
+    if not isinstance(self.fields, (list, tuple)) or not self.fields:
+      raise ValueError(
+        f'Field {self.name!r} of type {self.type!r} needs non-empty `fields`'
+      )
+    if any(not isinstance(child, FieldSpec) for child in self.fields):
+      raise ValueError(f'`fields` of {self.name!r} must contain FieldSpec values')
+    object.__setattr__(self, 'fields', tuple(self.fields))
+    _validate_nested_fields(self.fields, depth=1, parent=self.name)
 
   def _check_link_options(self) -> None:
     """Validate `collection`/`value_field`/`filters` (TODO 5.1 link type)."""
@@ -449,8 +481,45 @@ class FieldSpec:
       value = getattr(self, item.name)
       if value == item.default:
         continue
-      result[item.name] = value
+      if item.name == 'fields' and value is not None:
+        result['fields'] = {child.name: child.to_dict() for child in value}
+      elif item.name == 'filters' and value is not None:
+        result['filters'] = [dict(rule) for rule in value]
+      elif item.name == 'choices' and value is not None:
+        result['choices'] = list(value)
+      elif item.name in ('pattern', 'item_pattern'):
+        result[item.name] = list(value) if isinstance(value, tuple) else value
+      else:
+        result[item.name] = value
     return result
+
+
+def _validate_nested_fields(
+  fields: tuple[FieldSpec, ...], *, depth: int, parent: str
+) -> None:
+  """Validate names, aliases and nesting depth for child object fields."""
+  if depth > 3:
+    raise ValueError(
+      f'Object nesting exceeds the maximum depth of 3 (field {parent!r})'
+    )
+  seen: dict[str, str] = {}
+  for child in fields:
+    if child.role is not None:
+      raise ValueError(
+        f'Nested field {child.name!r} in {parent!r} cannot bind a semantic role'
+      )
+    for token in {child.name, child.key}:
+      if token in seen:
+        raise ValueError(
+          f'Nested key {token!r} of field {child.name!r} clashes with '
+          f'field {seen[token]!r} in {parent!r}'
+        )
+      seen[token] = child.name
+    if child.type in ('object', 'list[object]'):
+      _validate_nested_fields(
+        child.fields or (), depth=depth + 1,
+        parent=f'{parent}.{child.name}',
+      )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -540,8 +609,20 @@ def is_http_url_or_root_path(value: Any) -> bool:
     return False
   if value.startswith('/'):
     return not value.startswith('//') and '\\' not in value
-  parts = urllib.parse.urlsplit(value)
-  return parts.scheme in ('http', 'https') and bool(parts.netloc)
+  if '\\' in value or any(char.isspace() or ord(char) < 32 for char in value):
+    return False
+  try:
+    parts = urllib.parse.urlsplit(value)
+    hostname = parts.hostname
+    parts.port  # Accessing this property validates the port syntax and range.
+  except ValueError:
+    return False
+  return (
+    parts.scheme in ('http', 'https')
+    and bool(hostname)
+    and parts.username is None
+    and parts.password is None
+  )
 
 
 # Names a `seo.title_template` may use (until TODO 6.4's template language).
@@ -563,6 +644,51 @@ def _check_title_template(template: str) -> None:
         f'{{{field_name}}}; allowed: '
         + ', '.join(f'{{{name}}}' for name in TITLE_TEMPLATE_NAMES)
       )
+
+
+@dataclasses.dataclass(frozen=True)
+class SeoCheckConfig:
+  """Thresholds and finding levels used by the SEO integrity checks."""
+
+  title_max: int = 60
+  description_max: int = 160
+  missing_description: str = 'warn'
+  missing_image: str = 'off'
+  duplicate_title: str = 'warn'
+  duplicate_description: str = 'warn'
+  image_alt_required: str = 'error'
+
+  def __post_init__(self) -> None:
+    for key in ('title_max', 'description_max'):
+      value = getattr(self, key)
+      if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f'`seo.check.{key}` must be a positive integer')
+    for key in (
+      'missing_description', 'missing_image', 'duplicate_title',
+      'duplicate_description', 'image_alt_required',
+    ):
+      value = getattr(self, key)
+      if value not in ('off', 'warn', 'error'):
+        raise ValueError(f'`seo.check.{key}` must be off, warn or error')
+
+  def to_dict(self) -> dict[str, Any]:
+    """Return the non-default check options."""
+    return {
+      item.name: getattr(self, item.name)
+      for item in dataclasses.fields(self)
+      if getattr(self, item.name) != item.default
+    }
+
+  @classmethod
+  def from_dict(cls, data: Mapping[str, Any]) -> 'SeoCheckConfig':
+    """Build SEO check settings from a mapping."""
+    if not isinstance(data, Mapping):
+      raise ValueError('`seo.check` must be a mapping')
+    known = {item.name for item in dataclasses.fields(cls)}
+    unknown = set(data) - known
+    if unknown:
+      raise ValueError(f'Unknown seo.check option(s): {sorted(unknown)}')
+    return cls(**dict(data))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -612,6 +738,7 @@ class SeoConfig:
   description_length: int = 160
   noindex_tags: bool = False
   disallow: tuple[str, ...] = ()
+  check: SeoCheckConfig | None = None
 
   def __post_init__(self) -> None:
     if isinstance(self.default_robots, str) or not isinstance(
@@ -630,6 +757,8 @@ class SeoConfig:
       value = getattr(self, key)
       if value is not None and (not isinstance(value, str) or not value):
         raise ValueError(f'`seo.{key}` must be a non-empty string')
+    if self.check is not None and not isinstance(self.check, SeoCheckConfig):
+      raise ValueError('`seo.check` must be an SeoCheckConfig')
     if self.site_url is not None:
       parts = urllib.parse.urlsplit(self.site_url)
       if (
@@ -701,7 +830,9 @@ class SeoConfig:
     for item in dataclasses.fields(self):
       value = getattr(self, item.name)
       if value != item.default:
-        result[item.name] = value
+        result[item.name] = (
+          value.to_dict() if item.name == 'check' and value else value
+        )
     return result
 
   @classmethod
@@ -717,6 +848,8 @@ class SeoConfig:
     for key in ('default_robots', 'disallow'):
       if key in values and values[key] is None:
         values[key] = ()
+    if values.get('check') is not None:
+      values['check'] = SeoCheckConfig.from_dict(values['check'])
     return cls(**values)
 
 
@@ -953,21 +1086,77 @@ class FrontmatterSchema:
         ValueError: A `read_only` field's value would change.
 
     """
-    set_fields = instance.model_fields_set
-    for spec in self.fields:
-      if is_create:
-        if spec.on_create and spec.name not in set_fields:
-          setattr(instance, spec.name, _on_create_value(spec))
-        continue
-      if not spec.read_only or spec.name not in set_fields or existing is None:
-        continue
-      old_value = existing.get(spec.key, MISSING)
-      if old_value is MISSING:
-        continue
-      if getattr(instance, spec.name) != old_value:
-        raise ValueError(
-          f'Field {spec.name!r} is read-only and cannot be changed'
-        )
+    def apply_create(specs: tuple[FieldSpec, ...], model: Any) -> None:
+      """Apply on_create rules recursively to nested model instances."""
+      set_fields = model.model_fields_set
+      for field in specs:
+        value = getattr(model, field.name)
+        if field.on_create and field.name not in set_fields:
+          value = _on_create_value(field)
+          setattr(model, field.name, value)
+        if field.type == 'object' and value is not None:
+          apply_create(field.fields or (), value)
+        elif field.type == 'list[object]':
+          for item in value or []:
+            apply_create(field.fields or (), item)
+
+    def check_read_only(
+      specs: tuple[FieldSpec, ...], model: Any, old: Mapping[str, Any],
+      prefix: str = '',
+    ) -> None:
+      """Reject read-only changes recursively, including object lists."""
+      set_fields = model.model_fields_set
+      for field in specs:
+        value = getattr(model, field.name)
+        old_value = old.get(field.key, old.get(field.name, MISSING))
+        label = f'{prefix}.{field.name}' if prefix else field.name
+        if old_value is not MISSING and field.name not in set_fields:
+          if field.type == 'object' and isinstance(old_value, Mapping):
+            nested_type = type(value)
+            value = nested_type.model_validate(old_value)
+            setattr(model, field.name, value)
+          elif field.type == 'list[object]' and isinstance(old_value, list):
+            annotation = type(model).model_fields[field.name].annotation
+            nested_type = get_args(annotation)[0]
+            value = [nested_type.model_validate(item) for item in old_value]
+            setattr(model, field.name, value)
+        if field.read_only and old_value is not MISSING:
+          if field.name not in set_fields:
+            # An omitted read-only field is preserved, not reset to its
+            # schema default during a full-replacement update.
+            annotation = type(model).model_fields[field.name].annotation
+            if field.type == 'object' and isinstance(old_value, Mapping):
+              value = type(value).model_validate(old_value)
+            elif field.type == 'list[object]' and isinstance(old_value, list):
+              nested_type = get_args(annotation)[0]
+              value = [nested_type.model_validate(item) for item in old_value]
+            else:
+              value = old_value
+            setattr(model, field.name, value)
+          else:
+            compared = value
+            if hasattr(compared, 'model_dump'):
+              compared = compared.model_dump(by_alias=True, exclude_none=True)
+            elif isinstance(compared, list):
+              compared = [
+                item.model_dump(by_alias=True, exclude_none=True)
+                if hasattr(item, 'model_dump') else item for item in compared
+              ]
+            if compared != old_value:
+              raise ValueError(
+                f'Field {label!r} is read-only and cannot be changed'
+              )
+        if field.type == 'object' and value is not None and isinstance(old_value, Mapping):
+          check_read_only(field.fields or (), value, old_value, label)
+        elif field.type == 'list[object]' and isinstance(old_value, list):
+          for index, item in enumerate(value or []):
+            if index < len(old_value) and isinstance(old_value[index], Mapping):
+              check_read_only(field.fields or (), item, old_value[index], f'{label}[{index}]')
+
+    if is_create:
+      apply_create(self.fields, instance)
+    elif existing is not None:
+      check_read_only(self.fields, instance, existing)
     dumped = self.dump(instance, by_alias=True)
     if is_create or existing is None:
       return dumped
@@ -1091,7 +1280,27 @@ def _parse_field(name: str, options: Mapping[str, Any] | None) -> FieldSpec:
   unknown = set(options) - known
   if unknown:
     raise ValueError(f'Unknown option(s) {sorted(unknown)} for field {name!r}')
-  return FieldSpec(name=name, **options)
+  values = dict(options)
+  if 'fields' in values and values['fields'] is not None:
+    raw_children = values['fields']
+    children: list[FieldSpec] = []
+    if isinstance(raw_children, Mapping):
+      for child_name, child_options in raw_children.items():
+        children.append(_parse_field(str(child_name), child_options))
+    elif isinstance(raw_children, list):
+      for item in raw_children:
+        if not isinstance(item, Mapping) or 'name' not in item:
+          raise ValueError(f'Each nested field of {name!r} needs a `name`')
+        child_options = {
+          key: value for key, value in item.items() if key != 'name'
+        }
+        children.append(_parse_field(str(item['name']), child_options))
+    else:
+      raise ValueError(
+        f'`fields` of field {name!r} must be a mapping or a list'
+      )
+    values['fields'] = tuple(children)
+  return FieldSpec(name=name, **values)
 
 
 def _normalize_pattern(pattern: str | tuple[str, str]) -> str | tuple[str, str]:
@@ -1185,7 +1394,7 @@ def _implicit_default(spec: FieldSpec) -> Any:
     return spec.default
   if spec.type == 'bool':
     return False
-  if spec.type == 'dict':
+  if spec.type in ('dict', 'object'):
     return {}
   if spec.type in _CONTAINER_TYPES:
     return []
@@ -1244,6 +1453,14 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
       )
 
     annotation: Any = _TYPES[spec.type]
+    if spec.type in ('object', 'list[object]'):
+      nested_schema = FrontmatterSchema(
+        fields=spec.fields or (), extra=schema.extra
+      )
+      nested_model = _build_model(nested_schema)
+      annotation = (
+        nested_model if spec.type == 'object' else list[nested_model]
+      )
     options: dict[str, Any] = {}
     if spec.alias:
       options['alias'] = spec.alias

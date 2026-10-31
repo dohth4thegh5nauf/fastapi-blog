@@ -1,3 +1,5 @@
+# Historical Codebase Analysis (pre-security hardening)
+
 # Анализ кодовой базы FastAPI Blog
 
 **Дата анализа:** 2026-05-15  
@@ -777,3 +779,6 @@ git push origin feature/my-feature
 **Анализ выполнен:** 2026-05-15  
 **Версия проекта:** 0.8.1+  
 **Статус CI:** ✅ Passing
+
+
+> Historical note: snippets in this document describe the repository before the current credential hardening. Do not copy old inline passwords or session secrets; use `FASTAPI_BLOG_ADMIN_PASSWORD` and `SECRET_KEY` as described in [Environment Variables](ENVIRONMENT_VARIABLES.md).

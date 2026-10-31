@@ -9,6 +9,7 @@ from .config import CollectionSpec, Project, find_project, load_project
 from .editor import add_editor_to_app, get_api_router
 from .main import add_blog_to_fastapi
 from .models import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema, SeoConfig
+from .permissions import Authorizer
 from .router import get_blog_router
 
 
@@ -74,6 +75,10 @@ def setup_fastapi_blog(
   seo_routes: bool = False,
   admin: bool = True,
   collection_spec: CollectionSpec | None = None,
+  authorize: Authorizer | None = None,
+  insecure_dev: bool = False,
+  https_only: bool = False,
+  auth_users: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
@@ -94,6 +99,10 @@ def setup_fastapi_blog(
       admin_username: Admin username (default: `FASTAPI_BLOG_ADMIN_LOGIN`).
       admin_password: Admin password (default: `FASTAPI_BLOG_ADMIN_PASSWORD`).
       secret_key: Session secret key of the admin panel.
+      authorize: Shared callback `(request, resource, action) -> bool`.
+      insecure_dev: Explicitly allow the old development credentials (unsafe).
+      https_only: Mark the session cookie Secure (HTTPS only).
+      auth_users: Optional additional admin-panel accounts with password/role.
       enable_role_management: Add the role management views to the admin panel.
       frontmatter_schema: Custom schema of the post frontmatter.
       seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
@@ -122,16 +131,19 @@ def setup_fastapi_blog(
   # Fail early (before any route is added) if the admin panel is unavailable
   add_admin = _import_admin().add_admin_to_app if admin else None
 
-  # Get credentials from env if not provided
+  # Resolve environment values once; the admin setup validates that a
+  # password and strong session secret exist unless insecure_dev is explicit.
   if admin_username is None:
     admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN')
   if admin_password is None:
     admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
-  if admin:
-    # The admin panel keeps its previous defaults until they are removed
-    # in the security phase
-    admin_username = admin_username or 'admin'
-    admin_password = admin_password or 'Admin123!'
+
+  if add_admin is not None and not insecure_dev:
+    from .security import resolve_admin_credentials
+
+    admin_username, admin_password, secret_key = resolve_admin_credentials(
+      admin_username, admin_password, secret_key
+    )
 
   add_blog_to_fastapi(
     app,
@@ -145,6 +157,7 @@ def setup_fastapi_blog(
     seo=seo,
     seo_routes=seo_routes,
     collection_spec=collection_spec,
+    authorize=authorize,
   )
   if add_admin is None:
     return {}
@@ -159,4 +172,8 @@ def setup_fastapi_blog(
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
+    authorize=authorize,
+    insecure_dev=insecure_dev,
+    https_only=https_only,
+    auth_users=auth_users,
   )

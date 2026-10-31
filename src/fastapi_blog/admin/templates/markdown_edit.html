@@ -40,21 +40,30 @@
             </div>
             
             <div class="row">
+              {% set ns = namespace(group='') %}
               {% for f in form_fields %}
+              {% if f.kind == 'hidden' %}
+              {% else %}
+              {% if f.group != ns.group %}
+              {% set ns.group = f.group %}
+              {% if f.group %}<div class="col-12"><h4 class="mt-2">{{ f.group }}</h4></div>{% endif %}
+              {% endif %}
               <div class="{{ f.col }} mb-3">
                 <label class="form-label{% if f.required %} required{% endif %}" for="field-{{ f.name }}">{{ f.label }}</label>
                 {% if f.kind == 'bool' %}
-                <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}">
+                <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}"{% if f.read_only %} disabled{% endif %}>
                   <option value="true" {% if f.value == 'true' %}selected{% endif %}>{{ t.yes }}</option>
                   <option value="false" {% if f.value != 'true' %}selected{% endif %}>{{ t.no }}</option>
                 </select>
                 {% elif f.kind in ('textarea', 'json') %}
-                <textarea class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" rows="{{ 4 if f.kind == 'json' else 2 }}"{% if f.html_required %} required{% endif %}>{{ f.value }}</textarea>
+                <textarea class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" rows="{{ 4 if f.kind == 'json' else 2 }}"{% if f.read_only %} readonly{% endif %}{% if f.html_required %} required{% endif %}>{{ f.value }}</textarea>
                 {% else %}
-                <input type="{% if f.kind == 'date' %}date{% elif f.kind == 'datetime' %}datetime-local{% elif f.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.kind == 'number' %} step="any"{% endif %}{% if f.max_length and f.kind == 'text' %} maxlength="{{ f.max_length }}"{% endif %}{% if f.html_required %} required{% endif %}>
+                <input type="{% if f.kind == 'date' %}date{% elif f.kind == 'datetime' %}datetime-local{% elif f.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.kind == 'number' %} step="any"{% if f.min is not none %} min="{{ f.min }}"{% endif %}{% if f.max is not none %} max="{{ f.max }}"{% endif %}{% endif %}{% if f.max_length and f.kind == 'text' %} maxlength="{{ f.max_length }}"{% endif %}{% if f.read_only %} readonly{% endif %}{% if f.html_required %} required{% endif %}>
                 {% endif %}
+                {% if f.counter_max %}<small class="form-hint js-char-counter" data-counter-for="field-{{ f.name }}" data-counter-max="{{ f.counter_max }}"></small>{% endif %}
                 {% if f.hint %}<small class="form-hint">{{ f.hint }}</small>{% endif %}
               </div>
+              {% endif %}
               {% endfor %}
             </div>
             
@@ -79,6 +88,27 @@
 <script>
 const formFields = {{ form_fields_meta | tojson }};
 
+function setNested(target, path, value) {
+  let node = target;
+  for (const key of path.slice(0, -1)) {
+    if (typeof node[key] !== 'object' || node[key] === null) node[key] = {};
+    node = node[key];
+  }
+  node[path[path.length - 1]] = value;
+}
+
+for (const counter of document.querySelectorAll('.js-char-counter')) {
+  const field = document.getElementById(counter.dataset.counterFor);
+  const update = () => {
+    const count = field.value.length;
+    const limit = Number(counter.dataset.counterMax);
+    counter.textContent = `${count}/${limit}`;
+    counter.classList.toggle('text-danger', count > limit);
+  };
+  field.addEventListener('input', update);
+  update();
+}
+
 document.getElementById('post-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -87,7 +117,12 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
   // Build frontmatter from the schema fields, under their external keys
   const frontmatter = {};
   for (const field of formFields) {
-    const raw = document.getElementById(`field-${field.name}`).value;
+    if (field.kind === 'hidden') {
+      if (field.value !== '') setNested(frontmatter, field.path, JSON.parse(field.value));
+      continue;
+    }
+    const element = document.getElementById(`field-${field.name}`);
+    const raw = element.value;
     const items = raw.split(',').map(t => t.trim()).filter(t => t);
     let value;
     if (field.kind === 'bool') {
@@ -113,7 +148,7 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
       value = raw === '' ? undefined : raw;
     }
     if (value !== undefined) {
-      frontmatter[field.key] = value;
+      setNested(frontmatter, field.path, value);
     }
   }
   

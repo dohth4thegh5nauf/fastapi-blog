@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette_admin.routing import route
@@ -14,6 +15,12 @@ from starlette_admin.views import CustomView
 from .. import store
 from ..config import CollectionSpec
 from ..models import DEFAULT_SCHEMA, SLUG_RE, FrontmatterSchema
+from ..permissions import (
+  Authorizer,
+  default_authorize,
+  ensure_allowed,
+  user_from_session,
+)
 from .form_fields import (
   build_form_fields,
   form_fields_meta,
@@ -176,7 +183,21 @@ class MarkdownFileManager:
     return True
 
 
-class MarkdownListView(CustomView):
+class _AuthorizedMarkdownView:
+  """Shared asynchronous access checks for the file-backed admin views."""
+
+  authorize: Authorizer
+
+  def _set_principal(self, request: Request) -> None:
+    if getattr(request.state, 'blog_user', None) is None:
+      request.state.blog_user = user_from_session(request)
+
+  async def _require(self, request: Request, action: str) -> None:
+    self._set_principal(request)
+    await ensure_allowed(self.authorize, request, 'posts', action)
+
+
+class MarkdownListView(_AuthorizedMarkdownView, CustomView):
   """List view for markdown posts."""
 
   def __init__(
@@ -185,6 +206,7 @@ class MarkdownListView(CustomView):
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
     collection_spec: CollectionSpec | None = None,
+    authorize: Authorizer | None = None,
   ):
     """Initialize list view with posts directory, locale and schema."""
     super().__init__(
@@ -201,10 +223,12 @@ class MarkdownListView(CustomView):
     self.collection_spec = collection_spec
     self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
+    self.authorize = authorize or default_authorize
 
   @route('')
   async def index(self, request: Request) -> Response:
     """Render list of posts."""
+    await self._require(request, 'read')
     posts = self.manager.list_posts()
 
     # Convert to dict for template
@@ -304,7 +328,7 @@ class MarkdownListView(CustomView):
     return str(date_value)
 
 
-class MarkdownEditView(CustomView):
+class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
   """Edit view for markdown posts."""
 
   def __init__(
@@ -313,6 +337,7 @@ class MarkdownEditView(CustomView):
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
     collection_spec: CollectionSpec | None = None,
+    authorize: Authorizer | None = None,
   ):
     """Initialize edit view with posts directory, locale and schema."""
     super().__init__(
@@ -328,10 +353,12 @@ class MarkdownEditView(CustomView):
     )
     self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
+    self.authorize = authorize or default_authorize
 
   @route('')
   async def index(self, request: Request) -> Response:
     """Render edit form."""
+    await self._require(request, 'update')
     assert self.templates is not None
     slug = request.path_params.get('slug')
     if not slug:
@@ -383,7 +410,7 @@ class MarkdownEditView(CustomView):
     )
 
 
-class MarkdownCreateView(CustomView):
+class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
   """Create view for new markdown posts."""
 
   def __init__(
@@ -392,6 +419,7 @@ class MarkdownCreateView(CustomView):
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
     collection_spec: CollectionSpec | None = None,
+    authorize: Authorizer | None = None,
   ):
     """Initialize create view with posts directory, locale and schema."""
     super().__init__(
@@ -408,10 +436,12 @@ class MarkdownCreateView(CustomView):
     self.collection_spec = collection_spec
     self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
+    self.authorize = authorize or default_authorize
 
   @route('')
   async def index(self, request: Request) -> Response:
     """Render create form."""
+    await self._require(request, 'create')
     assert self.templates is not None
     # Get translations for this view's locale
     from ..i18n import load_translations

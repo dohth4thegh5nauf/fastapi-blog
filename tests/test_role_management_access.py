@@ -1,7 +1,5 @@
 """Test role management access control."""
 
-from unittest.mock import Mock
-
 import pytest
 from fastapi import FastAPI
 from starlette.requests import Request
@@ -19,7 +17,7 @@ def app_with_roles():
     title='Test Admin',
     admin_username='admin',
     admin_password='Admin123!',
-    secret_key='test-secret-key',
+    secret_key='t' * 64,
     enable_role_management=True,
   )
   return app, admins
@@ -104,26 +102,30 @@ def test_role_view_accessible_only_for_root_user(app_with_roles):
   assert role_view.admin_username == 'admin'
 
   # Create mock request (no need to set app.state - view reads from self.admin_username)
-  request = Mock(spec=Request)
+  request = Request({
+    'type': 'http', 'method': 'GET', 'path': '/', 'headers': [],
+    'session': {'user': 'admin', 'role': 'admin'},
+  })
 
   # Test root user access
-  request.session = {'user': 'admin'}
   assert role_view.is_accessible(request) is True
-  assert role_view.can_view_details(request) is True
+  assert role_view.can_view_detail(request) is True
   assert role_view.can_create(request) is True
   assert role_view.can_edit(request) is True
   assert role_view.can_delete(request) is True
 
   # Test non-root user access
-  request.session = {'user': 'other_user'}
+  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
+  request.state.blog_user = None
   assert role_view.is_accessible(request) is False
-  assert role_view.can_view_details(request) is False
+  assert role_view.can_view_detail(request) is False
   assert role_view.can_create(request) is False
   assert role_view.can_edit(request) is False
   assert role_view.can_delete(request) is False
 
   # Test no user
-  request.session = {}
+  request.scope['session'] = {}
+  request.state.blog_user = None
   assert role_view.is_accessible(request) is False
 
 
@@ -152,26 +154,30 @@ def test_user_roles_view_accessible_only_for_root_user(app_with_roles):
   assert user_roles_view.admin_username == 'admin'
 
   # Create mock request (no need to set app.state - view reads from self.admin_username)
-  request = Mock(spec=Request)
+  request = Request({
+    'type': 'http', 'method': 'GET', 'path': '/', 'headers': [],
+    'session': {'user': 'admin', 'role': 'admin'},
+  })
 
   # Test root user access
-  request.session = {'user': 'admin'}
   assert user_roles_view.is_accessible(request) is True
-  assert user_roles_view.can_view_details(request) is True
+  assert user_roles_view.can_view_detail(request) is True
   assert user_roles_view.can_create(request) is True
   assert user_roles_view.can_edit(request) is True
   assert user_roles_view.can_delete(request) is True
 
   # Test non-root user access
-  request.session = {'user': 'other_user'}
+  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
+  request.state.blog_user = None
   assert user_roles_view.is_accessible(request) is False
-  assert user_roles_view.can_view_details(request) is False
+  assert user_roles_view.can_view_detail(request) is False
   assert user_roles_view.can_create(request) is False
   assert user_roles_view.can_edit(request) is False
   assert user_roles_view.can_delete(request) is False
 
   # Test no user
-  request.session = {}
+  request.scope['session'] = {}
+  request.state.blog_user = None
   assert user_roles_view.is_accessible(request) is False
 
 
@@ -232,7 +238,7 @@ def test_role_management_disabled_by_default():
     title='Test Admin',
     admin_username='admin',
     admin_password='Admin123!',
-    secret_key='test-secret-key',
+    secret_key='t' * 64,
     # enable_role_management is False by default
   )
 
@@ -324,12 +330,13 @@ def test_is_accessible_does_not_use_app_state(app_with_roles):
     delattr(request, 'app')
 
   # View should work without accessing app.state
-  request.session = {'user': 'admin'}
+  request.scope = {'session': {'user': 'admin', 'role': 'admin'}}
   assert role_view.is_accessible(request) is True, (
     'is_accessible should work without request.app (reads from self.admin_username)'
   )
 
-  request.session = {'user': 'other_user'}
+  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
+  request.state.blog_user = None
   assert role_view.is_accessible(request) is False
 
 
@@ -356,7 +363,8 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
 
   # Create mock request for non-root user (no need to set app.state)
   request = Mock(spec=Request)
-  request.session = {'user': 'other_user'}
+  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
+  request.state.blog_user = None
 
   # DropDown.is_accessible checks if ANY nested view is accessible
   # Since all nested views check for root user, dropdown should be inaccessible
@@ -365,7 +373,7 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
   )
 
   # Now check for root user - should have access
-  request.session = {'user': 'admin'}
+  request.scope = {'session': {'user': 'admin', 'role': 'admin'}}
   assert role_dropdown.is_accessible(request), (
     'Role dropdown should be accessible to root user'
   )

@@ -17,7 +17,9 @@ from . import helpers
 from .auth import ConfigurationError, add_startup_check, check_api_auth_config
 from .config import CollectionSpec
 from .models import FrontmatterSchema, SeoConfig
+from .permissions import Authorizer
 from .router import get_blog_router
+from .security import install_origin_check_middleware
 from .seo import build_head, resolve_seo_config
 from .validators import Validator
 
@@ -63,6 +65,7 @@ def add_blog_to_fastapi(
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
   collection_spec: CollectionSpec | None = None,
+  authorize: Authorizer | None = None,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -105,6 +108,7 @@ def add_blog_to_fastapi(
       validators: External validators run on every write through the REST
                   API (TODO 6.2/6.3); blocking outcomes roll the write back
                   with HTTP 422.
+      authorize: Shared authorization policy used by the REST API.
       collection_spec: Optional project collection settings. Enables
                   generated slugs and is shared with the admin panel by
                   `setup_fastapi_blog()`.
@@ -337,8 +341,10 @@ def add_blog_to_fastapi(
       require_if_match=require_if_match,
       validators=validators,
       collection_spec=collection_spec,
+      authorize=authorize,
     )
     app.include_router(api_router, prefix=api_prefix, tags=['api'])
+    install_origin_check_middleware(app, (api_prefix,))
     add_startup_check(
       app,
       lambda: check_api_auth_config(

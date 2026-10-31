@@ -9,7 +9,7 @@ Then open:
     Admin UI: http://localhost:8000/admin (web interface)
     API Docs: http://localhost:8000/docs (REST API docs)
 
-Login credentials:
+Development-only login credentials (`insecure_dev=True`):
     Username: admin
     Password: Admin123!
 
@@ -57,6 +57,7 @@ admins = fastapi_blog.add_admin_to_app(
   admin_username='admin',
   admin_password='Admin123!',
   secret_key='change-me-in-production',
+  insecure_dev=True,
   locales=['en', 'ru'],
   default_locale='en',  # /admin → /admin/en
   enable_role_management=True,  # Enable role management (visible only to root admin)

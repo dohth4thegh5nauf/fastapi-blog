@@ -1,5 +1,6 @@
 """Custom ModelView classes for admin models."""
 
+import inspect
 from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from starlette_admin.contrib.sqla import ModelView
 from starlette_admin.routing import route
 
 from ..models import DEFAULT_SCHEMA, FrontmatterSchema
+from ..permissions import default_authorize, user_from_session
 from .passwords import get_password_hasher
 
 
@@ -62,7 +64,48 @@ def validate_and_prepare_password(password: str) -> str:
   return password
 
 
-class UserModelView(ModelView):
+class _AuthorizedModelView:
+  """Shared synchronous permission hooks used by Starlette Admin views."""
+
+  authorize = None
+  resource = 'posts'
+
+  def _allowed(self, request: Request, action: str) -> bool:
+    if getattr(request.state, 'blog_user', None) is None:
+      request.state.blog_user = user_from_session(request)
+    callback = self.authorize or default_authorize
+    result = callback(request, self.resource, action)
+    # Starlette Admin's view hooks are synchronous. The REST/custom views
+    # support asynchronous callbacks; admin ModelView hooks fail closed here.
+    return bool(result) if not inspect.isawaitable(result) else False
+
+  def is_accessible(self, request: Request) -> bool:
+    return self._allowed(request, 'read')
+
+  def can_view_detail(self, request: Request) -> bool:
+    return self._allowed(request, 'read')
+
+  def can_create(self, request: Request) -> bool:
+    return self._allowed(request, 'create')
+
+  def can_edit(self, request: Request) -> bool:
+    return self._allowed(request, 'update')
+
+  def can_delete(self, request: Request) -> bool:
+    return self._allowed(request, 'delete')
+
+  def can_export(self, request: Request) -> bool:
+    return self._allowed(request, 'read')
+
+  def can_import(self, request: Request) -> bool:
+    return self._allowed(request, 'create')
+
+  def is_action_allowed(self, request: Request, name: str) -> bool:
+    return self._allowed(request, 'update')
+
+
+class UserModelView(_AuthorizedModelView, ModelView):
+  resource = 'users'
   """Custom view for User model with password hashing.
 
   Note: label, name, and label_plural are set dynamically per locale
@@ -105,7 +148,8 @@ class UserModelView(ModelView):
     await super().before_edit(request, data, obj)
 
 
-class PostModelView(ModelView):
+class PostModelView(_AuthorizedModelView, ModelView):
+  resource = 'posts'
   """Custom view for Post model.
 
   Note: label, name, and label_plural are set dynamically per locale
@@ -191,12 +235,20 @@ class HomeView(CustomView):
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
     posts_dirname: str | None = None,
+    authorize=None,
   ):
     """Initialize home view with locale and frontmatter schema."""
     super().__init__(menu_label=label, icon=icon)
     self.locale = locale
     self.schema = schema
     self.posts_dirname = posts_dirname
+    self.authorize = authorize or default_authorize
+
+  def is_accessible(self, request: Request) -> bool:
+    if getattr(request.state, 'blog_user', None) is None:
+      request.state.blog_user = user_from_session(request)
+    result = self.authorize(request, 'posts', 'read')
+    return bool(result) if not inspect.isawaitable(result) else False
 
   @route('')
   async def index(self, request: Request) -> Response:

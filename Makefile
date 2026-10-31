@@ -67,13 +67,13 @@ run_editor:
 run_quickstart:
 	@echo "\n🚀 Starting FastAPI Blog - Quickstart Example\n"
 	@echo "📍 Admin Panel: http://localhost:8000/admin"
-	@echo "🔑 Login: admin / Admin123!\n"
+	@echo "🔑 DEV ONLY login (insecure_dev=True): admin / Admin123!\n"
 	cd tests/examples && mkdir -p data && uvicorn quickstart:app --reload
 
 run_admin_roles:
 	@echo "\n🚀 Starting FastAPI Blog - Admin with RBAC\n"
 	@echo "📍 Admin Panel: http://localhost:8000/admin"
-	@echo "🔑 Users: admin/password, editor/password, viewer/password\n"
+	@echo "🔑 DEV ONLY users (insecure_dev=True): admin, editor, viewer\n"
 	cd tests/examples && mkdir -p data && uvicorn admin_with_roles:app --reload
 
 run_admin_i18n:

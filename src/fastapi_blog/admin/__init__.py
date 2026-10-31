@@ -10,6 +10,7 @@ import logging
 import os
 import pathlib
 import warnings
+from collections.abc import Mapping
 
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
@@ -18,6 +19,11 @@ from starlette_admin.i18n import I18nConfig
 
 from ..config import CollectionSpec
 from ..models import FrontmatterSchema
+from ..permissions import Authorizer
+from ..security import (
+  install_origin_check_middleware,
+  resolve_admin_credentials,
+)
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
@@ -65,20 +71,48 @@ __all__ = [
 ]
 
 
-def _has_session_middleware(app: FastAPI) -> bool:
-  """Check if SessionMiddleware is already added to the app.
-
-  Args:
-    app: FastAPI application instance
-
-  Returns:
-    True if SessionMiddleware is already added, False otherwise
-
-  """
+def _session_middleware_options(app: FastAPI) -> dict | None:
+  """Return the options of an already-installed SessionMiddleware."""
   for middleware in app.user_middleware:
     if middleware.cls == SessionMiddleware:
-      return True
-  return False
+      return dict(getattr(middleware, 'kwargs', {}) or {})
+  return None
+
+
+def _validate_existing_session_middleware(
+  app: FastAPI, secret_key: str, https_only: bool
+) -> bool:
+  """Ensure an externally installed session middleware matches our policy."""
+  options = _session_middleware_options(app)
+  if options is None:
+    return False
+
+  configured_secret = options.get('secret_key')
+  if isinstance(configured_secret, bytes):
+    configured_secret = configured_secret.decode('utf-8')
+  if configured_secret != secret_key:
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      'The existing SessionMiddleware must use the same secret_key as '
+      'FastAPI Blog.'
+    )
+
+  same_site = str(options.get('same_site', 'lax')).lower()
+  if same_site not in {'lax', 'strict'}:
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      "The existing SessionMiddleware must use same_site='lax' or 'strict'."
+    )
+  if https_only and not options.get('https_only', False):
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      'https_only=True requires the existing SessionMiddleware to set '
+      'https_only=True.'
+    )
+  return True
 
 
 def _create_admin_for_locale(
@@ -97,6 +131,8 @@ def _create_admin_for_locale(
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
+  authorize: Authorizer | None = None,
+  auth_users: Mapping[str, Mapping[str, str]] | None = None,
 ) -> Admin:
   """Create an Admin instance for a specific locale.
 
@@ -157,6 +193,7 @@ def _create_admin_for_locale(
       locale=locale,
       schema=frontmatter_schema,
       posts_dirname=posts_dirname,
+      authorize=authorize,
     ),
   )
 
@@ -171,6 +208,7 @@ def _create_admin_for_locale(
 
   # Add User view with translated labels
   user_view = UserModelView(User, icon='fa fa-users')
+  user_view.authorize = authorize
   user_view.menu_label = user_label
   user_view.display_name = user_name_for_button
   admin.add_view(user_view)
@@ -187,13 +225,15 @@ def _create_admin_for_locale(
 
     # Create role management views with admin_username for access control
     role_view = RoleModelView(
-      Role, locale=locale, admin_username=admin_username, icon='fa fa-shield'
+      Role, locale=locale, admin_username=admin_username, icon='fa fa-shield',
+      authorize=authorize,
     )
     user_roles_view = UserWithRolesModelView(
       UserWithRoles,
       locale=locale,
       admin_username=admin_username,
       icon='fa fa-users-cog',
+      authorize=authorize,
     )
 
     # Add as dropdown menu group
@@ -226,6 +266,7 @@ def _create_admin_for_locale(
     locale=locale,
     schema=frontmatter_schema,
     collection_spec=collection_spec,
+    authorize=authorize,
   )
   posts_list_view.menu_label = posts_label
   admin.add_view(posts_list_view)
@@ -237,6 +278,7 @@ def _create_admin_for_locale(
       locale=locale,
       schema=frontmatter_schema,
       collection_spec=collection_spec,
+      authorize=authorize,
     )
   )
   admin.add_view(
@@ -245,6 +287,7 @@ def _create_admin_for_locale(
       locale=locale,
       schema=frontmatter_schema,
       collection_spec=collection_spec,
+      authorize=authorize,
     )
   )
 
@@ -267,6 +310,10 @@ def add_admin_to_app(
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
+  insecure_dev: bool = False,
+  https_only: bool = False,
+  authorize: Authorizer | None = None,
+  auth_users: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -278,8 +325,12 @@ def add_admin_to_app(
     title: Admin panel title
     database_url: Database URL (default: from DATABASE_URL env or SQLite)
     admin_username: Admin username (default: from FASTAPI_BLOG_ADMIN_LOGIN env or 'admin')
-    admin_password: Admin password (default: from FASTAPI_BLOG_ADMIN_PASSWORD env or 'Admin123!')
-    secret_key: Secret key for sessions (default: from SECRET_KEY env)
+    admin_password: Required admin password, or FASTAPI_BLOG_ADMIN_PASSWORD.
+    secret_key: Required session secret, or SECRET_KEY (32+ chars).
+    insecure_dev: Enable old development credentials explicitly (unsafe).
+    https_only: Set the session cookie Secure flag.
+    authorize: Shared `(request, resource, action) -> bool` permission callback.
+    auth_users: Optional extra login accounts mapped to password and role.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
     init_database: Whether to initialize database on startup (default: True)
     locales: List of available locales (default: ['en', 'ru'])
@@ -309,13 +360,16 @@ def add_admin_to_app(
       add_admin_to_app,
     )
 
+    import os
+
     app = FastAPI()
 
     # English and Russian with EN as default
     admins = add_admin_to_app(
       app,
       title='My Blog Admin',
-      admin_password='SuperSecret123!',
+      admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+      secret_key=os.environ['SECRET_KEY'],
       locales=[
         'en',
         'ru',
@@ -327,6 +381,8 @@ def add_admin_to_app(
     admins = add_admin_to_app(
       app,
       title='Админ-панель блога',
+      admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+      secret_key=os.environ['SECRET_KEY'],
       locales=[
         'en',
         'ru',
@@ -343,11 +399,9 @@ def add_admin_to_app(
     else:
       frontmatter_schema = collection_spec.schema
 
-  # Handle environment variables for admin credentials
-  if admin_username is None:
-    admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN', 'admin')
-  if admin_password is None:
-    admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD', 'Admin123!')
+  admin_username, admin_password, secret_key = resolve_admin_credentials(
+    admin_username, admin_password, secret_key, insecure_dev=insecure_dev
+  )
 
   # Set default locales if not provided
   if locales is None:
@@ -362,32 +416,12 @@ def add_admin_to_app(
       f"default_locale '{default_locale}' must be in locales list {locales}"
     )
 
-  # Get secret key
-  if secret_key is None:
-    secret_key = os.getenv(
-      'SECRET_KEY', 'change-me-in-production-please-use-strong-secret'
-    )
-
-  # Validate secret_key strength
-  WEAK_SECRETS = {
-    'change-me-in-production-please-use-strong-secret',
-    'changeme',
-    'secret',
-    'test-secret-key',
-    '',
-  }
-  if secret_key in WEAK_SECRETS or len(secret_key) < 32:
-    warnings.warn(
-      f'secret_key is weak (length: {len(secret_key)}). '
-      'Use secrets.token_hex(32) for production. '
-      "Example: python -c 'import secrets; print(secrets.token_hex(32))'",
-      UserWarning,
-      stacklevel=2,
-    )
-
-  # Add session middleware if needed (must be added AFTER CORS)
-  if add_session_middleware:
-    if _has_session_middleware(app):
+  # Add session middleware if needed (must be added AFTER CORS).
+  existing_session = _validate_existing_session_middleware(
+    app, secret_key, https_only
+  )
+  if existing_session:
+    if add_session_middleware:
       warnings.warn(
         'SessionMiddleware is already added to the application. '
         'Set add_session_middleware=False to avoid duplication. '
@@ -395,8 +429,28 @@ def add_admin_to_app(
         UserWarning,
         stacklevel=2,
       )
-    else:
-      app.add_middleware(SessionMiddleware, secret_key=secret_key)
+  elif add_session_middleware:
+    app.add_middleware(
+      SessionMiddleware,
+      secret_key=secret_key,
+      same_site='lax',
+      https_only=https_only,
+    )
+  else:
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      'add_session_middleware=False requires an existing SessionMiddleware.'
+    )
+
+  # Protect cookie-authenticated writes to every mounted admin locale.
+  install_origin_check_middleware(
+    app,
+    tuple(
+      path for locale in locales
+      for path in ('/admin', f'/{locale}/admin')
+    ),
+  )
 
   # Create engine and session
   engine, session_factory = create_engine_and_session(database_url)
@@ -452,6 +506,7 @@ def add_admin_to_app(
     password=admin_password,
     redirect_after_login='/admin/user/list',
     locale=default_locale,
+    users=auth_users,
   )
 
   default_admin = _create_admin_for_locale(
@@ -469,6 +524,8 @@ def add_admin_to_app(
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
+    authorize=authorize,
+    auth_users=auth_users,
   )
 
   default_admin.mount_to(app)
@@ -485,6 +542,7 @@ def add_admin_to_app(
       password=admin_password,
       redirect_after_login=f'/{locale}/admin/user/list',
       locale=locale,
+      users=auth_users,
     )
 
     admin = _create_admin_for_locale(
@@ -502,6 +560,8 @@ def add_admin_to_app(
       frontmatter_schema=frontmatter_schema,
       posts_dirname=posts_dirname,
       collection_spec=collection_spec,
+      authorize=authorize,
+      auth_users=auth_users,
     )
 
     admin.mount_to(app)

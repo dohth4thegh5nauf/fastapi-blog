@@ -22,7 +22,9 @@ from .schema import (
   FieldSpec,
   FrontmatterSchema,
   JsonLdConfig,
+  SeoCheckConfig,
   SeoConfig,
+  is_http_url_or_root_path,
 )
 
 
@@ -36,7 +38,9 @@ __all__ = [
   'FieldSpec',
   'FrontmatterSchema',
   'JsonLdConfig',
+  'SeoCheckConfig',
   'SeoConfig',
+  'is_http_url_or_root_path',
   'SLUG_PATTERN',
   'SLUG_RE',
   'Slug',

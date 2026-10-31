@@ -53,6 +53,7 @@ admins = fastapi_blog.add_admin_to_app(
   admin_username='admin',
   admin_password='Admin123!',
   secret_key='change-me-in-production',
+  insecure_dev=True,
   locales=['en', 'ru'],
   default_locale='en',
 )

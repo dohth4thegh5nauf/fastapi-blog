@@ -18,6 +18,7 @@ This hybrid approach provides flexibility: simple file-based posts for the blog,
 By default, the database is stored at `./data/app.db` (SQLite with async support):
 
 ```python
+import os
 from fastapi import FastAPI
 import fastapi_blog
 
@@ -26,8 +27,8 @@ app = FastAPI()
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='secure_password',
-  secret_key='your-secret-key',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
   # database_url not specified = uses default SQLite
 )
 ```
@@ -596,6 +597,7 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 ### Minimal Setup (SQLite)
 
 ```python
+import os
 from fastapi import FastAPI
 import fastapi_blog
 
@@ -604,8 +606,8 @@ app = FastAPI()
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='change_me',
-  secret_key='secret',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
