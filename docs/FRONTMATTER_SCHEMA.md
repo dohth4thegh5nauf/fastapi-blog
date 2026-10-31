@@ -116,6 +116,36 @@ The same parameter exists on `add_blog_to_fastapi()`, `add_admin_to_app()`,
 `get_api_router()` and `add_editor_to_app()` if you set the parts up one by one.
 Use the same schema everywhere, otherwise the parts disagree about the files.
 
+## Generated slugs and collection summaries
+
+Slug generation and document summaries are collection configuration, not
+frontmatter schema fields. Configure them in `fastapi_blog.yaml` and pass the
+loaded collection explicitly to the application:
+
+```yaml
+collections:
+  posts:
+    dir: posts
+    slug_template: "{seq|pad(4)}-{title_slug}"
+    unique: [seq]
+    summary: "{title}"
+```
+
+```python
+from fastapi_blog import load_project, setup_fastapi_blog
+
+posts = load_project("fastapi_blog.yaml").collections["posts"]
+setup_fastapi_blog(app, collection_spec=posts, include_api=True)
+```
+
+The generated-slug REST endpoint is `POST /api/posts/create`; its request
+contains `frontmatter` and `content`, without a `slug`. The admin create form
+uses the same behavior when the slug field is blank. A manually supplied slug
+continues to work. Date tags use the date-role field when populated, or the
+UTC first-save timestamp otherwise. The slug is generated once and remains
+stable across subsequent edits. A configured `summary` appears beneath the
+document title in the admin list.
+
 ## Using a schema in the REST API
 
 ```python

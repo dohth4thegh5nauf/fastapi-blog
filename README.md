@@ -152,6 +152,58 @@ The admin panel is enabled by default and therefore requires the `admin` extra. 
 
 See [QUICKSTART.md](QUICKSTART.md) for runnable examples and [demo.sh](demo.sh) for the repository demo.
 
+## Generated slugs and collection summaries
+
+A project collection can define a `slug_template` and an optional `summary`.
+Pass the loaded `CollectionSpec` to `setup_fastapi_blog()` so the public blog,
+REST API and admin panel share the same collection settings:
+
+```yaml
+# fastapi_blog.yaml
+collections:
+  posts:
+    dir: posts
+    slug_template: "{seq|pad(4)}-{title_slug}"
+    summary: "{title}"
+    unique: [seq]
+```
+
+```python
+from fastapi import FastAPI
+from fastapi_blog import load_project, setup_fastapi_blog
+
+app = FastAPI()
+posts = load_project("fastapi_blog.yaml").collections["posts"]
+
+setup_fastapi_blog(
+    app,
+    collection_spec=posts,
+    include_api=True,
+    admin=True,
+    # Supply deployment credentials and a strong secret in production.
+)
+```
+
+When a collection has a `slug_template`, the REST API supports
+`POST /api/posts/create` with only `frontmatter` and `content`; it allocates the
+next slug under the collection's write lock. The legacy
+`POST /api/posts/create/{slug}` route remains available. The admin create form
+also allows the slug to be left blank for automatic generation, or entered
+manually to override it. The API applies the same schema validation and
+blocking external validators to generated documents as to explicitly named
+documents.
+
+The `{year}`, `{month}` and `{day}` template tags use the document's date-role
+field when it has a value; otherwise they use the UTC timestamp captured at
+first save. Once created, the filename is stable when the title or date is
+edited. A configured `summary` is shown below the title in the admin post
+list; without one, the title is used.
+
+The package does not discover a project file implicitly at runtime. Load it
+explicitly with `load_project()` and pass the collection you want to use.
+This keeps application configuration explicit and preserves the file-based
+storage boundary.
+
 ## REST API
 
 Enable the post-management API with `include_api=True`:

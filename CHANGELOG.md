@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
-### Template language, slug generation and uniqueness (TODO 6.4, partial)
+### Template language, slug generation and uniqueness (TODO 6.4, complete)
 
 - Added a shared, non-evaluating template language for `slug_template`,
   `jsonld.id_template`, `summary`, and validator arguments: fields,
@@ -24,9 +24,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - JSON-LD `id_template` now uses the shared parser instead of `str.format()`.
   Validator arguments accept the same filters while retaining strict
   per-placeholder argument-safety checks.
-- Still not wired: auto-generated slugs in REST/admin create forms, first-
-  save timestamps for all legacy/manual document flows, and admin-list
-  summary rendering (the collection API is ready for those callers).
+- `CollectionSpec` can now be passed to `setup_fastapi_blog()`,
+  `add_blog_to_fastapi()`, `get_api_router()` and `add_admin_to_app()`. Its
+  directory and schema are shared across the public blog, REST API and admin
+  panel; project-file discovery remains explicit through `load_project()`.
+- Added `POST /api/posts/create` for generated-slug creation. The admin create
+  form also generates a slug when its slug field is left blank; an explicitly
+  entered slug remains supported. Generated writes run the same blocking
+  external validators and rollback behavior as named writes.
+- The UTC first-save timestamp is passed into slug generation. `{year}`,
+  `{month}` and `{day}` use the date-role field when populated and otherwise
+  use that first-save timestamp.
+- The admin post list now renders `CollectionSpec.summary` beneath the title,
+  falling back to the title when no summary template is configured.
+- Default-schema field names are available to `slug_template` and `summary`
+  even when a collection has no separate schema file.
 
 
 ### External validators and checked writes (TODO 6.2, 6.3)

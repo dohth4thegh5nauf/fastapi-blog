@@ -1,9 +1,15 @@
+import sys
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
+from fastapi_blog.config import CollectionSpec
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
+from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
+from fastapi_blog.validators import Validator
 
 
 @pytest.fixture
@@ -66,6 +72,164 @@ def test_create_post_success(client, app_dir):
   assert response.status_code == 201
   assert response.json() == {'slug': 'hello-world', 'status': 'created'}
   assert (app_dir / 'posts' / 'hello-world.md').is_file()
+
+
+def test_generated_slug_api_create(app_dir):
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title', 'date', 'published', 'tags', 'description'},
+    ),
+  )
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/create',
+    json={
+      'frontmatter': {
+        'title': 'Hello Generated',
+        'date': '2026-10-31',
+        'published': True,
+        'tags': ['generated'],
+        'description': 'Generated slug test',
+      },
+      'content': 'Body',
+    },
+  )
+
+  assert response.status_code == 201
+  assert response.json() == {
+    'slug': '0001-hello-generated',
+    'status': 'created',
+  }
+  assert response.headers.get('etag')
+  assert (app_dir / 'posts' / '0001-hello-generated.md').is_file()
+
+
+def test_generated_slug_uses_utc_first_save_when_date_is_empty(
+  app_dir, monkeypatch
+):
+  from fastapi_blog import editor
+
+  class FrozenDateTime:
+    @staticmethod
+    def now(tz):
+      assert tz is timezone.utc
+      return datetime(2024, 2, 3, 23, 30, tzinfo=timezone.utc)
+
+  monkeypatch.setattr(editor, 'datetime', FrozenDateTime)
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title'),)
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    slug_template=parse_template(
+      '{year}-{month}-{day}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title'},
+    ),
+  )
+  app = FastAPI()
+  app = add_blog_to_fastapi(
+    app, prefix='blog', frontmatter_schema=schema
+  )
+  app = add_editor_to_app(
+    app,
+    ui=False,
+    require_auth=False,
+    frontmatter_schema=schema,
+    collection_spec=spec,
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/create',
+    json={'frontmatter': {'title': 'First Save'}, 'content': 'Body'},
+  )
+
+  assert response.status_code == 201
+  assert response.json()['slug'] == '2024-02-03-first-save'
+
+
+def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title', 'date', 'published', 'tags', 'description'},
+    ),
+    validators=(
+      Validator.from_dict(
+        {
+          'name': 'reject',
+          'argv': [sys.executable, '-c', 'import sys; sys.exit(1)'],
+          'blocking': ['error'],
+        }
+      ),
+    ),
+  )
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/create',
+    json={
+      'frontmatter': {
+        'title': 'Rejected Generated',
+        'date': '2026-10-31',
+        'published': True,
+        'tags': [],
+        'description': '',
+      },
+      'content': 'Body',
+    },
+  )
+
+  assert response.status_code == 422
+  assert not (app_dir / 'posts' / '0001-rejected-generated.md').exists()
+
+
+def test_generated_slug_save_endpoint(app_dir):
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {'title', 'date', 'published', 'tags', 'description'},
+    ),
+  )
+  app = FastAPI()
+  app = add_blog_to_fastapi(app, prefix='blog')
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+
+  response = client.post(
+    '/api/posts/save',
+    json={'slug': '', **VALID_PAYLOAD},
+  )
+
+  assert response.status_code == 201
+  assert response.json()['slug'] == '0001-hello-world'
+  assert (app_dir / 'posts' / '0001-hello-world.md').is_file()
 
 
 def test_create_post_conflict(client, app_dir):

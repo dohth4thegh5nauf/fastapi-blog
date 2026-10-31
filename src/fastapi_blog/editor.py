@@ -1,6 +1,7 @@
 import pathlib
 import warnings
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 import jinja2
@@ -20,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import helpers, store
 from .auth import add_startup_check, check_api_auth_config
+from .config import CollectionSpec
 from .models import (
   SLUG_PATTERN,
   SLUG_RE,
@@ -148,6 +150,7 @@ def get_api_router(
   auth_dependency: Callable[..., Any] | None = None,
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
+  collection_spec: CollectionSpec | None = None,
 ) -> APIRouter:
   """Get REST API router for post management.
 
@@ -178,6 +181,8 @@ def get_api_router(
       validators: External validators run on every write (TODO 6.2). A
           write whose outcome is in a validator's `blocking` list is rolled
           back and answered with HTTP 422 carrying the `issues` (TODO 6.3).
+      collection_spec: Optional project collection settings. When it has a
+          `slug_template`, POST /create and POST /save can generate a slug.
 
   Returns:
       APIRouter with REST API endpoints
@@ -209,9 +214,28 @@ def get_api_router(
 
   """
   api_router = APIRouter(tags=['editor'])
+  slug_path = Path(
+    pattern=(
+      collection_spec.to_collection().slug_pattern.pattern
+      if collection_spec is not None
+      else SLUG_PATTERN
+    ),
+    max_length=200 if collection_spec is not None else 100,
+  )
+  if collection_spec is not None:
+    posts_dirname = str(collection_spec.dir)
+    if frontmatter_schema is not None:
+      collection_spec = collection_spec.with_schema(frontmatter_schema)
+    else:
+      frontmatter_schema = collection_spec.schema
+    if not validators:
+      validators = collection_spec.validators
+  docs = store.DocumentStore(
+    collection_spec.to_collection()
+    if collection_spec is not None
+    else store.blog_collections(posts_dirname)['posts']
+  )
   Payload = payload_model(strict, frontmatter_schema)
-  slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
-  docs = store.DocumentStore(store.blog_collections(posts_dirname)['posts'])
 
   def _require_if_match(if_match: str | None) -> None:
     if require_if_match and if_match is None:
@@ -245,7 +269,7 @@ def get_api_router(
     etag = docs.write(slug, frontmatter, body, if_match=if_match)
     blocking = run_blocking(
       validators,
-      collection_name='posts',
+      collection_name=(collection_spec.name if collection_spec else 'posts'),
       slug=slug,
       path=_document_path(slug),
       frontmatter=frontmatter,
@@ -289,6 +313,56 @@ def get_api_router(
       auth_func = require_authentication
   else:
     auth_func = optional_authentication
+
+  def _create_generated(
+    payload: Any,
+  ) -> tuple[str, str]:
+    if collection_spec is None or collection_spec.slug_template is None:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail='A slug is required; configure a collection slug_template to generate it.',
+      )
+    fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
+    try:
+      slug, etag = collection_spec.create_document(
+        docs,
+        fm_dump,
+        _body(payload),
+        created_at=datetime.now(timezone.utc),
+      )
+    except store.ConflictError as exc:
+      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except (ValueError, OSError) as exc:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+      ) from exc
+
+    blocking = run_blocking(
+      validators,
+      collection_name=collection_spec.name,
+      slug=slug,
+      path=docs.path_for(slug) or (pathlib.Path(posts_dirname) / f'{slug}.md'),
+      frontmatter=fm_dump,
+      cwd=pathlib.Path.cwd(),
+    )
+    if blocking:
+      docs.delete(slug)
+      raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={'issues': [issue.to_dict() for issue in blocking]},
+      )
+    helpers.clear_posts_cache()
+    return slug, etag
+
+  @api_router.post('/create', status_code=status.HTTP_201_CREATED)
+  async def create_generated_post(
+    payload: Payload,  # type: ignore[valid-type]
+    response: Response,
+    user: dict | None = Depends(auth_func),
+  ) -> dict[str, str]:
+    slug, etag = _create_generated(payload)
+    response.headers['ETag'] = etag
+    return {'slug': slug, 'status': 'created'}
 
   @api_router.get('/{slug}/raw')
   async def get_raw(
@@ -391,11 +465,6 @@ def get_api_router(
   ) -> JSONResponse:
     data = await request.json()
     slug = data.get('slug')
-    if not slug:
-      raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail='Slug is required',
-      )
 
     frontmatter = data.get('frontmatter', {})
     content = data.get('content', '')
@@ -409,6 +478,14 @@ def get_api_router(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f'Invalid payload: {str(e)}',
       ) from e
+
+    if not slug:
+      generated_slug, etag = _create_generated(payload)
+      response.headers['ETag'] = etag
+      return JSONResponse(
+        content={'slug': generated_slug, 'status': 'created'},
+        status_code=status.HTTP_201_CREATED,
+      )
 
     is_new = not docs.exists(slug)
     existing = None if is_new else docs.read(slug).frontmatter
@@ -449,6 +526,7 @@ def add_editor_to_app(
   admin_password: str | None = None,
   auth_dependency: Callable[..., Any] | None = None,
   require_if_match: bool = False,
+  collection_spec: CollectionSpec | None = None,
 ) -> FastAPI:
   """Add editor REST API and optional UI to FastAPI app.
 
@@ -473,6 +551,8 @@ def add_editor_to_app(
           `get_api_router()`
       require_if_match: Require an `If-Match` header on update/delete
           (optional), see `get_api_router()`
+      collection_spec: Optional project collection settings. A configured
+          `slug_template` enables `POST /create` and blank-slug `/save`.
 
   Returns:
       FastAPI application with editor routes added
@@ -536,6 +616,7 @@ def add_editor_to_app(
     frontmatter_schema=frontmatter_schema,
     auth_dependency=auth_dependency,
     require_if_match=require_if_match,
+    collection_spec=collection_spec,
   )
   app.include_router(api_router, prefix=prefix)
   add_startup_check(

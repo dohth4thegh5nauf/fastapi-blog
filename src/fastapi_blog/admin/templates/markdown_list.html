@@ -47,7 +47,12 @@
                 {% if posts %}
                   {% for post in posts %}
                   <tr>
-                    <td><strong>{{ post.title }}</strong></td>
+                    <td>
+                      <strong>{{ post.title }}</strong>
+                      {% if post.summary and post.summary != post.title %}
+                        <div class="text-muted small">{{ post.summary }}</div>
+                      {% endif %}
+                    </td>
                     <td><code class="text-muted">{{ post.slug }}</code></td>
                     {% if columns.date %}<td class="text-muted">{{ post.date }}</td>{% endif %}
                     {% if columns.published %}

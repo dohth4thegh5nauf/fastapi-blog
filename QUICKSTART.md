@@ -247,6 +247,44 @@ Now `/docs` will show:
 
 ❌ Admin panel (`/admin`) won't be in `/docs` - it's a web UI, not an API!
 
+### Generated Slugs from a Project Collection
+
+Define the collection's slug and summary settings in `fastapi_blog.yaml`:
+
+```yaml
+collections:
+  posts:
+    dir: posts
+    slug_template: "{seq|pad(4)}-{title_slug}"
+    unique: [seq]
+    summary: "{title}"
+```
+
+Load the collection and pass it to the unified setup. The same settings are
+then used by the REST API and admin panel:
+
+```python
+from fastapi import FastAPI
+from fastapi_blog import load_project, setup_fastapi_blog
+
+app = FastAPI()
+posts = load_project("fastapi_blog.yaml").collections["posts"]
+
+setup_fastapi_blog(
+    app,
+    collection_spec=posts,
+    include_api=True,
+    admin=True,
+)
+```
+
+With a `slug_template`, `POST /api/posts/create` can create a document without
+a slug in the request body. In the admin create form, leave the slug field
+blank to generate it automatically; entering a slug manually remains
+supported. The `summary` is displayed under each title in the admin list.
+When the date-role field is empty or absent, date tags in the generated slug
+use the UTC first-save timestamp.
+
 ### Create Your First Post
 
 Create `posts/hello-world.md`:

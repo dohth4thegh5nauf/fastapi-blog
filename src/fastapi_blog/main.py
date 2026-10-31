@@ -15,6 +15,7 @@ from starlette.responses import PlainTextResponse, RedirectResponse, Response
 
 from . import helpers
 from .auth import ConfigurationError, add_startup_check, check_api_auth_config
+from .config import CollectionSpec
 from .models import FrontmatterSchema, SeoConfig
 from .router import get_blog_router
 from .seo import build_head, resolve_seo_config
@@ -61,6 +62,7 @@ def add_blog_to_fastapi(
   seo_routes: bool = False,
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
+  collection_spec: CollectionSpec | None = None,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -103,6 +105,9 @@ def add_blog_to_fastapi(
       validators: External validators run on every write through the REST
                   API (TODO 6.2/6.3); blocking outcomes roll the write back
                   with HTTP 422.
+      collection_spec: Optional project collection settings. Enables
+                  generated slugs and is shared with the admin panel by
+                  `setup_fastapi_blog()`.
       require_if_match: Require the `If-Match` header on update/delete
                   (TODO 4.7); see `get_api_router()`. Default: `False`.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
@@ -143,6 +148,13 @@ def add_blog_to_fastapi(
       ```
 
   """
+  if collection_spec is not None:
+    posts_dirname = str(collection_spec.dir)
+    if frontmatter_schema is not None:
+      collection_spec = collection_spec.with_schema(frontmatter_schema)
+    else:
+      frontmatter_schema = collection_spec.schema
+
   # Handle environment variable for include_api
   if include_api is None:
     env_value = os.getenv('FASTAPI_BLOG_INCLUDE_API', 'false').lower()
@@ -324,6 +336,7 @@ def add_blog_to_fastapi(
       auth_dependency=api_auth_dependency,
       require_if_match=require_if_match,
       validators=validators,
+      collection_spec=collection_spec,
     )
     app.include_router(api_router, prefix=api_prefix, tags=['api'])
     add_startup_check(

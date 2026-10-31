@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette_admin.contrib.sqla import Admin
 from starlette_admin.i18n import I18nConfig
 
+from ..config import CollectionSpec
 from ..models import FrontmatterSchema
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
@@ -95,6 +96,7 @@ def _create_admin_for_locale(
   admin_username: str = 'admin',
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
+  collection_spec: CollectionSpec | None = None,
 ) -> Admin:
   """Create an Admin instance for a specific locale.
 
@@ -210,11 +212,18 @@ def _create_admin_for_locale(
     get_posts_directory,
   )
 
-  posts_dir = get_posts_directory(posts_dirname)
+  posts_dir = (
+    str(collection_spec.dir)
+    if collection_spec is not None
+    else get_posts_directory(posts_dirname)
+  )
 
   # Add list view (shows in menu)
   posts_list_view = MarkdownListView(
-    posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
+    posts_dir=posts_dir,
+    locale=locale,
+    schema=frontmatter_schema,
+    collection_spec=collection_spec,
   )
   posts_list_view.menu_label = posts_label
   admin.add_view(posts_list_view)
@@ -222,12 +231,18 @@ def _create_admin_for_locale(
   # Add edit and create views (don't show in menu)
   admin.add_view(
     MarkdownEditView(
-      posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
+      posts_dir=posts_dir,
+      locale=locale,
+      schema=frontmatter_schema,
+      collection_spec=collection_spec,
     )
   )
   admin.add_view(
     MarkdownCreateView(
-      posts_dir=posts_dir, locale=locale, schema=frontmatter_schema
+      posts_dir=posts_dir,
+      locale=locale,
+      schema=frontmatter_schema,
+      collection_spec=collection_spec,
     )
   )
 
@@ -249,6 +264,7 @@ def add_admin_to_app(
   enable_role_management: bool = False,
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
+  collection_spec: CollectionSpec | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -316,6 +332,13 @@ def add_admin_to_app(
     ```
 
   """
+  if collection_spec is not None:
+    posts_dirname = str(collection_spec.dir)
+    if frontmatter_schema is not None:
+      collection_spec = collection_spec.with_schema(frontmatter_schema)
+    else:
+      frontmatter_schema = collection_spec.schema
+
   # Handle environment variables for admin credentials
   if admin_username is None:
     admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN', 'admin')
@@ -441,6 +464,7 @@ def add_admin_to_app(
     admin_username=admin_username,
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
+    collection_spec=collection_spec,
   )
 
   default_admin.mount_to(app)
@@ -473,6 +497,7 @@ def add_admin_to_app(
       admin_username=admin_username,
       frontmatter_schema=frontmatter_schema,
       posts_dirname=posts_dirname,
+      collection_spec=collection_spec,
     )
 
     admin.mount_to(app)

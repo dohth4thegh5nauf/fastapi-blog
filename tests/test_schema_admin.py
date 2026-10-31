@@ -25,6 +25,12 @@ from fastapi_blog.admin.markdown_crud import (
   get_posts_directory,
 )
 from fastapi_blog.admin.views import load_posts_for_home
+from fastapi_blog.config import CollectionSpec
+from fastapi_blog.templates import (
+  SUMMARY_TAGS,
+  SLUG_TAGS_DEFAULT,
+  parse_template,
+)
 
 
 ADMIN_TEMPLATES = (
@@ -132,6 +138,44 @@ def test_list_view_shows_the_columns_of_bound_roles(posts_dir):
     'columns'
   ]
   assert columns == {'date': False, 'published': False, 'tags': False}
+
+
+def test_list_view_renders_collection_summary(posts_dir):
+  spec = CollectionSpec(
+    name='posts',
+    dir=posts_dir,
+    schema=EXTERNAL_SCHEMA,
+    summary=parse_template(
+      '{headline} — {labels}',
+      SUMMARY_TAGS,
+      {field.name for field in EXTERNAL_SCHEMA.fields},
+    ),
+  )
+  result = render(
+    MarkdownListView(posts_dir, 'en', EXTERNAL_SCHEMA, collection_spec=spec)
+  )
+  posts = {post['slug']: post for post in result['context']['posts']}
+  assert posts['a']['summary'] == 'Alpha — [\'x\', \'y\']'
+  assert posts['b']['summary'] == 'Beta — '
+
+
+def test_create_view_exposes_generated_slug_option(posts_dir):
+  spec = CollectionSpec(
+    name='posts',
+    dir=posts_dir,
+    schema=EXTERNAL_SCHEMA,
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}',
+      SLUG_TAGS_DEFAULT,
+      {field.name for field in EXTERNAL_SCHEMA.fields},
+    ),
+  )
+  context = render(
+    MarkdownCreateView(
+      posts_dir, 'en', EXTERNAL_SCHEMA, collection_spec=spec
+    )
+  )['context']
+  assert context['auto_slug'] is True
 
 
 def test_list_view_without_schema_shows_all_columns(posts_dir):

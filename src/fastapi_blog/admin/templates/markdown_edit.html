@@ -35,8 +35,8 @@
           <div class="card-body border-bottom py-3">
             <div class="mb-3">
               <label class="form-label required" for="slug">{{ t.slug }}</label>
-              <input type="text" class="form-control" id="slug" name="slug" value="{{ post.slug }}" required {% if not is_new %}readonly{% endif %}>
-              <small class="form-hint">{{ t.slug_hint }}</small>
+              <input type="text" class="form-control" id="slug" name="slug" value="{{ post.slug }}" {% if not (is_new and auto_slug) %}required{% endif %} {% if not is_new %}readonly{% endif %}>
+              <small class="form-hint">{% if is_new and auto_slug %}Leave blank to generate the slug from the collection template.{% else %}{{ t.slug_hint }}{% endif %}</small>
             </div>
             
             <div class="row">

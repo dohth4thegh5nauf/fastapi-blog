@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 
 from .auth import ConfigurationError
+from .config import CollectionSpec, Project, find_project, load_project
 from .editor import add_editor_to_app, get_api_router
 from .main import add_blog_to_fastapi
 from .models import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema, SeoConfig
@@ -72,6 +73,7 @@ def setup_fastapi_blog(
   seo: SeoConfig | None = None,
   seo_routes: bool = False,
   admin: bool = True,
+  collection_spec: CollectionSpec | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
@@ -99,6 +101,9 @@ def setup_fastapi_blog(
       seo_routes: Add `sitemap.xml`, `robots.txt` and `redirect_from`
           redirects (TODO 5.9.5). Requires `seo.site_url`. Default: `False`.
       admin: Add the admin panel (needs the `admin` extra). Default: `True`.
+      collection_spec: Optional collection from `load_project()`. Its
+          directory/schema are shared by the blog, REST API and admin; a
+          configured `slug_template` enables generated slugs.
 
   Returns:
       Admin instances by locale, or an empty dict when `admin=False`.
@@ -107,6 +112,13 @@ def setup_fastapi_blog(
       ImportError: If `admin=True` and the `admin` extra isn't installed.
 
   """
+  if collection_spec is not None:
+    posts_dirname = str(collection_spec.dir)
+    if frontmatter_schema is not None:
+      collection_spec = collection_spec.with_schema(frontmatter_schema)
+    else:
+      frontmatter_schema = collection_spec.schema
+
   # Fail early (before any route is added) if the admin panel is unavailable
   add_admin = _import_admin().add_admin_to_app if admin else None
 
@@ -132,6 +144,7 @@ def setup_fastapi_blog(
     frontmatter_schema=frontmatter_schema,
     seo=seo,
     seo_routes=seo_routes,
+    collection_spec=collection_spec,
   )
   if add_admin is None:
     return {}
@@ -145,4 +158,5 @@ def setup_fastapi_blog(
     enable_role_management=enable_role_management,
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
+    collection_spec=collection_spec,
   )

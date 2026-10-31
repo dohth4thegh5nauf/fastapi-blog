@@ -18,9 +18,9 @@ built-in defaults (`posts/` with the built-in schema). Applications that use
 the library directly don't need the file: they keep passing
 `posts_dirname`/`frontmatter_schema` in code.
 
-The format intentionally covers only what is implemented; `validators`,
-`slug_template`, `unique` and the `check` options (TODO 6.2/6.4) will extend
-it when they land.
+The project file is used by the CLI and can also be loaded explicitly by an
+application. Passing a `CollectionSpec` to `setup_fastapi_blog()` shares its
+schema, slug-generation settings and summary with the REST API and admin UI.
 """
 
 import dataclasses
@@ -31,7 +31,7 @@ from typing import Any
 import yaml
 
 from . import store
-from .models import FrontmatterSchema
+from .models import DEFAULT_SCHEMA, FrontmatterSchema
 from .templates import (
   SLUG_TAGS_DEFAULT,
   SUMMARY_TAGS,
@@ -91,6 +91,10 @@ class CollectionSpec:
   unique: tuple[str, ...] = ()
   summary: Template | None = None
 
+  def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
+    """Return this collection specification with an application schema."""
+    return dataclasses.replace(self, schema=schema)
+
   def to_collection(self) -> store.Collection:
     """Build the storage-layer `Collection` for this spec."""
     kwargs: dict[str, Any] = {}
@@ -117,12 +121,13 @@ class CollectionSpec:
       raise ConfigError(
         f'Collection {self.name!r} has no `slug_template`'
       )
+    schema = self.schema or DEFAULT_SCHEMA
     fields = {
       field.name: frontmatter.get(field.key)
-      for field in (self.schema.fields if self.schema else ())
+      for field in schema.fields
     }
-    title_spec = self.schema.field_for_role('title') if self.schema else None
-    date_spec = self.schema.field_for_role('date') if self.schema else None
+    title_spec = schema.field_for_role('title')
+    date_spec = schema.field_for_role('date')
     title = (
       frontmatter.get(title_spec.key, '') if title_spec else ''
     )
@@ -153,12 +158,13 @@ class CollectionSpec:
       raise ConfigError(
         f'Collection {self.name!r} has no `slug_template`'
       )
+    schema = self.schema or DEFAULT_SCHEMA
     fields = {
       field.name: frontmatter.get(field.key)
-      for field in (self.schema.fields if self.schema else ())
+      for field in schema.fields
     }
-    title_spec = self.schema.field_for_role('title') if self.schema else None
-    date_spec = self.schema.field_for_role('date') if self.schema else None
+    title_spec = schema.field_for_role('title')
+    date_spec = schema.field_for_role('date')
     title = frontmatter.get(title_spec.key, '') if title_spec else ''
     date_value = frontmatter.get(date_spec.key) if date_spec else None
     return documents.write_generated(
@@ -178,13 +184,14 @@ class CollectionSpec:
     self, slug: str, frontmatter: Mapping[str, Any]
   ) -> str:
     """Render the configured caption, or fall back to the title role."""
-    title_spec = self.schema.field_for_role('title') if self.schema else None
+    schema = self.schema or DEFAULT_SCHEMA
+    title_spec = schema.field_for_role('title')
     title = frontmatter.get(title_spec.key) if title_spec else None
     if self.summary is None:
       return str(title or slug)
     fields = {
       field.name: frontmatter.get(field.key)
-      for field in (self.schema.fields if self.schema else ())
+      for field in schema.fields
     }
     result = self.summary.render(
       {
@@ -246,7 +253,8 @@ def _collection_spec(
       )
     except (ValueError, TypeError) as exc:
       raise ConfigError(f'Collection {name!r}: {exc}') from exc
-  field_names = {spec.name for spec in schema.fields} if schema else set()
+  effective_schema = schema or DEFAULT_SCHEMA
+  field_names = {spec.name for spec in effective_schema.fields}
   slug_options = SlugOptions()
   if entry.get('slug') is not None:
     try:

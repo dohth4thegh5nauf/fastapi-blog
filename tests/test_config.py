@@ -1,5 +1,7 @@
 """Tests for the project file (`fastapi_blog.yaml`, TODO phase D)."""
 
+import datetime
+
 import pytest
 
 from fastapi_blog import config
@@ -139,6 +141,37 @@ def test_slug_template_and_unique_seq_are_loaded(project_dir):
   slug2, _etag2 = spec.create_document(store, {'title': 'Another'}, 'Body')
   assert slug2 == '0002-another'
   assert spec.summarize('0001-hello-world', {'title': 'Hello'}) == 'Hello'
+
+
+def test_default_schema_fields_are_available_to_collection_templates(project_dir):
+  (project_dir / 'posts').mkdir()
+  _write(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n'
+    '    slug_template: "{year}-{title_slug}"\n'
+    '    summary: "{title}"\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
+  assert spec.slug_template is not None
+  assert spec.summarize('2026-hello', {'title': 'Hello'}) == 'Hello'
+
+
+def test_collection_slug_uses_first_save_utc_when_date_is_missing(project_dir):
+  (project_dir / 'posts').mkdir()
+  _write(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n'
+    '    slug_template: "{year}-{month}-{day}-{title_slug}"\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
+  created_at = datetime.datetime(
+    2024, 2, 3, 23, 30, tzinfo=datetime.timezone.utc
+  )
+  store = config.store.DocumentStore(spec.to_collection())
+  slug, _etag = spec.create_document(
+    store, {'title': 'Hello'}, 'Body', created_at=created_at
+  )
+  assert slug == '2024-02-03-hello'
 
 
 def test_unique_seq_requires_sequence_tag(project_dir):

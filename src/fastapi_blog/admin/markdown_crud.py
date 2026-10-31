@@ -12,6 +12,7 @@ from starlette_admin.routing import route
 from starlette_admin.views import CustomView
 
 from .. import store
+from ..config import CollectionSpec
 from ..models import DEFAULT_SCHEMA, SLUG_RE, FrontmatterSchema
 from .form_fields import (
   build_form_fields,
@@ -98,13 +99,21 @@ class MarkdownFileManager:
   """
 
   def __init__(
-    self, posts_dir: str = 'posts', schema: FrontmatterSchema | None = None
+    self,
+    posts_dir: str = 'posts',
+    schema: FrontmatterSchema | None = None,
+    collection_spec: CollectionSpec | None = None,
   ):
     """Initialize file manager with posts directory and frontmatter schema."""
     self.posts_dir = Path(posts_dir)
-    self.schema = schema
+    self.collection_spec = collection_spec
+    self.schema = (
+      schema or (collection_spec.schema if collection_spec else None)
+    )
     self.store = store.DocumentStore(
-      store.blog_collections(self.posts_dir)['posts']
+      collection_spec.to_collection()
+      if collection_spec is not None
+      else store.blog_collections(self.posts_dir)['posts']
     )
 
   def list_posts(self) -> list[MarkdownPost]:
@@ -175,6 +184,7 @@ class MarkdownListView(CustomView):
     posts_dir: str = 'posts',
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
+    collection_spec: CollectionSpec | None = None,
   ):
     """Initialize list view with posts directory, locale and schema."""
     super().__init__(
@@ -183,8 +193,13 @@ class MarkdownListView(CustomView):
       path='/posts',
       route_name='posts:list',
     )
-    self.schema = schema or DEFAULT_SCHEMA
-    self.manager = MarkdownFileManager(posts_dir, self.schema)
+    self.schema = (
+      schema
+      or (collection_spec.schema if collection_spec else None)
+      or DEFAULT_SCHEMA
+    )
+    self.collection_spec = collection_spec
+    self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
 
   @route('')
@@ -197,6 +212,11 @@ class MarkdownListView(CustomView):
       {
         'slug': p.slug,
         'title': p.title,
+        'summary': (
+          self.collection_spec.summarize(p.slug, p.frontmatter)
+          if self.collection_spec is not None
+          else p.title
+        ),
         'date': self._format_date(p.date),
         'published': p.published,
         'tags': ', '.join(p.tags)
@@ -292,6 +312,7 @@ class MarkdownEditView(CustomView):
     posts_dir: str = 'posts',
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
+    collection_spec: CollectionSpec | None = None,
   ):
     """Initialize edit view with posts directory, locale and schema."""
     super().__init__(
@@ -300,8 +321,12 @@ class MarkdownEditView(CustomView):
       route_name='posts:edit',
       add_to_menu=False,  # Don't show in menu
     )
-    self.schema = schema or DEFAULT_SCHEMA
-    self.manager = MarkdownFileManager(posts_dir, self.schema)
+    self.schema = (
+      schema
+      or (collection_spec.schema if collection_spec else None)
+      or DEFAULT_SCHEMA
+    )
+    self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
 
   @route('')
@@ -350,6 +375,8 @@ class MarkdownEditView(CustomView):
         },
         'form_fields': form_fields,
         'form_fields_meta': form_fields_meta(form_fields),
+        'is_new': False,
+        'auto_slug': False,
         'base_url': request.scope['root_path'],
         't': t,
       },
@@ -364,6 +391,7 @@ class MarkdownCreateView(CustomView):
     posts_dir: str = 'posts',
     locale: str = 'en',
     schema: FrontmatterSchema | None = None,
+    collection_spec: CollectionSpec | None = None,
   ):
     """Initialize create view with posts directory, locale and schema."""
     super().__init__(
@@ -372,8 +400,13 @@ class MarkdownCreateView(CustomView):
       route_name='posts:new',
       add_to_menu=False,
     )
-    self.schema = schema or DEFAULT_SCHEMA
-    self.manager = MarkdownFileManager(posts_dir, self.schema)
+    self.schema = (
+      schema
+      or (collection_spec.schema if collection_spec else None)
+      or DEFAULT_SCHEMA
+    )
+    self.collection_spec = collection_spec
+    self.manager = MarkdownFileManager(posts_dir, self.schema, collection_spec)
     self.locale = locale
 
   @route('')
@@ -402,6 +435,10 @@ class MarkdownCreateView(CustomView):
         'form_fields': form_fields,
         'form_fields_meta': form_fields_meta(form_fields),
         'is_new': True,
+        'auto_slug': bool(
+          self.collection_spec is not None
+          and self.collection_spec.slug_template is not None
+        ),
         'base_url': request.scope['root_path'],
         't': t,
       },

@@ -291,3 +291,25 @@ Docker Container
 - [CODEBASE_SUMMARY_RU.md](CODEBASE_SUMMARY_RU.md) - Detailed codebase analysis (Russian)
 - [DATABASE.md](DATABASE.md) - Database architecture details
 - [ROLE_MANAGEMENT.md](ROLE_MANAGEMENT.md) - RBAC implementation
+
+
+## Project collection settings and generated slugs
+
+`config.py` parses `fastapi_blog.yaml` into `Project` and `CollectionSpec`
+objects. The CLI resolves these settings for `check`, `schema` and `export`.
+Applications can opt into the same collection behavior explicitly:
+
+```python
+from fastapi_blog import load_project, setup_fastapi_blog
+
+posts = load_project("fastapi_blog.yaml").collections["posts"]
+setup_fastapi_blog(app, collection_spec=posts, include_api=True)
+```
+
+`CollectionSpec` stays outside the storage layer. It binds the frontmatter
+schema and shared template language to `DocumentStore`; the store only
+allocates and writes the generated slug while holding its in-process
+collection lock. The REST API and admin create form use that operation, while
+updates retain the existing slug. The admin list renders the collection's
+summary template. If the date-role field is empty, date tags use the UTC
+first-save timestamp supplied by the creation caller.
