@@ -33,6 +33,7 @@ This repository is a development fork of [pydanny/fastapi-blog](https://github.c
 - Optional REST API for creating, reading, updating and deleting Markdown posts.
 - API authentication through session middleware, HTTP Basic credentials or a custom FastAPI dependency.
 - Optional `If-Match` concurrency checks for update and delete operations.
+- Optional per-collection `on_change(event)` callbacks for successful create, update and delete operations.
 
 The admin panel is an HTML web application and does not appear in FastAPI's OpenAPI docs. The REST API is a separate feature and is included in `/docs` when enabled.
 

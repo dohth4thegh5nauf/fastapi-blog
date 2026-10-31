@@ -189,6 +189,7 @@ def test_generated_slug_uses_utc_first_save_when_date_is_empty(
 
 
 def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
+  events = []
   spec = CollectionSpec(
     name='posts',
     dir=app_dir / 'posts',
@@ -197,6 +198,7 @@ def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
       SLUG_TAGS_DEFAULT,
       {'title', 'date', 'published', 'tags', 'description'},
     ),
+    on_change=events.append,
     validators=(
       Validator.from_dict(
         {
@@ -208,7 +210,6 @@ def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
     ),
   )
   app = FastAPI()
-  app = add_blog_to_fastapi(app, prefix='blog')
   app = add_editor_to_app(
     app, ui=False, require_auth=False, collection_spec=spec
   )
@@ -230,6 +231,7 @@ def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
 
   assert response.status_code == 422
   assert not (app_dir / 'posts' / '0001-rejected-generated.md').exists()
+  assert events == []
 
 
 def test_generated_slug_save_endpoint(app_dir):
@@ -713,3 +715,44 @@ def test_read_only_field_is_stable_across_updates(id_client):
     == doc_id
   )
   assert create.status_code == 201  # sanity: the fixture create did succeed
+
+
+def test_api_on_change_receives_successful_events_and_authenticated_actor(app_dir):
+  events = []
+  spec = CollectionSpec(
+    name='posts', dir=app_dir / 'posts', on_change=events.append
+  )
+
+  async def authenticate():
+    return {'username': 'api-editor'}
+
+  app = FastAPI()
+  app = add_editor_to_app(
+    app,
+    ui=False,
+    require_auth=True,
+    auth_dependency=authenticate,
+    collection_spec=spec,
+  )
+  client = TestClient(app)
+
+  created = client.post('/api/posts/create/event-post', json=VALID_PAYLOAD)
+  assert created.status_code == 201
+  updated = client.put(
+    '/api/posts/update/event-post',
+    json={
+      **VALID_PAYLOAD,
+      'frontmatter': {**VALID_PAYLOAD['frontmatter'], 'title': 'Changed'},
+    },
+  )
+  assert updated.status_code == 200
+  deleted = client.delete('/api/posts/delete/event-post')
+  assert deleted.status_code == 204
+
+  assert [event.kind for event in events] == ['created', 'updated', 'deleted']
+  assert all(event.slug == 'event-post' for event in events)
+  assert all(event.collection == 'posts' for event in events)
+  assert events[0].etag == created.headers['etag']
+  assert events[1].etag == updated.headers['etag']
+  assert events[2].etag is None
+  assert all(event.user == 'api-editor' for event in events)

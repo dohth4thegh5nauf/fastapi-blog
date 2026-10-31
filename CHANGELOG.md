@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Collection change notifications (TODO 6.5)
+
+- Added immutable `store.ChangeEvent` records with `kind`, `collection`,
+  `slug`, `etag` and optional `user` fields.
+- Added the optional `Collection.on_change` callback and the corresponding
+  `CollectionSpec.on_change` Python setting; YAML remains declarative and
+  does not attempt to serialize callables.
+- Successful writes and deletes notify after the file operation and outside
+  the collection lock. REST writes defer notifications until blocking
+  validators pass, so rolled-back writes do not emit false events.
+- REST requests include the authenticated username (or user id). Hook
+  exceptions are logged and swallowed; the file operation remains committed.
+- Added tests for event ordering, etags, actor propagation and hook failures.
+
+
 ### Template language, slug generation and uniqueness (TODO 6.4, complete)
 
 - Added a shared, non-evaluating template language for `slug_template`,

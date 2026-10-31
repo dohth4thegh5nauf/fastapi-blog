@@ -17,11 +17,13 @@ through a `DocumentStore`.
 
 import dataclasses
 import hashlib
+import logging
 import os
 import re
 import tempfile
 import threading
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, cast
 
 import yaml
@@ -31,6 +33,9 @@ import yaml
 # lowercase letters, digits and hyphens, starting with a letter or digit, up
 # to 100 characters. Kept local (not imported from `models`) so this module
 # stays free of any dependency on the schema/validation layer above it.
+logger = logging.getLogger(__name__)
+
+
 DEFAULT_SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,99}$')
 
 # One path segment (directory level or file name) of the default slug shape,
@@ -258,6 +263,21 @@ class DocumentRecord:
 
 
 @dataclasses.dataclass(frozen=True)
+class ChangeEvent:
+  """A successful document mutation reported to a collection hook.
+
+  `etag` is the new content etag for create/update and `None` for delete.
+  `user` is the authenticated actor supplied by the caller, when available.
+  """
+
+  kind: str
+  collection: str
+  slug: str
+  etag: str | None = None
+  user: Any = None
+
+
+@dataclasses.dataclass(frozen=True)
 class Collection:
   """A directory of same-shaped documents.
 
@@ -292,6 +312,8 @@ class Collection:
       create: When `False`, `DocumentStore.write` refuses to create a new
           document (an existing one can still be rewritten).
       delete: When `False`, `DocumentStore.delete` always refuses.
+      on_change: Optional callback invoked after a successful mutation. Hook
+          failures are logged and never roll back a committed document change.
 
   """
 
@@ -302,6 +324,7 @@ class Collection:
   depth: int = 0
   create: bool = True
   delete: bool = True
+  on_change: Callable[[ChangeEvent], Any] | None = None
 
   def __post_init__(self) -> None:
     object.__setattr__(self, 'dir', Path(self.dir))
@@ -445,6 +468,8 @@ class DocumentStore:
     body: str,
     *,
     if_match: str | None = None,
+    user: Any = None,
+    notify: bool = True,
   ) -> str:
     """Create or overwrite a document by slug. Returns its new etag.
 
@@ -467,29 +492,38 @@ class DocumentStore:
             different etag.
 
     """
-    existing_path = self.path_for(slug)
-    if if_match is not None:
-      if existing_path is None:
-        raise ConflictError(
-          f'document {slug!r} does not exist', status_code=409
-        )
-      current_etag = compute_etag(existing_path.read_text(encoding='utf-8'))
-      if if_match != current_etag:
-        raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
-    if existing_path is None and not self.collection.create:
-      raise OperationNotAllowedError(
-        f'collection {self.collection.name!r} does not allow creating new documents'
-      )
-    # An update keeps whatever extension the document was already stored
-    # with; only a new document picks the collection's primary extension.
-    target = existing_path or self._candidate(
-      slug, self.collection.extensions[0]
-    )
     text = serialize_document(frontmatter, body)
     with self._lock:
+      existing_path = self.path_for(slug)
+      if if_match is not None:
+        if existing_path is None:
+          raise ConflictError(
+            f'document {slug!r} does not exist', status_code=409
+          )
+        current_etag = compute_etag(
+          existing_path.read_text(encoding='utf-8')
+        )
+        if if_match != current_etag:
+          raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
+      if existing_path is None and not self.collection.create:
+        raise OperationNotAllowedError(
+          f'collection {self.collection.name!r} does not allow creating new documents'
+        )
+      # An update keeps its extension; a new document uses the primary one.
+      target = existing_path or self._candidate(
+        slug, self.collection.extensions[0]
+      )
       target.parent.mkdir(parents=True, exist_ok=True)
       atomic_write_text(target, text)
-    return compute_etag(text)
+    etag = compute_etag(text)
+    if notify:
+      self.notify_change(
+        'updated' if existing_path is not None else 'created',
+        slug,
+        etag,
+        user=user,
+      )
+    return etag
 
   def write_generated(
     self,
@@ -504,6 +538,8 @@ class DocumentStore:
     created_at: Any = None,
     dirname: str = '',
     options: Any = None,
+    user: Any = None,
+    notify: bool = True,
   ) -> tuple[str, str]:
     """Create a document with the next slug number under the store lock.
 
@@ -530,10 +566,19 @@ class DocumentStore:
           f'generated document slug already exists: {slug!r}',
           status_code=409,
         )
-      etag = self.write(slug, frontmatter, body)
-      return slug, etag
+      etag = self.write(slug, frontmatter, body, user=user, notify=False)
+    if notify:
+      self.notify_change('created', slug, etag, user=user)
+    return slug, etag
 
-  def delete(self, slug: str, *, if_match: str | None = None) -> None:
+  def delete(
+    self,
+    slug: str,
+    *,
+    if_match: str | None = None,
+    user: Any = None,
+    notify: bool = True,
+  ) -> None:
     """Delete a document by slug.
 
     Args:
@@ -553,15 +598,30 @@ class DocumentStore:
       raise OperationNotAllowedError(
         f'collection {self.collection.name!r} does not allow deleting documents'
       )
-    path = self.path_for(slug)
-    if path is None:
-      raise NotFoundError(f'document not found: {slug!r}')
-    if if_match is not None:
-      current_etag = compute_etag(path.read_text(encoding='utf-8'))
-      if if_match != current_etag:
-        raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
     with self._lock:
+      path = self.path_for(slug)
+      if path is None:
+        raise NotFoundError(f'document not found: {slug!r}')
+      if if_match is not None:
+        current_etag = compute_etag(path.read_text(encoding='utf-8'))
+        if if_match != current_etag:
+          raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
       path.unlink()
+    if notify:
+      self.notify_change('deleted', slug, None, user=user)
+
+  def notify_change(
+    self, kind: str, slug: str, etag: str | None, *, user: Any = None
+  ) -> None:
+    """Invoke the optional hook without allowing hook failures to affect I/O."""
+    callback = self.collection.on_change
+    if callback is None:
+      return
+    event = ChangeEvent(kind, self.collection.name, slug, etag, user)
+    try:
+      callback(event)
+    except Exception:
+      logger.exception('on_change failed for %s/%s', self.collection.name, slug)
 
 
 def blog_collections(

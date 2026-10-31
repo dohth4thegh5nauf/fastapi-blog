@@ -31,6 +31,13 @@ from .models import (
 from .validators import Validator, run_blocking
 
 
+def _event_actor(user: Any) -> Any:
+  """Return a stable, non-sensitive actor identifier for change events."""
+  if isinstance(user, dict):
+    return user.get('username') or user.get('id')
+  return user
+
+
 async def require_authentication(request: Request) -> dict:
   """Require authentication via session cookie.
 
@@ -314,6 +321,7 @@ def get_api_router(
     *,
     previous_text: str | None,
     if_match: str | None = None,
+    user: dict[str, Any] | None = None,
   ) -> str:
     """Write, run the blocking validators, roll back on a blocking outcome.
 
@@ -329,7 +337,14 @@ def get_api_router(
     with docs._lock:
       if previous_text is None and collection_spec is not None:
         _check_unique_on_create(slug, frontmatter)
-      etag = docs.write(slug, frontmatter, body, if_match=if_match)
+      etag = docs.write(
+        slug,
+        frontmatter,
+        body,
+        if_match=if_match,
+        user=_event_actor(user),
+        notify=False,
+      )
     blocking = run_blocking(
       validators,
       collection_name=(collection_spec.name if collection_spec else 'posts'),
@@ -339,11 +354,17 @@ def get_api_router(
       cwd=pathlib.Path.cwd(),
     )
     if not blocking:
+      docs.notify_change(
+        'updated' if previous_text is not None else 'created',
+        slug,
+        etag,
+        user=_event_actor(user),
+      )
       return etag
     target = docs.path_for(slug)
     if previous_text is None:
       if target is not None:
-        docs.delete(slug)
+        docs.delete(slug, notify=False)
     elif target is not None:
       store.atomic_write_text(target, previous_text)
     helpers.clear_posts_cache()
@@ -378,12 +399,15 @@ def get_api_router(
     auth_func = optional_authentication
 
   def _create_generated(
-    payload: Any,
+    payload: Any, user: dict[str, Any] | None = None
   ) -> tuple[str, str]:
     if collection_spec is None or collection_spec.slug_template is None:
       raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail='A slug is required; configure a collection slug_template to generate it.',
+        detail=(
+          'A slug is required; configure a collection slug_template to '
+          'generate it.'
+        ),
       )
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
     try:
@@ -392,6 +416,8 @@ def get_api_router(
         fm_dump,
         _body(payload),
         created_at=datetime.now(timezone.utc),
+        user=_event_actor(user),
+        notify=False,
       )
     except store.ConflictError as exc:
       raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
@@ -409,11 +435,12 @@ def get_api_router(
       cwd=pathlib.Path.cwd(),
     )
     if blocking:
-      docs.delete(slug)
+      docs.delete(slug, notify=False)
       raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={'issues': [issue.to_dict() for issue in blocking]},
       )
+    docs.notify_change('created', slug, etag, user=_event_actor(user))
     helpers.clear_posts_cache()
     return slug, etag
 
@@ -423,7 +450,7 @@ def get_api_router(
     response: Response,
     user: dict | None = Depends(auth_func),
   ) -> dict[str, str]:
-    slug, etag = _create_generated(payload)
+    slug, etag = _create_generated(payload, user=user)
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
 
@@ -460,7 +487,9 @@ def get_api_router(
         detail=f"Post '{slug}' already exists",
       )
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
-    etag = _write_validated(slug, fm_dump, _body(payload), previous_text=None)
+    etag = _write_validated(
+      slug, fm_dump, _body(payload), previous_text=None, user=user
+    )
     helpers.clear_posts_cache()
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
@@ -495,6 +524,7 @@ def get_api_router(
         _body(payload),
         previous_text=previous_text,
         if_match=if_match,
+        user=user,
       )
     except store.ConflictError as exc:
       raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
@@ -510,7 +540,7 @@ def get_api_router(
   ) -> None:
     _require_if_match(if_match)
     try:
-      docs.delete(slug, if_match=if_match)
+      docs.delete(slug, if_match=if_match, user=_event_actor(user))
     except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -543,7 +573,7 @@ def get_api_router(
       ) from e
 
     if not slug:
-      generated_slug, etag = _create_generated(payload)
+      generated_slug, etag = _create_generated(payload, user=user)
       response.headers['ETag'] = etag
       return JSONResponse(
         content={'slug': generated_slug, 'status': 'created'},
@@ -563,7 +593,7 @@ def get_api_router(
         previous_path.read_text(encoding='utf-8') if previous_path else None
       )
     etag = _write_validated(
-      slug, fm_dump, _body(payload), previous_text=previous_text
+      slug, fm_dump, _body(payload), previous_text=previous_text, user=user
     )
     helpers.clear_posts_cache()
     response.headers['ETag'] = etag

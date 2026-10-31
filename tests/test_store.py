@@ -381,3 +381,38 @@ def test_store_raises_the_specific_errors(tmp_path):
   locked.write('kept', {}, '')
   with pytest.raises(store.OperationNotAllowedError, match='does not allow'):
     locked.delete('kept')
+
+
+def test_on_change_reports_create_update_delete_with_etags_and_user(tmp_path):
+  events = []
+  actor = {'username': 'editor'}
+  docs = store.DocumentStore(
+    store.Collection('posts', tmp_path, on_change=events.append)
+  )
+
+  created_etag = docs.write('hello', {'title': 'Hello'}, 'First\n', user=actor)
+  updated_etag = docs.write('hello', {'title': 'Updated'}, 'Second\n', user=actor)
+  docs.delete('hello', user=actor)
+
+  assert [(event.kind, event.collection, event.slug) for event in events] == [
+    ('created', 'posts', 'hello'),
+    ('updated', 'posts', 'hello'),
+    ('deleted', 'posts', 'hello'),
+  ]
+  assert events[0].etag == created_etag
+  assert events[1].etag == updated_etag
+  assert events[2].etag is None
+  assert all(event.user is actor for event in events)
+
+
+def test_on_change_failure_does_not_fail_document_mutation(tmp_path, caplog):
+  def broken_hook(event):
+    raise RuntimeError('hook unavailable')
+
+  docs = store.DocumentStore(
+    store.Collection('posts', tmp_path, on_change=broken_hook)
+  )
+  etag = docs.write('hello', {'title': 'Hello'}, 'Body\n')
+
+  assert docs.read('hello').etag == etag
+  assert 'on_change failed' in caplog.text

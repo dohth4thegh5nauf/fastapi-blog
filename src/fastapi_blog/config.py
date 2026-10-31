@@ -25,7 +25,7 @@ schema, slug-generation settings and summary with the REST API and admin UI.
 
 import dataclasses
 import pathlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import yaml
@@ -95,6 +95,7 @@ class CollectionSpec:
   summary: Template | None = None
   check_links: str = 'off'
   check_files: str = 'off'
+  on_change: Callable[[store.ChangeEvent], Any] | None = None
 
   def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
     """Return this collection specification with an application schema."""
@@ -111,7 +112,7 @@ class CollectionSpec:
       kwargs['slug_pattern'] = r'^[^/\\\x00-\x20]{1,200}$'
     if self.extension is not None:
       kwargs['extension'] = self.extension
-    return store.Collection(self.name, self.dir, **kwargs)
+    return store.Collection(self.name, self.dir, on_change=self.on_change, **kwargs)
 
   def make_slug(
     self,
@@ -157,6 +158,8 @@ class CollectionSpec:
     *,
     created_at: Any = None,
     dirname: str = '',
+    user: Any = None,
+    notify: bool = True,
   ) -> tuple[str, str]:
     """Create a document using the configured slug template and sequence lock."""
     if self.slug_template is None:
@@ -183,6 +186,8 @@ class CollectionSpec:
       created_at=created_at,
       dirname=dirname,
       options=self.slug_options,
+      user=user,
+      notify=notify,
     )
 
   def summarize(

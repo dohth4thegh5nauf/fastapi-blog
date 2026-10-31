@@ -84,3 +84,42 @@ covers every schema key. Exit codes: `0` clean, `1` findings at or above
 
 **Last Updated:** 2026-10-31
 **Version:** 0.9.0 (in development)
+
+## Change notifications (TODO 6.5)
+
+A collection may receive a Python callback after a successful create, update
+or delete. The callback is not configured in YAML; attach it to the
+`CollectionSpec` loaded from the project file:
+
+```python
+from dataclasses import replace
+from fastapi import FastAPI
+from fastapi_blog import add_editor_to_app, load_project
+
+def publish_change(event):
+    # Send a message to a queue, trigger a rebuild, or create a Git commit.
+    print(event.kind, event.collection, event.slug, event.etag, event.user)
+
+project = load_project('fastapi_blog.yaml')
+posts = replace(project.collections['posts'], on_change=publish_change)
+app = FastAPI()
+
+async def authenticate():
+    return {'username': 'content-editor'}
+
+add_editor_to_app(
+    app,
+    ui=False,
+    collection_spec=posts,
+    auth_dependency=authenticate,
+)
+```
+
+The immutable event has `kind` (`created`, `updated` or `deleted`),
+`collection`, `slug`, `etag` and `user`. The etag is the new content hash for
+create/update and `None` for delete. REST requests pass the authenticated
+username (or user id) when available; direct storage calls may pass `user=`
+to `DocumentStore.write()`/`delete()`. The hook runs after the mutation and
+outside the store lock. Exceptions are logged and swallowed: a notification
+failure does not undo a successful file operation. No event journal or retry
+queue is maintained; the application owns delivery and durability.
