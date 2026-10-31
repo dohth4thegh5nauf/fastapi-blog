@@ -177,7 +177,7 @@ def test_check_reports_duplicate_unique_fields_and_sequence(tmp_path):
     ),
     unique=('seq', 'title'),
   )
-  _write(spec.dir, '0001-a', '---\\ntitle: Same\\n---\\n')
-  _write(spec.dir, '0001-b', '---\\ntitle: Same\\n---\\n')
+  _write(spec.dir, '0001-a', '---\ntitle: Same\n---\n')
+  _write(spec.dir, '0001-b', '---\ntitle: Same\n---\n')
   report = checks.check_collection(spec, root=tmp_path)
   assert len([issue for issue in report.issues if issue.code == 'unique.duplicate']) == 2

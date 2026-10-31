@@ -166,6 +166,9 @@ collections:
     slug_template: "{seq|pad(4)}-{title_slug}"
     summary: "{title}"
     unique: [seq]
+    check:
+      links: error   # off | warn | error
+      files: warn    # off | warn | error
 ```
 
 ```python
@@ -192,6 +195,12 @@ also allows the slug to be left blank for automatic generation, or entered
 manually to override it. The API applies the same schema validation and
 blocking external validators to generated documents as to explicitly named
 documents.
+
+The optional `check.links` setting validates local `link`/`list[link]`
+references (including target-collection filters); `check.files` validates
+`file`/`image` paths against their configured `media_dir` and `public_path`.
+Both default to `off`; choose `warn` or `error` per collection. External IRIs
+are not resolved, and media paths are containment-checked before access.
 
 The `{year}`, `{month}` and `{day}` template tags use the document's date-role
 field when it has a value; otherwise they use the UTC timestamp captured at

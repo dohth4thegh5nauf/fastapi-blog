@@ -45,6 +45,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   even when a collection has no separate schema file.
 
 
+### Link and media integrity checks (TODO 6.1)
+
+- Added per-collection `check.links` and `check.files` levels (`off`, `warn`,
+  `error`; default `off`) to `fastapi_blog.yaml`.
+- `link`/`list[link]` fields resolve local references by the target `@id`,
+  configured `value_field`, or slug; `collection` supports cross-collection
+  targets and `filters` distinguish disallowed targets from missing ones.
+  Absolute and compact IRIs are left to external resolvers.
+- `file`/`image` fields with `media_dir` are checked against `public_path`;
+  resolved paths are constrained to the media directory, and missing or
+  escaping paths receive deterministic findings; a non-empty file field
+  without `media_dir` is marked `undefined`, not silently treated as valid.
+- Project loading validates referenced collections, target fields and filter
+  fields before checks run. The CLI passes the complete project registry even
+  when `--collection` selects only one collection.
+- Added tests for local/cross-collection links, custom values, filters,
+  external IRIs, media path mapping, missing files and traversal attempts.
+
 ### External validators and checked writes (TODO 6.2, 6.3)
 
 - New `validators.py`: a validator runs a command without a shell (argument

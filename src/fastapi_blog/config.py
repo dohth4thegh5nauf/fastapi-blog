@@ -55,6 +55,7 @@ _COLLECTION_KEYS = {
   'slug_template',
   'unique',
   'summary',
+  'check',
 }
 
 
@@ -77,6 +78,8 @@ class CollectionSpec:
       slug_template: Parsed `slug_template` (`templates.Template`), if any.
       unique: Field/tag names whose values must not repeat (TODO 6.4).
       summary: Parsed `summary` template for document captions, if any.
+      check_links: Link-integrity level (`off`, `warn`, `error`).
+      check_files: File-integrity level (`off`, `warn`, `error`).
 
   """
 
@@ -90,6 +93,8 @@ class CollectionSpec:
   slug_template: Template | None = None
   unique: tuple[str, ...] = ()
   summary: Template | None = None
+  check_links: str = 'off'
+  check_files: str = 'off'
 
   def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
     """Return this collection specification with an application schema."""
@@ -280,6 +285,29 @@ def _collection_spec(
       )
     except ValueError as exc:
       raise ConfigError(f'Collection {name!r}: {exc}') from exc
+  check_options = entry.get('check', {})
+  if check_options is None:
+    check_options = {}
+  if not isinstance(check_options, Mapping):
+    raise ConfigError(f'Collection {name!r}: `check` must be a mapping')
+  unknown_checks = sorted(set(check_options) - {'links', 'files'})
+  if unknown_checks:
+    raise ConfigError(
+      f'Collection {name!r}: unknown check option(s) {unknown_checks}'
+    )
+  def _check_level(value: Any) -> str:
+    # PyYAML's YAML 1.1 resolver treats the unquoted token `off` as False.
+    return 'off' if value is False else str(value)
+
+  check_links = _check_level(check_options.get('links', 'off'))
+  check_files = _check_level(check_options.get('files', 'off'))
+  for check_name, level in (
+    ('links', check_links), ('files', check_files)
+  ):
+    if level not in ('off', 'warn', 'error'):
+      raise ConfigError(
+        f'Collection {name!r}: `check.{check_name}` must be off, warn or error'
+      )
   unique = entry.get('unique') or ()
   if isinstance(unique, str):
     unique = (unique,)
@@ -316,6 +344,8 @@ def _collection_spec(
     slug_template=slug_template,
     unique=unique,
     summary=summary,
+    check_links=check_links,
+    check_files=check_files,
   )
 
 
@@ -350,6 +380,50 @@ def load_project(path: str | pathlib.Path) -> Project:
     str(name): _collection_spec(str(name), entry, root)
     for name, entry in entries.items()
   }
+  # Resolve link declarations only after the complete collection registry is
+  # known, so forward references are valid but misspelled targets fail early.
+  for source in collections.values():
+    if source.schema is None:
+      continue
+    for field in source.schema.fields:
+      if not field.is_link:
+        continue
+      target_name = field.collection or source.name
+      target = collections.get(target_name)
+      if target is None:
+        raise ConfigError(
+          f'Collection {source.name!r}, field {field.name!r}: '
+          f'target collection {target_name!r} does not exist'
+        )
+      if field.value_field:
+        target_field = (
+          target.schema.get(field.value_field) if target.schema else None
+        )
+        if target_field is None and target.schema:
+          target_field = next(
+            (
+              item for item in target.schema.fields
+              if item.key == field.value_field
+            ),
+            None,
+          )
+        if target_field is None:
+          raise ConfigError(
+            f'Collection {source.name!r}, field {field.name!r}: '
+            f'target field {field.value_field!r} does not exist in '
+            f'collection {target_name!r}'
+          )
+      if field.filters and target.schema:
+        for rule in field.filters:
+          filter_field = target.schema.get(rule['field'])
+          if filter_field is None and not any(
+            item.key == rule['field'] for item in target.schema.fields
+          ):
+            raise ConfigError(
+              f'Collection {source.name!r}, field {field.name!r}: '
+              f'filter field {rule["field"]!r} does not exist in '
+              f'collection {target_name!r}'
+            )
   return Project(root=root, collections=collections)
 
 

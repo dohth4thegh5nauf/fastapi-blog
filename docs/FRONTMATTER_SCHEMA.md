@@ -88,6 +88,33 @@ namespace, so they can't clash with each other.
 An empty YAML value for a list or dict field (`tags:`) is read as an empty
 container.
 
+### Integrity checks for links and files
+
+The project collection entry (in `fastapi_blog.yaml`) can opt into checks:
+
+```yaml
+collections:
+  pages:
+    dir: pages
+    schema: pages.yaml
+    check:
+      links: warn   # off (default), warn, error
+      files: error  # off (default), warn, error
+```
+
+`check.links` validates local `link` and `list[link]` values against the
+configured target collection. A target is identified by its `@id` alias, the
+configured `value_field`, or its slug. `collection` selects another collection
+and `filters` restrict which target records are valid. A missing target and a
+target excluded by filters are separate findings. External IRIs are not
+fetched or resolved.
+
+`check.files` validates `file` and `image` values when `media_dir` is set. The
+stored value must begin with `public_path` (or `media_dir` by default); the
+remaining path is resolved below `media_dir`. Missing files and paths that
+escape the media directory are reported. HTTP(S) URLs are treated as external
+and are not fetched.
+
 ## Using a schema in the blog
 
 ```python

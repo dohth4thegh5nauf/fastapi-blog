@@ -122,14 +122,14 @@ def test_collection_spec_carries_an_inline_schema():
 def test_slug_template_and_unique_seq_are_loaded(project_dir):
   (project_dir / 'posts').mkdir()
   (project_dir / 'schema.yaml').write_text(
-    'fields:\\n  title: {role: title}\\n', encoding='utf-8'
+    'fields:\n  title: {role: title}\n', encoding='utf-8'
   )
   _write(
     project_dir,
-    'collections:\\n  posts:\\n    dir: posts\\n    schema: schema.yaml\\n'
-    '    slug_template: "{seq|pad(4)}-{title_slug}"\\n'
-    '    unique: [seq]\\n'
-    '    summary: "{title}"\\n'
+    'collections:\n  posts:\n    dir: posts\n    schema: schema.yaml\n'
+    '    slug_template: "{seq|pad(4)}-{title_slug}"\n'
+    '    unique: [seq]\n'
+    '    summary: "{title}"\n'
   )
   spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
   assert spec.slug_template is not None

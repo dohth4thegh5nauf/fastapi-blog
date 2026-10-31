@@ -12,13 +12,15 @@ wrong as a list of `Issue` objects:
   something could not be checked — never reported as fine (П4).
 
 The report is deterministic: issues are sorted, no times or absolute paths.
-Link checks, external validators, slug numbering and `check` config options
-(TODO 6.1/6.2/6.4) come on top of this base.
+Optional link/media integrity checks, JSON-LD context coverage and external
+validators share the same `Issue` model and exit-code rules.
 """
 
 import dataclasses
 import json
 import pathlib
+import urllib.parse
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import ValidationError
@@ -246,10 +248,217 @@ def _check_unique(
         seen[name][marker] = slug
 
 
+
+def _target_field(spec: CollectionSpec, field_name: str):
+  schema = spec.schema
+  if schema is None:
+    return None
+  field = schema.get(field_name)
+  if field is not None:
+    return field
+  return next((item for item in schema.fields if item.key == field_name), None)
+
+
+def _link_values(value: Any) -> list[str]:
+  if value is None or value == '':
+    return []
+  values = value if isinstance(value, list) else [value]
+  return [str(item) for item in values if item is not None and str(item)]
+
+
+def _link_index(
+  spec: CollectionSpec,
+  documents: store.DocumentStore,
+  value_field: str | None = None,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+  """Build value -> slug and slug -> frontmatter indexes for a target."""
+  by_value: dict[str, str] = {}
+  records: dict[str, dict[str, Any]] = {}
+  schema = spec.schema
+  id_field = _target_field(spec, value_field) if value_field else (
+    next((field for field in schema.fields if field.key == '@id'), None)
+    if schema else None
+  )
+  for slug in sorted(documents.list()):
+    try:
+      record = documents.read(slug)
+    except (store.ParseError, store.NotFoundError):
+      continue
+    records[slug] = record.frontmatter
+    value = record.frontmatter.get(id_field.key) if id_field else slug
+    if value is not None:
+      by_value[str(value)] = slug
+    # Slugs are always valid link targets, even when @id is configured.
+    by_value.setdefault(slug, slug)
+  return by_value, records
+
+
+def _check_links(
+  spec: CollectionSpec,
+  documents: store.DocumentStore,
+  issues: list[Issue],
+  collections: Mapping[str, CollectionSpec],
+) -> None:
+  if spec.check_links == 'off' or spec.schema is None:
+    return
+  level = 'warning' if spec.check_links == 'warn' else 'error'
+  indexes: dict[str, tuple[dict[str, str], dict[str, dict[str, Any]]]] = {}
+  for slug in sorted(documents.list()):
+    try:
+      record = documents.read(slug)
+    except (store.ParseError, store.NotFoundError):
+      continue
+    for field in spec.schema.fields:
+      if not field.is_link:
+        continue
+      target_name = field.collection or spec.name
+      target_spec = collections.get(target_name)
+      if target_spec is None:
+        issues.append(
+          Issue('undefined', 'link.collection_unavailable',
+                f'Target collection {target_name!r} is not available', slug,
+                field.name)
+        )
+        continue
+      target_field = (
+        _target_field(target_spec, field.value_field)
+        if field.value_field else None
+      )
+      if field.value_field and target_field is None:
+        issues.append(
+          Issue('undefined', 'link.value_field_unavailable',
+                f'Target field {field.value_field!r} is not defined in '
+                f'collection {target_name!r}', slug, field.name)
+        )
+        continue
+      # The default is @id when present, otherwise the target slug.
+      index_key = field.value_field or '@id'
+      cache_key = f'{target_name}:{index_key}'
+      if cache_key not in indexes:
+        target_store = store.DocumentStore(target_spec.to_collection())
+        indexes[cache_key] = _link_index(
+          target_spec, target_store, field.value_field
+        )
+      by_value, target_records = indexes[cache_key]
+      for link in _link_values(record.frontmatter.get(field.key)):
+        target_slug = by_value.get(link)
+        if target_slug is None:
+          parsed = urllib.parse.urlsplit(link)
+          # Only skip an IRI when it did not resolve as a local @id/value.
+          # This permits compact IDs such as `note:0007` when they are
+          # explicitly present in the target collection.
+          if parsed.scheme or link.startswith('//'):
+            continue
+          issues.append(
+            Issue(level, 'link.target_missing',
+                  f'Link target {link!r} does not exist in collection '
+                  f'{target_name!r}', slug, field.name)
+          )
+          continue
+        if field.filters:
+          target_frontmatter = target_records[target_slug]
+          failed = []
+          for rule in field.filters:
+            filter_field = _target_field(target_spec, rule['field'])
+            filter_key = filter_field.key if filter_field else rule['field']
+            if target_frontmatter.get(filter_key) not in rule['values']:
+              failed.append(rule['field'])
+          if failed:
+            issues.append(
+              Issue(level, 'link.target_filtered',
+                    f'Link target {link!r} does not satisfy filter(s): '
+                    f'{", ".join(failed)}', slug, field.name)
+            )
+
+
+def _check_files(
+  spec: CollectionSpec,
+  documents: store.DocumentStore,
+  root: pathlib.Path,
+  issues: list[Issue],
+) -> None:
+  if spec.check_files == 'off' or spec.schema is None:
+    return
+  level = 'warning' if spec.check_files == 'warn' else 'error'
+  for slug in sorted(documents.list()):
+    try:
+      record = documents.read(slug)
+    except (store.ParseError, store.NotFoundError):
+      continue
+    for field in spec.schema.fields:
+      if field.type not in ('file', 'image'):
+        continue
+      value = record.frontmatter.get(field.key)
+      if value is None or value == '':
+        continue
+      if not field.media_dir:
+        issues.append(
+          Issue(
+            'undefined', 'file.media_dir_unavailable',
+            'Cannot check this field because it has no `media_dir`',
+            slug, field.name,
+          )
+        )
+        continue
+      values = value if isinstance(value, list) else [value]
+      project_root = root.resolve()
+      media_dir = (project_root / field.media_dir).resolve()
+      try:
+        media_dir.relative_to(project_root)
+      except ValueError:
+        issues.append(
+          Issue(
+            level, 'file.media_dir_unsafe',
+            f'media_dir {field.media_dir!r} resolves outside the project root',
+            slug, field.name,
+          )
+        )
+        continue
+      public_path = (field.public_path or field.media_dir).strip('/')
+      for item in values:
+        if not isinstance(item, str) or not item:
+          continue
+        parsed = urllib.parse.urlsplit(item)
+        if parsed.scheme in ('http', 'https') or item.startswith('//'):
+          continue
+        public_value = urllib.parse.unquote(parsed.path).lstrip('/')
+        if public_path:
+          if public_value == public_path:
+            relative = ''
+          elif public_value.startswith(public_path + '/'):
+            relative = public_value[len(public_path) + 1:]
+          else:
+            issues.append(
+              Issue(level, 'file.public_path_mismatch',
+                    f'Path {item!r} is outside public_path {public_path!r}',
+                    slug, field.name)
+            )
+            continue
+        else:
+          relative = public_value
+        candidate = (media_dir / relative).resolve()
+        try:
+          candidate.relative_to(media_dir)
+        except ValueError:
+          issues.append(
+            Issue(level, 'file.path_unsafe',
+                  f'Path {item!r} escapes media_dir {field.media_dir!r}',
+                  slug, field.name)
+          )
+          continue
+        if not candidate.is_file():
+          issues.append(
+            Issue(level, 'file.missing',
+                  f'File {item!r} does not exist in media_dir '
+                  f'{field.media_dir!r}', slug, field.name)
+          )
+
+
 def check_collection(
-  spec: CollectionSpec, *, root: str | pathlib.Path | None = None
+  spec: CollectionSpec, *, root: str | pathlib.Path | None = None,
+  collections: Mapping[str, CollectionSpec] | None = None,
 ) -> Report:
-  """Check one collection: parsing, schema match, context coverage.
+  """Check one collection: parsing, schema, uniqueness, links, files, context.
 
   Args:
       spec: The collection to check.
@@ -285,6 +494,8 @@ def check_collection(
       report.summaries[slug] = spec.summarize(slug, record.frontmatter)
   _check_documents(spec, documents, issues)
   _check_unique(spec, documents, issues)
+  _check_links(spec, documents, issues, collections or {spec.name: spec})
+  _check_files(spec, documents, base, issues)
   _check_context(spec, base, issues)
   _check_validators(spec, base, issues)
   issues.sort(key=Issue.sort_key)
