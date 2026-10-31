@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Site-wide SEO settings: `SeoConfig` and the `seo:` section (TODO 5.9.2)
+
+- `SeoConfig` (`fastapi_blog.models`) holds the settings from TODO 5.9.2:
+  `site_url`, `site_name`, `title_template`, `default_image`,
+  `default_author`, `default_robots`, `index_description`, `og`,
+  `twitter_card`, `structured_data`, `description_fallback`,
+  `description_length`, `noindex_tags`. It's the `seo:` section of a schema
+  file (`FrontmatterSchema.seo`, read by `from_dict`/`from_file`, written by
+  `to_dict`) and the `seo=` argument of `add_blog_to_fastapi()` and
+  `setup_fastapi_blog()`
+- The argument is stronger than the section and replaces it as a whole (no
+  key-by-key merge); `seo.resolve_seo_config(seo, schema)` is the one place
+  that decides. `seo: {}` is a section with all defaults, so the SEO output
+  of TODO 5.9.4 will switch on for it; without a section and an argument
+  nothing changes (П6)
+- Every value is checked when the schema is loaded, and the error names the
+  key (`` `seo.twitter_card` must be … ``): `site_url` must be an `http(s)`
+  URL without a query or fragment (a trailing `/` is dropped, so absolute
+  addresses have one spelling); `default_image` must be an `http(s)` URL or
+  a path from the site root (`javascript:`, `data:`, `//host` and relative
+  paths are refused); `default_robots` must be a list of the four known
+  directives; `title_template` may only use `{title}` and `{site_name}`
+  (no positional, attribute, index, conversion or format-spec forms, which
+  `str.format` would otherwise let through until TODO 6.4's language
+  exists). Unknown keys and a non-mapping section are errors too
+- Fixed: the routers of the non-default locales were built without `seo=`,
+  so `/ru/blog/...` lost the `site_name` that `/blog/...` had
+- Fixed: `FrontmatterSchema.with_extra()` dropped `seo` and
+  `published_values` (a schema with a `status` role couldn't even be
+  copied; `LOOSE_DEFAULT_SCHEMA` was unaffected only because it has none)
+- Still no visible effect beyond `site_name` in the page header: the
+  substitution order (5.9.3) and the `<head>` output (5.9.4) consume these
+  settings next
+
 ### Housekeeping: test invocation, stale references, invariance wiring
 
 - `make test` and both CI workflows called `pytest .`, which overrides

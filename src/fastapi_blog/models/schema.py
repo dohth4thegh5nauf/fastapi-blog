@@ -14,6 +14,8 @@ import dataclasses
 import datetime
 import pathlib
 import re
+import string
+import urllib.parse
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
@@ -524,6 +526,42 @@ class JsonLdConfig:
     return cls(**values)
 
 
+def is_http_url_or_root_path(value: Any) -> bool:
+  """Return whether `value` is an `http(s)` URL or a path from the site root.
+
+  The same rule applies to the `canonical` and `image` roles and to
+  `seo.default_image` (TODO 5.9.4): anything else (`javascript:`, `data:`,
+  a protocol-relative `//host`, a relative path) is rejected.
+  """
+  if not isinstance(value, str) or not value or value != value.strip():
+    return False
+  if value.startswith('/'):
+    return not value.startswith('//') and '\\' not in value
+  parts = urllib.parse.urlsplit(value)
+  return parts.scheme in ('http', 'https') and bool(parts.netloc)
+
+
+# Names a `seo.title_template` may use (until TODO 6.4's template language).
+TITLE_TEMPLATE_NAMES = ('title', 'site_name')
+
+
+def _check_title_template(template: str) -> None:
+  """Raise `ValueError` unless `template` only has plain known placeholders."""
+  try:
+    parsed = list(string.Formatter().parse(template))
+  except ValueError as exc:
+    raise ValueError(f'`seo.title_template` is malformed: {exc}') from exc
+  for _literal, field_name, format_spec, conversion in parsed:
+    if field_name is None:
+      continue
+    if field_name not in TITLE_TEMPLATE_NAMES or format_spec or conversion:
+      raise ValueError(
+        f'`seo.title_template` has an unsupported placeholder '
+        f'{{{field_name}}}; allowed: '
+        + ', '.join(f'{{{name}}}' for name in TITLE_TEMPLATE_NAMES)
+      )
+
+
 @dataclasses.dataclass(frozen=True)
 class SeoConfig:
   """A schema's `seo` section (TODO 5.9.2): site-wide SEO settings.
@@ -570,6 +608,10 @@ class SeoConfig:
   noindex_tags: bool = False
 
   def __post_init__(self) -> None:
+    if isinstance(self.default_robots, str) or not isinstance(
+      self.default_robots, (list, tuple)
+    ):
+      raise ValueError('`seo.default_robots` must be a list of directives')
     object.__setattr__(self, 'default_robots', tuple(self.default_robots))
     for key in (
       'site_url',
@@ -582,10 +624,30 @@ class SeoConfig:
       value = getattr(self, key)
       if value is not None and (not isinstance(value, str) or not value):
         raise ValueError(f'`seo.{key}` must be a non-empty string')
-    if self.site_url is not None and not self.site_url.startswith(
-      ('http://', 'https://')
+    if self.site_url is not None:
+      parts = urllib.parse.urlsplit(self.site_url)
+      if (
+        parts.scheme not in ('http', 'https')
+        or not parts.netloc
+        or parts.query
+        or parts.fragment
+      ):
+        raise ValueError(
+          '`seo.site_url` must be an http(s):// URL without a query or '
+          f'fragment, got {self.site_url!r}'
+        )
+      # One spelling, so absolute addresses are built the same way
+      # everywhere (`https://example.org/` and `https://example.org`).
+      object.__setattr__(self, 'site_url', self.site_url.rstrip('/'))
+    if self.default_image is not None and not is_http_url_or_root_path(
+      self.default_image
     ):
-      raise ValueError(f'`seo.site_url` must start with http(s)://')
+      raise ValueError(
+        '`seo.default_image` must be an http(s):// URL or a path from the '
+        f'site root, got {self.default_image!r}'
+      )
+    if self.title_template is not None:
+      _check_title_template(self.title_template)
     for directive in self.default_robots:
       if directive not in ROBOTS_DIRECTIVES:
         raise ValueError(
@@ -624,13 +686,15 @@ class SeoConfig:
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> 'SeoConfig':
     """Build from a plain dict (the `seo:` section of a schema file)."""
+    if not isinstance(data, Mapping):
+      raise ValueError('`seo` must be a mapping')
     known = {item.name for item in dataclasses.fields(cls)}
     unknown = set(data) - known
     if unknown:
       raise ValueError(f'Unknown seo option(s): {sorted(unknown)}')
     values = dict(data)
-    if 'default_robots' in values:
-      values['default_robots'] = tuple(values['default_robots'] or ())
+    if 'default_robots' in values and values['default_robots'] is None:
+      values['default_robots'] = ()
     return cls(**values)
 
 
@@ -774,7 +838,11 @@ class FrontmatterSchema:
   def with_extra(self, extra: str) -> 'FrontmatterSchema':
     """Return a copy of the schema with another `extra` mode."""
     return FrontmatterSchema(
-      fields=self.fields, extra=extra, jsonld=self.jsonld
+      fields=self.fields,
+      extra=extra,
+      jsonld=self.jsonld,
+      seo=self.seo,
+      published_values=self.published_values,
     )
 
   def model(self) -> 'type[BaseModel]':

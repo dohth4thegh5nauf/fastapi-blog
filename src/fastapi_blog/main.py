@@ -178,6 +178,7 @@ def add_blog_to_fastapi(
       favorite_post_ids=favorite_post_ids,
       strict=strict_frontmatter,
       frontmatter_schema=frontmatter_schema,
+      seo=seo,
       sanitize_html=sanitize_html,
       posts_dirname=posts_dirname,
       pages_dirname=pages_dirname,

@@ -1,4 +1,4 @@
-"""Ready-made SEO frontmatter fields (TODO 5.9.1).
+"""SEO frontmatter fields (TODO 5.9.1) and site-wide settings (TODO 5.9.2).
 
 `seo_fields()` returns a `FieldSpec` per SEO role (see `models/schema.py`'s
 `ROLES`/`_ROLE_TYPES`), with the `choices`/`label`/`hint` TODO 5.9.1
@@ -6,15 +6,16 @@ describes. A schema author adds the whole set or a subset, and may rename
 or re-alias any of them — the returned `FieldSpec`s use the role name as
 the field name, nothing more.
 
-Only the *fields* are built here. `SeoConfig` (TODO 5.9.2, in
-`models/schema.py`) and the `seo=` argument of `add_blog_to_fastapi()`/
-`setup_fastapi_blog()` carry the site-wide settings (`site_name` already
-reaches the page header); the substitution order (5.9.3) and the full
+`SeoConfig` (in `models/schema.py`) holds the site-wide settings: the
+`seo:` section of a schema file or the `seo=` argument of
+`add_blog_to_fastapi()`/`setup_fastapi_blog()`. `resolve_seo_config()` picks
+the effective one. The substitution order (5.9.3) and the full
 `<head>`/social-tag output (5.9.4) aren't built yet, so most of these roles
-still have no visible effect on a rendered page.
+and settings still have no visible effect on a rendered page (only
+`site_name` reaches the page header).
 """
 
-from .models import ROBOTS_DIRECTIVES, FieldSpec
+from .models import ROBOTS_DIRECTIVES, FieldSpec, FrontmatterSchema, SeoConfig
 
 
 # One FieldSpec per SEO role, keyed by role name (also the field's default
@@ -107,3 +108,30 @@ def seo_fields(roles: 'tuple[str, ...] | None' = None) -> tuple[FieldSpec, ...]:
   if unknown:
     raise ValueError(f'Unknown SEO role(s): {sorted(unknown)}')
   return tuple(_FIELDS[role] for role in roles)
+
+
+def resolve_seo_config(
+  seo: SeoConfig | None,
+  schema: FrontmatterSchema | None,
+) -> SeoConfig | None:
+  """Return the effective site-wide SEO settings (TODO 5.9.2).
+
+  The `seo=` argument is stronger than the schema's `seo` section: when it's
+  given, it replaces the section as a whole (the two aren't merged key by
+  key, so what's in effect is always readable from one place).
+
+  Args:
+      seo: The `seo=` argument of `add_blog_to_fastapi()` or
+          `setup_fastapi_blog()`, if any.
+      schema: The posts schema, whose `seo` section is the fallback.
+
+  Returns:
+      The settings, or `None` when there's neither an argument nor a section
+      (then only the TODO 5.9.6 fixes apply, per П6).
+
+  """
+  if seo is not None:
+    return seo
+  if schema is not None:
+    return schema.seo
+  return None

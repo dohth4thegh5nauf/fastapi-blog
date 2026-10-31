@@ -233,6 +233,42 @@ export (see `fastapi_blog.jsonld`):
 - `jsonld.uncovered_keys(schema, project_root=...)` lists the schema keys
   the (resolved) context doesn't cover — JSON-LD would silently drop them.
 
+## The `seo:` section
+
+A schema may carry a `seo` section (`SeoConfig`) with site-wide SEO
+settings. The same settings can be passed as `seo=SeoConfig(...)` to
+`add_blog_to_fastapi()` and `setup_fastapi_blog()`; the argument is stronger
+than the section and replaces it as a whole (the two aren't merged).
+
+```yaml
+seo:
+  site_url: "https://example.org"      # base of absolute addresses
+  site_name: "Example Notes"           # page header, `title_template`
+  title_template: "{title} - {site_name}"
+  default_image: "/static/social.png"
+  default_author: null
+  default_robots: []                   # noindex, nofollow, noarchive, nosnippet
+  index_description: "Short site description"
+  og: true
+  twitter_card: summary_large_image    # summary, summary_large_image or null
+  structured_data: blogposting         # blogposting, article or none
+  description_fallback: excerpt        # excerpt or none
+  description_length: 160
+  noindex_tags: false
+```
+
+- Every key is optional. An empty section (`seo: {}`) is valid and means
+  "all defaults"; without a section and without the argument the blog behaves
+  as before.
+- Values are checked when the schema is loaded, and an error names the key
+  (for example `seo.twitter_card`). `site_url` must be an `http(s)` URL
+  without a query or fragment; a trailing `/` is dropped. `default_image` is
+  an `http(s)` URL or a path from the site root. `title_template` may only
+  use `{title}` and `{site_name}`.
+- Today only `site_name` has a visible effect (the page header). The
+  substitution order and the `<head>` output that use the other settings are
+  still to come (TODO 5.9.3 and 5.9.4).
+
 ## Built-in schemas
 
 - `DEFAULT_SCHEMA` reproduces the old hardcoded behavior (`StrictFrontmatter`).

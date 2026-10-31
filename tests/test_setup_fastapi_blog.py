@@ -1,8 +1,10 @@
 """Tests for setup_fastapi_blog() unified facade."""
 
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 import fastapi_blog
+from fastapi_blog.models import SeoConfig
 
 
 def _all_paths(app: FastAPI) -> list[str]:
@@ -174,3 +176,16 @@ def test_setup_fastapi_blog_is_convenience_wrapper():
 
   # Admin instances should be equivalent
   assert set(admins1.keys()) == set(admins2.keys())
+
+
+def test_setup_fastapi_blog_passes_seo_to_the_blog():
+  """TODO 5.9.2: `seo=` reaches the blog (here: `site_name` in the header)."""
+  app = FastAPI()
+  fastapi_blog.setup_fastapi_blog(
+    app,
+    posts_dirname='tests/examples/posts',
+    admin=False,
+    seo=SeoConfig(site_name='Example Notes'),
+  )
+  with TestClient(app) as client:
+    assert '>Example Notes</a></h1>' in client.get('/blog/').text

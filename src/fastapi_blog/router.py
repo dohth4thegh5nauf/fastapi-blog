@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from . import helpers, jsonld, store
 from .i18n import Translator
 from .models import SLUG_RE, FrontmatterSchema, SeoConfig
+from .seo import resolve_seo_config
 
 
 def get_blog_router(
@@ -124,11 +125,7 @@ def get_blog_router(
     """Add i18n translator and site-wide SEO context to the template context."""
     # The `seo=` argument is stronger than the schema's `seo` section
     # (TODO 5.9.2); without either there is no `site_name` (5.9.6 behavior).
-    effective_seo = (
-      seo
-      if seo is not None
-      else (frontmatter_schema.seo if frontmatter_schema is not None else None)
-    )
+    effective_seo = resolve_seo_config(seo, frontmatter_schema)
     if effective_seo is not None and effective_seo.site_name:
       context['site_name'] = effective_seo.site_name
 
