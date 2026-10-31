@@ -142,13 +142,13 @@ fastapi_blog
 ├── admin/__init__.py (add_admin_to_app)
 │   ├── auth_provider.py (SimpleAuthProvider)
 │   ├── database.py (SQLAlchemy setup)
-│   ├── models.py (User, Post)
-│   ├── views.py (ModelViews)
+│   ├── models/ (User, Post, Role, UserWithRoles)
+│   ├── views.py, views_role.py (ModelViews)
+│   ├── markdown_crud.py (markdown file operations)
 │   ├── i18n.py (translations)
 │   └── templates/ (custom starlette-admin templates)
 │
 └── editor.py (add_editor_to_app)
-    └── markdown_crud.py (file operations)
 ```
 
 ## Security Architecture

@@ -1,0 +1,4 @@
+# Forbidden words and phrases for `tests/test_invariance.py`.
+# One entry per line; empty lines and lines starting with `#` are ignored.
+# The project owner maintains this list (see `TODO.md`, section 8);
+# it is intentionally left empty until the owner fills it.

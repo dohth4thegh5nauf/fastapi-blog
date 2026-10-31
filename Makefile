@@ -32,12 +32,12 @@ mypy:
 	mypy .
 
 test:
-	coverage run -m pytest .
+	coverage run -m pytest
 	coverage report -m
 	coverage html
 
 test-pdb:
-	pytest --pdb .
+	pytest --pdb
 
 run:
 	make run_defaults
@@ -73,7 +73,7 @@ run_quickstart:
 run_admin_roles:
 	@echo "\n🚀 Starting FastAPI Blog - Admin with RBAC\n"
 	@echo "📍 Admin Panel: http://localhost:8000/admin"
-	@echo "🔑 Users: admin/Admin123!, editor/Editor123!, viewer/Viewer123!\n"
+	@echo "🔑 Users: admin/password, editor/password, viewer/password\n"
 	cd tests/examples && mkdir -p data && uvicorn admin_with_roles:app --reload
 
 run_admin_i18n:

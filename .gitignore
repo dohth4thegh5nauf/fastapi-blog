@@ -175,7 +175,6 @@ changelog.json
 /tmp
 !/tmp/.gitkeep
 
-*.baktests/examples/data/
 tests/examples/data/
 
 *.bak

@@ -366,5 +366,5 @@ unset FASTAPI_BLOG_INCLUDE_API  # Uses default (false)
 
 ---
 
-**Last Updated:** 2026-05-15  
-**Version:** 0.8.1+
+**Last Updated:** 2026-10-31  
+**Version:** 0.9.0 (in development)

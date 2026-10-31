@@ -655,5 +655,5 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 
 ---
 
-**Last Updated**: 2024
-**Version**: 0.8.0+
+**Last Updated**: 2026-10-31
+**Version**: 0.9.0 (in development)

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Housekeeping: test invocation, stale references, invariance wiring
+
+- `make test` and both CI workflows called `pytest .`, which overrides
+  `testpaths` and crashed collecting the `+/` reference-material directory;
+  they now call plain `pytest`, leaving collection scoped to `tests/` per
+  `pyproject.toml`
+- `Makefile run_admin_roles` advertised credentials that contradict the
+  actual `tests/examples/admin_with_roles.py` users (every password there
+  is `password`)
+- `docs/ROLE_MANAGEMENT.md`, `docs/CODEBASE_ANALYSIS.md` and
+  `docs/CODEBASE_SUMMARY_RU.md` still referenced the removed
+  `fastapi_blog.admin.models_role` module and otherwise stale file trees;
+  updated to the current `admin/models/` layout and real file names
+- Added the spec-mandated invariance-test wiring (`tests/test_invariance.py`
+  plus `tests/forbidden_names.txt`, the latter intentionally left empty for
+  the owner per `TODO.md` section 8) and corrected stale counts/versions in
+  `README.md`, `QUICKSTART.md` and the docs footers
+
 ### SEO roles and `fastapi_blog.seo.seo_fields()` (TODO 5.9.1)
 
 Nine new semantic roles, the same mechanism as `title`/`date`/`published`:

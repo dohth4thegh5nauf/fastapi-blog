@@ -56,26 +56,26 @@ fastapi-blog/
 │   ├── main.py                   # Интеграция с FastAPI
 │   ├── router.py                 # Роутеры блога
 │   ├── helpers.py                # Утилиты
-│   ├── models.py                 # Модели данных
+│   ├── models/                   # FrontmatterSchema, FieldSpec, API models
 │   ├── auth.py                   # Унифицированная аутентификация
-│   ├── editor.py                 # Редактор постов (deprecated)
+│   ├── store.py                 # Хранилище документов (Collection, DocumentStore)
+│   ├── jsonld.py                # JSON-LD экспорт
+│   ├── editor.py                # Редактор постов (deprecated UI + REST API)
 │   ├── admin/                    # Админ-панель
 │   │   ├── __init__.py          # Настройка админки
-│   │   ├── models.py            # Модели БД (User, Post)
-│   │   ├── models_role.py       # Модели RBAC (Role, UserWithRoles)
+│   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # Представления админки
 │   │   ├── views_role.py        # Представления для ролей
 │   │   ├── auth_provider.py     # Провайдер аутентификации
 │   │   ├── database.py          # Настройка БД
 │   │   ├── fields.py            # Кастомные поля (Markdown, Tags, Slug)
 │   │   ├── i18n.py              # Интернационализация
-│   │   ├── markdown_model.py    # Модель для markdown постов
 │   │   ├── markdown_crud.py     # CRUD для markdown
 │   │   ├── templates/           # Шаблоны админки
 │   │   └── translations/        # Переводы (en, ru)
 │   ├── templates/                # Публичные шаблоны блога
 │   └── translations/             # Переводы блога
-├── tests/                        # Тесты (117 тестов)
+├── tests/                        # Тесты (450+)
 │   ├── examples/                 # Примеры конфигураций
 │   │   ├── quickstart.py        # Базовый пример
 │   │   ├── admin_with_roles.py  # RBAC пример
@@ -96,8 +96,8 @@ fastapi-blog/
 ├── README.md                    # Основная документация
 ├── QUICKSTART.md                # Быстрый старт
 ├── CONTRIBUTING.md              # Гайд для контрибьюторов
-├── AI.md                        # Инструкции для AI
-└── changelog.md                 # История изменений
+├── AGENTS.md                    # Инструкции для AI
+└── CHANGELOG.md                 # История изменений
 ```
 
 ---

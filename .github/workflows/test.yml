@@ -33,4 +33,4 @@
                 make lint             
           - name: Test with pytest
             run: |-
-                pytest .
+                pytest

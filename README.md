@@ -46,7 +46,7 @@ Then open http://localhost:8000/admin (login: `admin` / `Admin123!`)
 ### Developer Experience
 - ⚡ Fast performance with FastAPI
 - 🔒 Modern security practices
-- 🧪 Comprehensive test coverage (88+ tests)
+- 🧪 Comprehensive test coverage (450+ tests)
 - 🚀 Python 3.12+ and 3.13 support
 - 🐳 Docker support
 
@@ -518,11 +518,16 @@ make all
 fastapi-blog/
 ├── src/fastapi_blog/          # Main package
 │   ├── main.py               # Core FastAPI integration
-│   ├── router.py             # Blog routes and views  
-│   ├── helpers.py            # Utility functions
+│   ├── router.py             # Blog routes and views
+│   ├── helpers.py            # Markdown parsing, post listing
+│   ├── models/               # FrontmatterSchema, FieldSpec, API models
+│   ├── store.py              # Collection/DocumentStore (ETag, locking)
+│   ├── editor.py             # REST API router (add_editor_to_app)
+│   ├── admin/                # Optional admin panel (needs `admin` extra)
 │   └── templates/            # Jinja2 templates
-├── tests/                    # Test suite
+├── tests/                    # Test suite (450+ tests)
 │   └── examples/             # Example configurations
+├── docs/                     # Documentation
 ├── .github/workflows/        # CI/CD workflows
 └── pyproject.toml           # Project configuration
 ```

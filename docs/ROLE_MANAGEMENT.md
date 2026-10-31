@@ -91,7 +91,7 @@ admins = fastapi_blog.add_admin_to_app(
 
 # Add role management views to admin
 for locale, admin in admins.items():
-  from fastapi_blog.admin.models_role import Role, UserWithRoles
+  from fastapi_blog.admin.models import Role, UserWithRoles
   
   # Add Role view
   role_view = RoleModelView(Role, icon='fa fa-shield')
@@ -105,7 +105,7 @@ for locale, admin in admins.items():
 ### Initialize Default Roles
 
 ```python
-from fastapi_blog.admin.models_role import create_default_roles
+from fastapi_blog.admin.models.role import create_default_roles
 from fastapi_blog.admin.database import create_engine_and_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,7 +129,7 @@ This creates three default roles:
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi_blog.admin.database import get_db
-from fastapi_blog.admin.models_role import UserWithRoles
+from fastapi_blog.admin.models import UserWithRoles
 
 
 @app.get('/admin/dashboard')
@@ -153,7 +153,7 @@ async def admin_dashboard(db: AsyncSession = Depends(get_db)):
 ```python
 from starlette.requests import Request
 from starlette_admin.contrib.sqla import ModelView
-from fastapi_blog.admin.models_role import UserWithRoles
+from fastapi_blog.admin.models import UserWithRoles
 
 
 class MyModelView(ModelView):
@@ -263,7 +263,7 @@ admins = fastapi_blog.add_admin_to_app(
 
 # Add role management
 for locale, admin in admins.items():
-  from fastapi_blog.admin.models_role import Role, UserWithRoles
+  from fastapi_blog.admin.models import Role, UserWithRoles
   
   role_view = RoleModelView(Role, icon='fa fa-shield')
   admin.add_view(role_view)
@@ -276,11 +276,8 @@ for locale, admin in admins.items():
 
 ```python
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi_blog.admin.models_role import (
-  Role,
-  UserWithRoles,
-  create_default_roles,
-)
+from fastapi_blog.admin.models import Role, UserWithRoles
+from fastapi_blog.admin.models.role import create_default_roles
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
@@ -386,11 +383,8 @@ alembic upgrade head
 ```python
 from sqlalchemy import select
 from fastapi_blog.admin.models import User
-from fastapi_blog.admin.models_role import (
-  UserWithRoles,
-  Role,
-  create_default_roles,
-)
+from fastapi_blog.admin.models import Role, UserWithRoles
+from fastapi_blog.admin.models.role import create_default_roles
 
 
 async def migrate_users_to_roles(session: AsyncSession):

@@ -44,13 +44,13 @@ fastapi-blog/
 │   ├── main.py                  # add_blog_to_fastapi()
 │   ├── router.py                # Роутеры для блога
 │   ├── helpers.py               # Вспомогательные функции
-│   ├── models.py                # Pydantic модели для постов
+│   ├── models/                  # FrontmatterSchema, FieldSpec (Pydantic)
+│   ├── store.py                 # Хранилище документов (Collection, DocumentStore)
 │   ├── admin/                   # Административная панель
 │   │   ├── __init__.py          # add_admin_to_app()
 │   │   ├── auth_provider.py     # Аутентификация
 │   │   ├── database.py          # SQLAlchemy + async
-│   │   ├── models.py            # User, Post (SQLAlchemy)
-│   │   ├── models_role.py       # Role, UserWithRoles
+│   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # ModelViews для админки
 │   │   ├── views_role.py        # RoleModelView, UserWithRolesModelView
 │   │   ├── i18n.py              # Поддержка локализации

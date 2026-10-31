@@ -12,7 +12,7 @@ The fastest way to see FastAPI Blog in action:
 
 ```bash
 # Clone and install
-git clone https://github.com/awestley/fastapi-blog.git
+git clone https://github.com/pydanny/fastapi-blog.git
 cd fastapi-blog
 make install
 
