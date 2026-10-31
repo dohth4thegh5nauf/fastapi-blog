@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import helpers, jsonld, store
 from .i18n import Translator
-from .models import SLUG_RE, FrontmatterSchema
+from .models import SLUG_RE, FrontmatterSchema, SeoConfig
 
 
 def get_blog_router(
@@ -23,6 +23,7 @@ def get_blog_router(
   locale: str | None = None,  # If set, creates routes for this specific locale
   prefix: str | None = 'blog',  # URL prefix (e.g., 'blog')
   frontmatter_schema: FrontmatterSchema | None = None,
+  seo: SeoConfig | None = None,
   jsonld_routes: bool = False,
 ) -> APIRouter:
   router = APIRouter()
@@ -120,7 +121,17 @@ def get_blog_router(
     return locale_url_for
 
   def _add_i18n_context(request: Request, context: dict) -> dict:
-    """Add i18n translator to template context."""
+    """Add i18n translator and site-wide SEO context to the template context."""
+    # The `seo=` argument is stronger than the schema's `seo` section
+    # (TODO 5.9.2); without either there is no `site_name` (5.9.6 behavior).
+    effective_seo = (
+      seo
+      if seo is not None
+      else (frontmatter_schema.seo if frontmatter_schema is not None else None)
+    )
+    if effective_seo is not None and effective_seo.site_name:
+      context['site_name'] = effective_seo.site_name
+
     current_locale = _get_locale(request)
     context['t'] = Translator(current_locale)
     context['locale'] = current_locale
@@ -253,10 +264,17 @@ def get_blog_router(
   if jsonld_routes:
     jsonld_schema = helpers.resolve_schema(strict, frontmatter_schema)
     jsonld_store = store.DocumentStore(
-      store.Collection(
-        'posts', pathlib.Path(posts_dirname), slug_pattern=SLUG_RE
-      )
+      store.blog_collections(posts_dirname)['posts']
     )
+
+    def _jsonld_context() -> Any:
+      """Resolve the schema's context; an unloadable one is a 503, not "ok"."""
+      try:
+        return jsonld.resolve_context(jsonld_schema)
+      except jsonld.JsonLdError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
 
     def _jsonld_node(slug: str) -> dict[str, Any] | None:
       try:
@@ -269,6 +287,7 @@ def get_blog_router(
         slug=slug,
         collection='posts',
         content=record.body.strip(),
+        context=_jsonld_context(),
       )
 
     # Registered before `/{slug}.jsonld`: Starlette matches routes in
@@ -282,9 +301,17 @@ def get_blog_router(
         documents.append(
           (post['slug'], record.frontmatter, record.body.strip())
         )
-      graph = jsonld.collection_to_jsonld(
-        documents, schema=jsonld_schema, collection='posts'
-      )
+      try:
+        graph = jsonld.collection_to_jsonld(
+          documents,
+          schema=jsonld_schema,
+          collection='posts',
+          context=_jsonld_context(),
+        )
+      except jsonld.JsonLdError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
       return JSONResponse(content=graph, media_type='application/ld+json')
 
     @router.get('/{slug}.jsonld', name=f'blog_post_jsonld{name_suffix}')
@@ -309,12 +336,7 @@ def get_blog_router(
   async def blog_page(
     page_id: str, request: Request, response_class=HTMLResponse
   ):
-    path = pathlib.Path(f'{pages_dirname}/{page_id}.md')
-    try:
-      page: dict[str, str | dict] = helpers.load_content_from_markdown_file(
-        path, sanitize=sanitize_html
-      )
-    except FileNotFoundError:
+    def _not_found() -> Any:
       context = _add_i18n_context(request, {})
       context['title'] = context['t'].blog.not_found
       return templates.TemplateResponse(
@@ -323,6 +345,21 @@ def get_blog_router(
         status_code=404,
         context=context,
       )
+
+    # The same path safety as for posts (TODO 4.1): the slug is validated
+    # before it ever becomes a path, a bad one is a 404 like a missing page.
+    try:
+      path = store.safe_document_path(
+        pathlib.Path(pages_dirname), page_id, pattern=SLUG_RE
+      )
+    except ValueError:
+      return _not_found()
+    try:
+      page: dict[str, str | dict] = helpers.load_content_from_markdown_file(
+        path, sanitize=sanitize_html
+      )
+    except FileNotFoundError:
+      return _not_found()
     page['slug'] = page_id
     metadata = page.get('metadata')
     page_title = metadata.get('title') if isinstance(metadata, dict) else None

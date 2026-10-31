@@ -246,3 +246,42 @@ def test_deprecated_ui_with_a_schema_warns(workdir):
     add_editor_to_app(
       app, ui=True, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA
     )
+
+
+def test_update_preserves_unknown_keys_and_file_order(workdir):
+  """A rewrite keeps unknown keys and the file's key order (TODO 4.5)."""
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('headline', alias='title', required=True, role='title'),
+      FieldSpec('pub_date', alias='pubDate', required=True, role='date'),
+    ),
+    extra='allow',
+  )
+  app = FastAPI()
+  fastapi_blog.add_blog_to_fastapi(
+    app,
+    include_api=True,
+    api_require_auth=False,
+    frontmatter_schema=schema,
+  )
+  client = TestClient(app)
+  # A file written by hand, with an unknown key and a non-schema order.
+  (workdir / 'posts' / 'note.md').write_text(
+    '---\nzeta: 1\ntitle: Old\nalpha: 2\n---\nBody\n', encoding='utf-8'
+  )
+  response = client.put(
+    '/api/posts/update/note',
+    json={
+      'frontmatter': {'title': 'New', 'pubDate': '2024-01-01'},
+      'content': 'Body',
+    },
+  )
+  assert response.status_code == 200
+  frontmatter = _read_frontmatter(workdir / 'posts' / 'note.md')
+  assert frontmatter == {
+    'zeta': 1,
+    'title': 'New',
+    'alpha': 2,
+    'pubDate': '2024-01-01',
+  }
+  assert list(frontmatter) == ['zeta', 'title', 'alpha', 'pubDate']

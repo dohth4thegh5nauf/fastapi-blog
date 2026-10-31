@@ -24,6 +24,76 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the owner per `TODO.md` section 8) and corrected stale counts/versions in
   `README.md`, `QUICKSTART.md` and the docs footers
 
+### Store error hierarchy
+
+- `store` raises specific errors now, all subclasses of `store.StoreError`:
+  `InvalidSlugError` (bad slug or directory escape), `ParseError` (bad YAML
+  frontmatter or a non-UTF-8 file, also raised by `read`), `NotFoundError`
+  (missing document) and `OperationNotAllowedError` (`create`/`delete`
+  forbidden); `ConflictError` joins the hierarchy, still carrying
+  `status_code`. Each one also inherits the builtin it replaces
+  (`ValueError`, `FileNotFoundError`, `PermissionError`), so every existing
+  `except` clause keeps working unchanged
+
+### JSON-LD contexts: local files, allow-listed URLs, limits (TODO 5.5)
+
+- `jsonld.context` accepts a path to a file inside the project root (YAML
+  or JSON; a whole document's `@context` is extracted) or an allow-listed
+  URL, beside inline mappings and lists — loaded by the new
+  `jsonld.resolve_context(schema, project_root=...)`. Nothing in a context
+  is executed; a context outside the project root is refused
+- Remote contexts need the `jsonld` extra plus an explicit
+  `allow_remote_contexts` entry: fetch has a timeout, a `max_context_bytes`
+  size limit and refuses redirects to another host. A context that can't
+  be loaded raises `ContextUnavailableError` (HTTP routes answer 503,
+  `export` exits 64) — never a silent "ok"
+- New `jsonld` config limits: `max_context_bytes` and `max_documents`
+  (the latter caps an exported `@graph`, enforced by
+  `collection_to_jsonld`)
+- The emission functions stay pure: callers resolve the context and pass
+  it as `context=`; `uncovered_keys(schema, project_root=...)` resolves a
+  local context before checking for lost terms
+
+### Frontmatter field types and lost-term control (TODO 5.1, 5.6)
+
+- New field types: `link` and `list[link]` (a string pointing at another
+  resource — a slug, a compact IRI or an absolute IRI) with the target
+  options `collection`, `value_field` and `[{field, values}]` `filters`;
+  `file` and `image` (a path kept as a string) with `media_dir` and
+  `public_path`. `pattern` now also applies to `link`/`file`/`image`,
+  `item_pattern` to `list[link]`, and `choices` to all of them
+- `fastapi_blog.jsonld.uncovered_keys(schema)` reports the schema keys an
+  inline `@context` doesn't cover (a same-name term, a `prefix:` term or
+  `@vocab`), `content_term` included. URL context items are skipped, not
+  loaded — loading files and remote contexts is TODO 5.5
+
+### Document storage: merge-on-rewrite, nested collections, page schema (TODO 4.5, 4.6)
+
+- Rewriting a post through the REST API merges the dump over the file's
+  current frontmatter instead of replacing it: known keys keep their
+  positions, unknown keys survive when the schema is `extra: 'allow'`, a
+  known field emptied to `None` is dropped, and schema fields the file
+  didn't have yet are appended in schema order
+  (`FrontmatterSchema._merge_for_rewrite`). Admin-panel writes still bypass
+  schema validation — that remainder is TODO 7.6 (phase E)
+- `Collection(depth=N)` implements nested collections: the slug is the
+  relative path without the extension (`a/b/0001-x`), each segment is
+  checked against `slug_pattern`, and at most `N` segments are directories;
+  `list()` returns relative slugs and skips files that would not validate
+- `slug_pattern` may be a string template using `{dirname}` and
+  `{filename}` as one-segment placeholders (plain regex tokens such as
+  `{m,n}` quantifiers survive the expansion)
+- `store.blog_collections()` builds the two standard collections: the
+  `posts_dirname`/`pages_dirname` parameters stay the public surface, and
+  the REST API, the admin panel and the JSON-LD routes now construct their
+  collections in this one place
+- Pages validate against a built-in schema with the fields they have always
+  had (`helpers.PAGES_SCHEMA`: `title`, `description`, `author`,
+  `extra: 'allow'`); a page that doesn't match is still served with its
+  raw frontmatter
+- The public page route resolves the page slug through `safe_document_path`
+  like every other slug-to-path conversion (TODO 4.1)
+
 ### SEO roles and `fastapi_blog.seo.seo_fields()` (TODO 5.9.1)
 
 Nine new semantic roles, the same mechanism as `title`/`date`/`published`:

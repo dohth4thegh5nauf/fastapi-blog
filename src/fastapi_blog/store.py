@@ -22,7 +22,7 @@ import re
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -32,6 +32,12 @@ import yaml
 # to 100 characters. Kept local (not imported from `models`) so this module
 # stays free of any dependency on the schema/validation layer above it.
 DEFAULT_SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,99}$')
+
+# One path segment (directory level or file name) of the default slug shape,
+# used to expand the `{dirname}`/`{filename}` placeholders of a template
+# `slug_pattern` (TODO 4.6). Plain `.replace()`, so every other regex token
+# in the pattern (including `{m,n}` quantifiers) survives untouched.
+_SLUG_SEGMENT = r'[a-z0-9][a-z0-9-]{0,99}'
 
 
 def parse_document(text: str) -> tuple[dict[str, Any], str]:
@@ -54,7 +60,7 @@ def parse_document(text: str) -> tuple[dict[str, Any], str]:
       is empty; otherwise it is the parsed YAML mapping.
 
   Raises:
-      ValueError: The frontmatter block isn't valid YAML, or isn't a mapping.
+      ParseError: The frontmatter block isn't valid YAML, or isn't a mapping.
 
   """
   if text.startswith('﻿'):
@@ -77,11 +83,11 @@ def parse_document(text: str) -> tuple[dict[str, Any], str]:
   try:
     data = yaml.safe_load(fm_text)
   except yaml.YAMLError as exc:
-    raise ValueError(f'invalid YAML frontmatter: {exc}') from exc
+    raise ParseError(f'invalid YAML frontmatter: {exc}') from exc
   if data is None:
     data = {}
   if not isinstance(data, dict):
-    raise ValueError('frontmatter is not a mapping')
+    raise ParseError('frontmatter is not a mapping')
 
   body = ''.join(lines[end + 1 :])
   return data, body
@@ -168,16 +174,16 @@ def safe_document_path(
       The file path (not required to exist).
 
   Raises:
-      ValueError: `slug` doesn't match `pattern`, or the resolved path (after
-          following any symlinks) would land outside `directory`.
+      InvalidSlugError: `slug` doesn't match `pattern`, or the resolved path
+          (after following any symlinks) would land outside `directory`.
 
   """
   if not pattern.fullmatch(slug):
-    raise ValueError(f'invalid slug: {slug!r}')
+    raise InvalidSlugError(f'invalid slug: {slug!r}')
   base = directory.resolve()
   candidate = (directory / f'{slug}{suffix}').resolve()
   if candidate != base and base not in candidate.parents:
-    raise ValueError(f'slug escapes the collection directory: {slug!r}')
+    raise InvalidSlugError(f'slug escapes the collection directory: {slug!r}')
   return directory / f'{slug}{suffix}'
 
 
@@ -186,7 +192,35 @@ def compute_etag(text: str) -> str:
   return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
-class ConflictError(Exception):
+class StoreError(Exception):
+  """Base class for every error the document store raises."""
+
+
+class InvalidSlugError(StoreError, ValueError):
+  """The slug doesn't match the collection pattern or leaves its directory."""
+
+
+class ParseError(StoreError, ValueError):
+  """The file can't be parsed (bad encoding or invalid YAML frontmatter)."""
+
+
+class NotFoundError(StoreError, FileNotFoundError):
+  """The document doesn't exist.
+
+  Inherits `FileNotFoundError` (unlike a bare `LookupError`) so existing
+  `except FileNotFoundError` callers keep working unchanged.
+  """
+
+
+class OperationNotAllowedError(StoreError, PermissionError):
+  """The collection forbids the operation (`create=False` or `delete=False`).
+
+  Inherits `PermissionError` so existing `except PermissionError` callers
+  keep working unchanged.
+  """
+
+
+class ConflictError(StoreError):
   """A `DocumentStore.write`/`delete` precondition wasn't met.
 
   Attributes:
@@ -245,12 +279,16 @@ class Collection:
           (see `atomic_write_text`), never just by reading or listing.
       slug_pattern: Compiled regex the whole slug must match (default:
           lowercase letters, digits, hyphens, max 100 chars, see
-          `DEFAULT_SLUG_PATTERN`).
+          `DEFAULT_SLUG_PATTERN`). May also be given as a string template
+          using `{dirname}` and `{filename}` as placeholders for one slug
+          segment each (TODO 4.6); it is compiled in `__post_init__`.
       extension: One file extension, or several to also read/list (the first
           is what new documents are written with), without the leading dot.
-      depth: Nested-collection depth. Only `0` (flat, no subdirectories) is
-          implemented so far; anything else raises `NotImplementedError`
-          (TODO 4.6 is not done).
+      depth: Nested-collection depth (TODO 4.6). `0` (default) is flat: no
+          subdirectories, the slug is a file name. `N > 0` allows up to `N`
+          levels of subdirectories; the slug is then the relative path
+          without the extension (`a/b/0001-x`), each segment is checked
+          against `slug_pattern`, and at most `N` of them are directories.
       create: When `False`, `DocumentStore.write` refuses to create a new
           document (an existing one can still be rewritten).
       delete: When `False`, `DocumentStore.delete` always refuses.
@@ -259,7 +297,7 @@ class Collection:
 
   name: str
   dir: Path
-  slug_pattern: re.Pattern[str] = DEFAULT_SLUG_PATTERN
+  slug_pattern: re.Pattern[str] | str = DEFAULT_SLUG_PATTERN
   extension: str | tuple[str, ...] = 'md'
   depth: int = 0
   create: bool = True
@@ -269,11 +307,14 @@ class Collection:
     object.__setattr__(self, 'dir', Path(self.dir))
     if not self.extensions:
       raise ValueError(f'collection {self.name!r} needs at least one extension')
-    if self.depth != 0:
-      raise NotImplementedError(
-        f'collection {self.name!r}: depth > 0 (nested collections) is not '
-        'implemented yet (see TODO.md, 4.6)'
-      )
+    if self.depth < 0:
+      raise ValueError(f'collection {self.name!r}: depth must be >= 0')
+    if isinstance(self.slug_pattern, str):
+      # A template pattern may use `{dirname}`/`{filename}` as placeholders
+      # for one slug segment each (directory portion / file name).
+      pattern = self.slug_pattern.replace('{dirname}', _SLUG_SEGMENT)
+      pattern = pattern.replace('{filename}', _SLUG_SEGMENT)
+      object.__setattr__(self, 'slug_pattern', re.compile(pattern))
 
   @property
   def extensions(self) -> tuple[str, ...]:
@@ -303,11 +344,19 @@ class DocumentStore:
     self.collection = collection
     self._lock = threading.Lock()
 
+  def _check_slug(self, slug: str) -> None:
+    """Raise InvalidSlugError unless `slug` is valid for this collection."""
+    if len(slug.split('/')) - 1 > self.collection.depth:
+      raise InvalidSlugError(
+        f'invalid slug (deeper than depth {self.collection.depth}): {slug!r}'
+      )
+
   def _candidate(self, slug: str, ext: str) -> Path:
+    self._check_slug(slug)
     return safe_document_path(
       self.collection.dir,
       slug,
-      pattern=self.collection.slug_pattern,
+      pattern=cast(re.Pattern[str], self.collection.slug_pattern),
       suffix=f'.{ext}',
     )
 
@@ -319,8 +368,8 @@ class DocumentStore:
     slug before touching the filesystem.
 
     Raises:
-        ValueError: `slug` is invalid (see `safe_document_path`); checked
-            once regardless of how many extensions are configured.
+        InvalidSlugError: `slug` is invalid (see `safe_document_path`);
+            checked once regardless of how many extensions are configured.
 
     """
     candidates = [
@@ -332,12 +381,30 @@ class DocumentStore:
     return None
 
   def list(self) -> list[str]:
-    """Return the slug of every document in the collection, in no particular order."""
+    """Return the slug of every document, flat or nested, unsorted.
+
+    With `depth > 0` a slug is the document's path relative to the
+    collection directory without its extension (`a/b/0001-x`); files whose
+    relative slug the collection would reject are skipped.
+    """
     if not self.collection.dir.is_dir():
       return []
     slugs: list[str] = []
     for ext in self.collection.extensions:
-      slugs.extend(path.stem for path in self.collection.dir.glob(f'*.{ext}'))
+      for path in self.collection.dir.rglob(f'*.{ext}'):
+        if not path.is_file():
+          continue
+        rel = path.relative_to(self.collection.dir).with_suffix('')
+        slug = rel.as_posix()
+        try:
+          self._check_slug(slug)
+        except ValueError:
+          continue
+        if not cast(re.Pattern[str], self.collection.slug_pattern).fullmatch(
+          slug
+        ):
+          continue
+        slugs.append(slug)
     return slugs
 
   def exists(self, slug: str) -> bool:
@@ -354,14 +421,18 @@ class DocumentStore:
     """Read and parse a document by slug.
 
     Raises:
-        ValueError: `slug` is invalid.
-        FileNotFoundError: No document with this slug exists.
+        InvalidSlugError: `slug` is invalid.
+        NotFoundError: No document with this slug exists.
+        ParseError: The file isn't valid UTF-8 or its frontmatter is bad.
 
     """
     path = self.path_for(slug)
     if path is None:
-      raise FileNotFoundError(f'document not found: {slug!r}')
-    text = path.read_text(encoding='utf-8')
+      raise NotFoundError(f'document not found: {slug!r}')
+    try:
+      text = path.read_text(encoding='utf-8')
+    except UnicodeDecodeError as exc:
+      raise ParseError(f'{slug}: the file is not valid UTF-8') from exc
     frontmatter, body = parse_document(text)
     return DocumentRecord(
       slug=slug, frontmatter=frontmatter, body=body, etag=compute_etag(text)
@@ -387,8 +458,9 @@ class DocumentStore:
             still doesn't.
 
     Raises:
-        ValueError: `slug` is invalid or escapes the collection directory.
-        PermissionError: The document doesn't exist yet and
+        InvalidSlugError: `slug` is invalid or escapes the collection
+            directory.
+        OperationNotAllowedError: The document doesn't exist yet and
             `collection.create` is `False`.
         ConflictError: `if_match` doesn't match the document's current state:
             409 if the document doesn't exist, 412 if it exists with a
@@ -405,7 +477,7 @@ class DocumentStore:
       if if_match != current_etag:
         raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
     if existing_path is None and not self.collection.create:
-      raise PermissionError(
+      raise OperationNotAllowedError(
         f'collection {self.collection.name!r} does not allow creating new documents'
       )
     # An update keeps whatever extension the document was already stored
@@ -428,23 +500,48 @@ class DocumentStore:
             document's current etag.
 
     Raises:
-        ValueError: `slug` is invalid.
-        PermissionError: `collection.delete` is `False`.
-        FileNotFoundError: No document with this slug exists.
+        InvalidSlugError: `slug` is invalid.
+        OperationNotAllowedError: `collection.delete` is `False`.
+        NotFoundError: No document with this slug exists.
         ConflictError: 412, `if_match` doesn't match the document's current
             etag.
 
     """
     if not self.collection.delete:
-      raise PermissionError(
+      raise OperationNotAllowedError(
         f'collection {self.collection.name!r} does not allow deleting documents'
       )
     path = self.path_for(slug)
     if path is None:
-      raise FileNotFoundError(f'document not found: {slug!r}')
+      raise NotFoundError(f'document not found: {slug!r}')
     if if_match is not None:
       current_etag = compute_etag(path.read_text(encoding='utf-8'))
       if if_match != current_etag:
         raise ConflictError(f'etag mismatch for {slug!r}', status_code=412)
     with self._lock:
       path.unlink()
+
+
+def blog_collections(
+  posts_dirname: str | Path = 'posts',
+  pages_dirname: str | Path = 'pages',
+) -> dict[str, Collection]:
+  """Build the two standard collections behind the directory-name sugar.
+
+  `posts_dirname`/`pages_dirname` stay the public API surface (TODO 4.6);
+  internally every caller builds its `Collection`s here, in one place,
+  instead of hand-rolling `store.Collection('posts', ...)` at each site.
+
+  Args:
+      posts_dirname: Directory holding the blog posts.
+      pages_dirname: Directory holding the pages.
+
+  Returns:
+      Mapping with `'posts'` and `'pages'` collections (flat, the default
+      slug shape and extension); wrap the one you need in a `DocumentStore`.
+
+  """
+  return {
+    'posts': Collection('posts', Path(posts_dirname)),
+    'pages': Collection('pages', Path(pages_dirname)),
+  }

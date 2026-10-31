@@ -206,9 +206,7 @@ def get_api_router(
   api_router = APIRouter(tags=['editor'])
   Payload = payload_model(strict, frontmatter_schema)
   slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
-  docs = store.DocumentStore(
-    store.Collection('posts', pathlib.Path(posts_dirname), slug_pattern=SLUG_RE)
-  )
+  docs = store.DocumentStore(store.blog_collections(posts_dirname)['posts'])
 
   def _require_if_match(if_match: str | None) -> None:
     if require_if_match and if_match is None:

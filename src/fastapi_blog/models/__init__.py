@@ -18,9 +18,11 @@ from .schema import (
   MISSING,
   RESERVED_NAMES,
   ROLES,
+  ROBOTS_DIRECTIVES,
   FieldSpec,
   FrontmatterSchema,
   JsonLdConfig,
+  SeoConfig,
 )
 
 
@@ -30,9 +32,11 @@ __all__ = [
   'MISSING',
   'RESERVED_NAMES',
   'ROLES',
+  'ROBOTS_DIRECTIVES',
   'FieldSpec',
   'FrontmatterSchema',
   'JsonLdConfig',
+  'SeoConfig',
   'SLUG_PATTERN',
   'SLUG_RE',
   'Slug',

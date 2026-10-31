@@ -1,8 +1,19 @@
-"""Tests for JSON-LD emission (TODO phase C, 5.2-5.4)."""
+"""Tests for JSON-LD emission (TODO phase C, 5.2-5.4, 5.5, 5.6)."""
+
+import urllib.request
 
 import pytest
 
-from fastapi_blog.jsonld import collection_to_jsonld, document_to_jsonld
+from fastapi_blog.jsonld import (
+  ContextUnavailableError,
+  JsonLdError,
+  collection_to_jsonld,
+  document_to_jsonld,
+  resolve_context,
+)
+from fastapi_blog.jsonld import (
+  uncovered_keys as jsonld_uncovered_keys,
+)
 from fastapi_blog.models import FieldSpec, FrontmatterSchema, JsonLdConfig
 
 
@@ -235,3 +246,264 @@ def test_collection_to_jsonld_is_deterministic_regardless_of_input_order():
   result1 = collection_to_jsonld(docs_order_1, schema=NOTES_SCHEMA)
   result2 = collection_to_jsonld(docs_order_2, schema=NOTES_SCHEMA)
   assert result1 == result2
+
+
+# --- Lost terms (TODO 5.6) ---------------------------------------------------
+
+
+def test_uncovered_keys_reports_terms_the_context_drops():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('doc_id', alias='@id', type='str'),
+      FieldSpec('title', required=True, role='title'),
+      FieldSpec('note_status', alias='status'),
+    ),
+    jsonld=JsonLdConfig(context={'title': 'https://example.org/title'}),
+  )
+  assert jsonld_uncovered_keys(schema) == ['status']
+
+
+def test_uncovered_keys_covers_compact_iris_through_the_prefix():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('state', alias='ex:state'),),
+    jsonld=JsonLdConfig(context={'ex': 'https://example.org/'}),
+  )
+  assert jsonld_uncovered_keys(schema) == []
+
+
+def test_uncovered_keys_vocab_covers_everything():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context={'@vocab': 'https://example.org/#'}),
+  )
+  assert jsonld_uncovered_keys(schema) == []
+
+
+def test_uncovered_keys_counts_the_content_term():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(
+      context={'title': 'https://example.org/title'}, content_term='content'
+    ),
+  )
+  assert jsonld_uncovered_keys(schema) == ['content']
+
+
+def test_uncovered_keys_merges_a_list_of_contexts():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('date', type='date'),
+    ),
+    jsonld=JsonLdConfig(
+      context=[
+        {'title': 'https://example.org/title'},
+        {'date': 'https://example.org/date'},
+      ]
+    ),
+  )
+  assert jsonld_uncovered_keys(schema) == []
+
+
+def test_uncovered_keys_skips_context_urls_without_loading_them():
+  """A URL context item can't be inspected; it must not crash the check."""
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context=['https://example.org/context.jsonld']),
+  )
+  assert jsonld_uncovered_keys(schema) == ['title']
+
+
+def test_uncovered_keys_without_context_covers_nothing():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+  )
+  assert jsonld_uncovered_keys(schema) == ['title']
+
+
+# --- Contexts: files and remote URLs (TODO 5.5) -------------------------------
+
+
+def test_resolve_context_returns_none_without_a_config_or_context():
+  assert resolve_context(FrontmatterSchema()) is None
+  schema = FrontmatterSchema(jsonld=JsonLdConfig(type='Note'))
+  assert resolve_context(schema) is None
+
+
+def test_resolve_context_loads_a_file_inside_the_project(tmp_path):
+  (tmp_path / 'ctx.yaml').write_text(
+    '"@context":\n  title: https://example.org/t\n', encoding='utf-8'
+  )
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context='ctx.yaml'),
+  )
+  assert resolve_context(schema, project_root=tmp_path) == {
+    'title': 'https://example.org/t'
+  }
+
+
+def test_resolve_context_refuses_a_file_outside_the_project(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context='../outside.yaml'),
+  )
+  with pytest.raises(ContextUnavailableError, match='outside the project'):
+    resolve_context(schema, project_root=tmp_path)
+
+
+def test_resolve_context_enforces_the_file_size_limit(tmp_path):
+  (tmp_path / 'big.yaml').write_text(
+    '"@context":\n  title: https://example.org/t\n', encoding='utf-8'
+  )
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context='big.yaml', max_context_bytes=4),
+  )
+  with pytest.raises(ContextUnavailableError, match='larger'):
+    resolve_context(schema, project_root=tmp_path)
+
+
+def test_resolve_context_refuses_a_url_not_in_the_allowlist(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context='https://evil.example/c.jsonld'),
+  )
+  with pytest.raises(ContextUnavailableError, match='allow_remote_contexts'):
+    resolve_context(schema, project_root=tmp_path)
+
+
+def test_resolve_context_fetches_an_allowed_url(monkeypatch, tmp_path):
+  """An allow-listed URL is fetched through a size-limited opener."""
+
+  class _FakeResponse:
+    def __init__(self, data):
+      self._data = data
+
+    def read(self, limit):
+      return self._data[:limit]
+
+    def __enter__(self):
+      return self
+
+    def __exit__(self, *args):
+      return False
+
+  class _FakeOpener:
+    def __init__(self, data):
+      self._data = data
+
+    def open(self, request, timeout):
+      return _FakeResponse(self._data)
+
+  payload = b'{"@context": {"title": "https://example.org/t"}}'
+  monkeypatch.setattr(
+    urllib.request,
+    'build_opener',
+    lambda *handlers: _FakeOpener(payload),
+  )
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(
+      context='https://example.org/c.jsonld',
+      allow_remote_contexts=['https://example.org/c.jsonld'],
+    ),
+  )
+  assert resolve_context(schema, project_root=tmp_path) == {
+    'title': 'https://example.org/t'
+  }
+
+
+def test_resolve_context_reports_a_url_over_the_size_limit(
+  monkeypatch, tmp_path
+):
+  class _FakeResponse:
+    def read(self, limit):
+      return b'x' * (limit + 1)
+
+    def __enter__(self):
+      return self
+
+    def __exit__(self, *args):
+      return False
+
+  class _FakeOpener:
+    def open(self, request, timeout):
+      return _FakeResponse()
+
+  monkeypatch.setattr(
+    urllib.request, 'build_opener', lambda *handlers: _FakeOpener()
+  )
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(
+      context='https://example.org/c.jsonld',
+      allow_remote_contexts=['https://example.org/c.jsonld'],
+      max_context_bytes=8,
+    ),
+  )
+  with pytest.raises(ContextUnavailableError, match='larger'):
+    resolve_context(schema, project_root=tmp_path)
+
+
+def test_remote_contexts_need_the_jsonld_extra(monkeypatch, tmp_path):
+  monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(
+      context='https://example.org/c.jsonld',
+      allow_remote_contexts=['https://example.org/c.jsonld'],
+    ),
+  )
+  with pytest.raises(ContextUnavailableError, match='jsonld'):
+    resolve_context(schema, project_root=tmp_path)
+
+
+def test_jsonld_config_validates_the_allowlist_and_limits():
+  with pytest.raises(ValueError, match=r'http\(s\) URLs'):
+    JsonLdConfig(allow_remote_contexts=['ftp://example.org/c'])
+  with pytest.raises(ValueError, match='positive integer'):
+    JsonLdConfig(max_context_bytes=0)
+  with pytest.raises(ValueError, match='positive integer'):
+    JsonLdConfig(max_documents=True)
+  config = JsonLdConfig.from_dict({'allow_remote_contexts': ['https://a/']})
+  assert config.allow_remote_contexts == ('https://a/',)
+
+
+def test_collection_export_respects_max_documents():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(max_documents=1),
+  )
+  with pytest.raises(JsonLdError, match='max_documents'):
+    collection_to_jsonld(
+      [('a', {'title': 'A'}, None), ('b', {'title': 'B'}, None)],
+      schema=schema,
+    )
+
+
+def test_document_export_accepts_a_resolved_context_override():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context={'title': 'x'}),
+  )
+  node = document_to_jsonld(
+    {'title': 'Hi'}, schema=schema, slug='a', context={'title': 'y'}
+  )
+  assert node['@context'] == {'title': 'y'}
+
+
+def test_uncovered_keys_resolves_a_local_context_file(tmp_path):
+  (tmp_path / 'ctx.yaml').write_text(
+    '"@context":\n  title: https://example.org/t\n', encoding='utf-8'
+  )
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('pub_date', alias='date', type='date'),
+    ),
+    jsonld=JsonLdConfig(context='ctx.yaml'),
+  )
+  assert jsonld_uncovered_keys(schema, project_root=tmp_path) == ['date']
+  # Without a project root the file can't be read: nothing is verified.
+  assert jsonld_uncovered_keys(schema) == ['date', 'title']

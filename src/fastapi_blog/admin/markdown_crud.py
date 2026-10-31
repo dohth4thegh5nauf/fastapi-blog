@@ -104,7 +104,7 @@ class MarkdownFileManager:
     self.posts_dir = Path(posts_dir)
     self.schema = schema
     self.store = store.DocumentStore(
-      store.Collection('posts', self.posts_dir, slug_pattern=SLUG_RE)
+      store.blog_collections(self.posts_dir)['posts']
     )
 
   def list_posts(self) -> list[MarkdownPost]:

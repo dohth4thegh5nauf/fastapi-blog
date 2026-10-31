@@ -15,12 +15,26 @@ from . import store
 from .models import (
   DEFAULT_SCHEMA,
   LOOSE_DEFAULT_SCHEMA,
+  FieldSpec,
   FrontmatterSchema,
   frontmatter_model,
 )
 
 
 logger = logging.getLogger(__name__)
+
+# Pages validate against their own schema with the fields they have always
+# had (TODO 4.6), keeping unknown keys (`extra: 'allow'`); a page that
+# doesn't match is still served, with its raw frontmatter (see
+# `load_content_from_markdown_file`).
+PAGES_SCHEMA = FrontmatterSchema(
+  fields=(
+    FieldSpec('title', role='title'),
+    FieldSpec('description', role='description'),
+    FieldSpec('author'),
+  ),
+  extra='allow',
+)
 
 
 def resolve_schema(
@@ -238,9 +252,30 @@ def _read_posts(
 
 
 def load_content_from_markdown_file(
-  path: pathlib.Path, sanitize: bool = False
+  path: pathlib.Path,
+  sanitize: bool = False,
+  schema: FrontmatterSchema | None = PAGES_SCHEMA,
 ) -> dict[str, str | dict]:
+  """Render a markdown page from `path`.
+
+  Args:
+      path: Markdown file to read.
+      sanitize: Sanitize the rendered HTML (as the blog does for posts).
+      schema: Frontmatter schema pages validate against (TODO 4.6; defaults
+          to `PAGES_SCHEMA`, the fields pages have always had). Unknown keys
+          are kept (`extra: 'allow'`); a page that doesn't match the schema
+          is still served, with its raw frontmatter.
+
+  Returns:
+      Dict with `metadata`, `markdown` and `html` keys.
+
+  """
   metadata, markdown_text = store.read_document(path)
+  if schema is not None:
+    try:
+      metadata = schema.dump(schema.model()(**metadata))
+    except ValidationError as exc:
+      logger.warning('Serving %s with raw frontmatter: %s', path, exc)
   page: dict[str, str | dict] = {
     'metadata': metadata,
     'markdown': markdown_text,

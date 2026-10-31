@@ -58,6 +58,15 @@ ROLES: tuple[str, ...] = (
 # Keys the blog sets on every post itself, so a field can't use them as a name.
 RESERVED_NAMES: tuple[str, ...] = ('slug', 'content')
 
+# Robots directives search engines actually act on (TODO 5.9): used by the
+# `robots` role's `choices`, `SeoConfig.default_robots` and the meta output.
+ROBOTS_DIRECTIVES: tuple[str, ...] = (
+  'noindex',
+  'nofollow',
+  'noarchive',
+  'nosnippet',
+)
+
 # How unknown frontmatter keys are handled (same names as in Pydantic).
 EXTRA_MODES: tuple[str, ...] = ('forbid', 'allow', 'ignore')
 
@@ -71,15 +80,37 @@ _TYPES: dict[str, Any] = {
   'date': datetime.date,
   'list[str]': list[str],
   'list[int]': list[int],
+  # A link points to another resource: a slug of the same collection, a
+  # compact IRI (`prefix:name`) or an absolute IRI. It is stored and
+  # checked like `str`; `collection`/`value_field`/`filters` describe the
+  # target for the link check (TODO 6.1) and the admin autocomplete.
+  'link': str,
+  'list[link]': list[str],
+  # A file or an image is a path kept as a string (the public path).
+  'file': str,
+  'image': str,
   'dict': dict[str, Any],
   'any': Any,
 }
 
 # Types that may carry `min_length` / `max_length` constraints.
-_LENGTH_TYPES: tuple[str, ...] = ('str', 'list[str]', 'list[int]')
+_LENGTH_TYPES: tuple[str, ...] = (
+  'str',
+  'link',
+  'file',
+  'image',
+  'list[str]',
+  'list[int]',
+  'list[link]',
+)
 
 # Types whose empty value is a container (a missing/null value becomes empty).
-_CONTAINER_TYPES: tuple[str, ...] = ('list[str]', 'list[int]', 'dict')
+_CONTAINER_TYPES: tuple[str, ...] = (
+  'list[str]',
+  'list[int]',
+  'list[link]',
+  'dict',
+)
 
 # Allowed field types for each role.
 _ROLE_TYPES: dict[str, tuple[str, ...]] = {
@@ -110,17 +141,21 @@ _ON_CREATE_TYPES: dict[str, str] = {
 # Types `choices` is supported for.
 _CHOICE_TYPES: tuple[str, ...] = (
   'str',
+  'link',
+  'file',
+  'image',
   'int',
   'float',
   'list[str]',
   'list[int]',
+  'list[link]',
 )
 
 # Types `min`/`max` are supported for.
 _MIN_MAX_TYPES: tuple[str, ...] = ('int', 'float')
 
 # Types `min_items`/`max_items` are supported for.
-_ITEMS_TYPES: tuple[str, ...] = ('list[str]', 'list[int]')
+_ITEMS_TYPES: tuple[str, ...] = ('list[str]', 'list[int]', 'list[link]')
 
 
 class _Missing:
@@ -179,6 +214,16 @@ class FieldSpec:
           the same field.
       max_items: Maximum length, for `list[str]`/`list[int]` fields.
           Mutually exclusive with `max_length` on the same field.
+      collection: For `link` fields: the target collection (default: the
+          same one).
+      value_field: For `link` fields: the target field whose value is stored
+          (default: the field with the alias `@id`, else the slug).
+      filters: For `link` fields: a list of `{field, values}`; only
+          documents whose field has one of the values are valid targets.
+      media_dir: For `file`/`image` fields: the directory of the files,
+          relative to the project root (no absolute paths, no `..`).
+      public_path: For `file`/`image` fields: the prefix of the stored path
+          (default: `media_dir`). Needs `media_dir`.
 
   """
 
@@ -204,6 +249,11 @@ class FieldSpec:
   max: int | float | None = None
   min_items: int | None = None
   max_items: int | None = None
+  collection: str | None = None
+  value_field: str | None = None
+  filters: tuple[dict[str, Any], ...] | None = None
+  media_dir: str | None = None
+  public_path: str | None = None
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -280,7 +330,7 @@ class FieldSpec:
           )
     if self.pattern is not None:
       object.__setattr__(self, 'pattern', _normalize_pattern(self.pattern))
-      if self.type != 'str':
+      if self.type not in ('str', 'link', 'file', 'image'):
         raise ValueError(
           f'`pattern` is not supported for type {self.type!r} '
           f'(field {self.name!r}); did you mean `item_pattern`?'
@@ -289,10 +339,10 @@ class FieldSpec:
       object.__setattr__(
         self, 'item_pattern', _normalize_pattern(self.item_pattern)
       )
-      if self.type != 'list[str]':
+      if self.type not in ('list[str]', 'list[link]'):
         raise ValueError(
           f'`item_pattern` is not supported for type {self.type!r} '
-          f"(field {self.name!r}); it needs type 'list[str]'"
+          f"(field {self.name!r}); it needs type 'list[str]' or 'list[link]'"
         )
     has_min_max = self.min is not None or self.max is not None
     if has_min_max and self.type not in _MIN_MAX_TYPES:
@@ -314,11 +364,76 @@ class FieldSpec:
       raise ValueError(
         f'Field {self.name!r} sets both `max_items` and `max_length`; use one'
       )
+    self._check_link_options()
+    self._check_file_options()
+
+  def _check_link_options(self) -> None:
+    """Validate `collection`/`value_field`/`filters` (TODO 5.1 link type)."""
+    options = ('collection', 'value_field', 'filters')
+    if not self.is_link:
+      for option in options:
+        if getattr(self, option) is not None:
+          raise ValueError(
+            f'`{option}` needs a `link` or `list[link]` field, got '
+            f'{self.type!r} (field {self.name!r})'
+          )
+      return
+    for option in ('collection', 'value_field'):
+      value = getattr(self, option)
+      if value is not None and (not isinstance(value, str) or not value):
+        raise ValueError(f'`{option}` of field {self.name!r} must be a string')
+    if self.filters is None:
+      return
+    if not isinstance(self.filters, list | tuple) or not self.filters:
+      raise ValueError(f'`filters` of field {self.name!r} must be a list')
+    cleaned: list[dict[str, Any]] = []
+    for item in self.filters:
+      if (
+        not isinstance(item, Mapping)
+        or set(item) != {'field', 'values'}
+        or not isinstance(item['field'], str)
+        or not isinstance(item['values'], list | tuple)
+        or not item['values']
+      ):
+        raise ValueError(
+          f'Each filter of field {self.name!r} must be '
+          '`{field: NAME, values: [...]}`'
+        )
+      cleaned.append({'field': item['field'], 'values': list(item['values'])})
+    object.__setattr__(self, 'filters', tuple(cleaned))
+
+  def _check_file_options(self) -> None:
+    """Validate `media_dir`/`public_path` (TODO 5.1 file/image types)."""
+    for option in ('media_dir', 'public_path'):
+      value = getattr(self, option)
+      if value is None:
+        continue
+      if self.type not in ('file', 'image'):
+        raise ValueError(
+          f'`{option}` needs a `file` or `image` field, got {self.type!r} '
+          f'(field {self.name!r})'
+        )
+      if not isinstance(value, str) or not value:
+        raise ValueError(f'`{option}` of field {self.name!r} must be a string')
+    if self.public_path is not None and self.media_dir is None:
+      raise ValueError(f'`public_path` needs `media_dir` (field {self.name!r})')
+    if self.media_dir is not None and (
+      self.media_dir.startswith('/') or '..' in self.media_dir.split('/')
+    ):
+      raise ValueError(
+        f'`media_dir` of field {self.name!r} must be a relative path inside '
+        'the project'
+      )
 
   @property
   def key(self) -> str:
     """Return the key used in the markdown file (alias or name)."""
     return self.alias or self.name
+
+  @property
+  def is_link(self) -> bool:
+    """Return whether the field holds links (`link` or `list[link]`)."""
+    return self.type in ('link', 'list[link]')
 
   def to_dict(self) -> dict[str, Any]:
     """Return non-default options as a plain dict (without the name)."""
@@ -337,14 +452,12 @@ class FieldSpec:
 class JsonLdConfig:
   """A schema's `jsonld` section (TODO 5.3): JSON-LD defaults for a collection.
 
-  Nothing here is resolved or validated by this module — `fastapi_blog.jsonld`
-  (TODO 5.4) is what turns a document into JSON-LD using it.
-
   Attributes:
-      context: The `@context` value emitted as-is: an inline mapping, or a
-          list of mappings/URLs. Loading `context` from a local file (TODO
-          5.5, needs the `jsonld` extra) isn't implemented yet — pass the
-          already-loaded mapping instead.
+      context: The `@context` value: an inline mapping, a path to a file
+          inside the project root, a URL (only with `allow_remote_contexts`),
+          or a list of them. Files and URLs are loaded by
+          `fastapi_blog.jsonld.resolve_context` (TODO 5.5); nothing in a
+          context is ever executed.
       base: Base IRI substituted into `id_template`'s `{base}` placeholder.
       id_template: Used for a document's `@id` when no field has
           `alias='@id'`. A plain `str.format()` template with `{base}`,
@@ -354,6 +467,11 @@ class JsonLdConfig:
       type: Default `@type` when no field has `alias='@type'`.
       content_term: JSON-LD term the document body is emitted under (the
           raw Markdown, not rendered HTML). `None` (default) omits the body.
+      allow_remote_contexts: URLs of remote contexts that may be fetched
+          (TODO 5.5). Needs the `jsonld` extra; the default is no remote
+          contexts at all.
+      max_context_bytes: Size limit of one context, in bytes.
+      max_documents: Limit of documents in one exported `@graph`.
 
   """
 
@@ -362,6 +480,25 @@ class JsonLdConfig:
   id_template: str | None = None
   type: str | None = None
   content_term: str | None = None
+  allow_remote_contexts: tuple[str, ...] = ()
+  max_context_bytes: int = 262144
+  max_documents: int = 10000
+
+  def __post_init__(self) -> None:
+    object.__setattr__(
+      self, 'allow_remote_contexts', tuple(self.allow_remote_contexts)
+    )
+    for url in self.allow_remote_contexts:
+      if not isinstance(url, str) or not url.startswith(
+        ('https://', 'http://')
+      ):
+        raise ValueError(
+          f'`jsonld.allow_remote_contexts` must list http(s) URLs, got {url!r}'
+        )
+    for key in ('max_context_bytes', 'max_documents'):
+      value = getattr(self, key)
+      if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f'`jsonld.{key}` must be a positive integer')
 
   def to_dict(self) -> dict[str, Any]:
     """Return non-default options as a plain dict."""
@@ -379,7 +516,122 @@ class JsonLdConfig:
     unknown = set(data) - known
     if unknown:
       raise ValueError(f'Unknown jsonld option(s): {sorted(unknown)}')
-    return cls(**data)
+    values = dict(data)
+    if 'allow_remote_contexts' in values:
+      values['allow_remote_contexts'] = tuple(
+        values['allow_remote_contexts'] or ()
+      )
+    return cls(**values)
+
+
+@dataclasses.dataclass(frozen=True)
+class SeoConfig:
+  """A schema's `seo` section (TODO 5.9.2): site-wide SEO settings.
+
+  With no `seo` section and no `seo=` argument the blog behaves as before
+  TODO 5.9 (П6: only the 5.9.6 fixes apply). The substitution order and the
+  `<head>`/social-tag output that consume these settings are TODO 5.9.3 and
+  5.9.4. Value errors carry the offending `seo.<key>` name.
+
+  Attributes:
+      site_url: Base of absolute addresses; in production set it always.
+          Without it, absolute addresses are built from the request URL.
+      site_name: Site name, used by `title_template` and the page header.
+      title_template: Applied to a non-empty title, e.g.
+          `'{title} - {site_name}'`. Until TODO 6.4 lands this is a plain
+          `str.format()` template with the same names.
+      default_image: Fallback for the `image` role (og:image and friends).
+      default_author: Fallback for the `author` role.
+      default_robots: Merged with a document's `robots` role value; only
+          `noindex`/`nofollow`/`noarchive`/`nosnippet` are allowed.
+      index_description: Description for the index and list pages.
+      og: Emit Open Graph tags (only when the tag has a value).
+      twitter_card: `summary`, `summary_large_image` or `None` (off).
+      structured_data: `blogposting`, `article` or `none` (default).
+      description_fallback: `excerpt` (first `description_length` characters
+          of the plain-text body) or `none` (default).
+      description_length: Length cap for the excerpt fallback.
+      noindex_tags: Give tag pages a `robots` `noindex` directive.
+
+  """
+
+  site_url: str | None = None
+  site_name: str | None = None
+  title_template: str | None = None
+  default_image: str | None = None
+  default_author: str | None = None
+  default_robots: tuple[str, ...] = ()
+  index_description: str | None = None
+  og: bool = False
+  twitter_card: str | None = None
+  structured_data: str = 'none'
+  description_fallback: str = 'none'
+  description_length: int = 160
+  noindex_tags: bool = False
+
+  def __post_init__(self) -> None:
+    object.__setattr__(self, 'default_robots', tuple(self.default_robots))
+    for key in (
+      'site_url',
+      'site_name',
+      'title_template',
+      'default_image',
+      'default_author',
+      'index_description',
+    ):
+      value = getattr(self, key)
+      if value is not None and (not isinstance(value, str) or not value):
+        raise ValueError(f'`seo.{key}` must be a non-empty string')
+    if self.site_url is not None and not self.site_url.startswith(
+      ('http://', 'https://')
+    ):
+      raise ValueError(f'`seo.site_url` must start with http(s)://')
+    for directive in self.default_robots:
+      if directive not in ROBOTS_DIRECTIVES:
+        raise ValueError(
+          f'`seo.default_robots` has unknown directive {directive!r}; '
+          f'allowed: {", ".join(ROBOTS_DIRECTIVES)}'
+        )
+    if self.twitter_card not in (None, 'summary', 'summary_large_image'):
+      raise ValueError(
+        '`seo.twitter_card` must be summary, summary_large_image or null'
+      )
+    if self.structured_data not in ('blogposting', 'article', 'none'):
+      raise ValueError(
+        '`seo.structured_data` must be blogposting, article or none'
+      )
+    if self.description_fallback not in ('excerpt', 'none'):
+      raise ValueError('`seo.description_fallback` must be excerpt or none')
+    if (
+      not isinstance(self.description_length, int)
+      or isinstance(self.description_length, bool)
+      or self.description_length < 1
+    ):
+      raise ValueError('`seo.description_length` must be a positive integer')
+    for key in ('og', 'noindex_tags'):
+      if not isinstance(getattr(self, key), bool):
+        raise ValueError(f'`seo.{key}` must be true or false')
+
+  def to_dict(self) -> dict[str, Any]:
+    """Return non-default options as a plain dict."""
+    result: dict[str, Any] = {}
+    for item in dataclasses.fields(self):
+      value = getattr(self, item.name)
+      if value != item.default:
+        result[item.name] = value
+    return result
+
+  @classmethod
+  def from_dict(cls, data: Mapping[str, Any]) -> 'SeoConfig':
+    """Build from a plain dict (the `seo:` section of a schema file)."""
+    known = {item.name for item in dataclasses.fields(cls)}
+    unknown = set(data) - known
+    if unknown:
+      raise ValueError(f'Unknown seo option(s): {sorted(unknown)}')
+    values = dict(data)
+    if 'default_robots' in values:
+      values['default_robots'] = tuple(values['default_robots'] or ())
+    return cls(**values)
 
 
 @dataclasses.dataclass(eq=False)
@@ -429,6 +681,7 @@ class FrontmatterSchema:
   fields: tuple[FieldSpec, ...] = ()
   extra: str = 'forbid'
   jsonld: JsonLdConfig | None = None
+  seo: SeoConfig | None = None
   published_values: tuple[str, ...] | None = None
   _model: Any = dataclasses.field(default=None, init=False, repr=False)
   _payload_model: Any = dataclasses.field(default=None, init=False, repr=False)
@@ -581,7 +834,10 @@ class FrontmatterSchema:
             returned by `read_document`); ignored when `is_create`.
 
     Returns:
-        Dict with the frontmatter values, by external key (alias).
+        Dict with the frontmatter values, by external key (alias). On an
+        update with `existing` given, the dump is merged over the file's
+        current frontmatter (see `_merge_for_rewrite`): the file's key
+        order and, with `extra: 'allow'`, its unknown keys are preserved.
 
     Raises:
         ValueError: A `read_only` field's value would change.
@@ -602,7 +858,41 @@ class FrontmatterSchema:
         raise ValueError(
           f'Field {spec.name!r} is read-only and cannot be changed'
         )
-    return self.dump(instance, by_alias=True)
+    dumped = self.dump(instance, by_alias=True)
+    if is_create or existing is None:
+      return dumped
+    return self._merge_for_rewrite(dumped, existing)
+
+  def _merge_for_rewrite(
+    self, dumped: dict[str, Any], existing: Mapping[str, Any]
+  ) -> dict[str, Any]:
+    """Merge an update dump over the document's current frontmatter (4.5).
+
+    Known keys take their new values in the positions they already occupy;
+    a known key emptied to `None` is not written back; unknown keys survive
+    only when `extra` is `'allow'`; schema fields the file doesn't have yet
+    are appended in schema order. `existing` is keyed by external key, as
+    read from the file.
+
+    Args:
+        dumped: The update dump (`by_alias`); values are never `None`.
+        existing: The document's current frontmatter, by external key.
+
+    Returns:
+        The frontmatter to write, in the file's original key order.
+
+    """
+    schema_keys = {spec.key for spec in self.fields}
+    merged: dict[str, Any] = {}
+    for key, value in existing.items():
+      if key in dumped:
+        merged[key] = dumped.pop(key)
+      elif key in schema_keys:
+        continue  # Known field emptied to None: dropped, not written back.
+      elif self.extra == 'allow':
+        merged[key] = value
+    merged.update(dumped)
+    return merged
 
   def to_dict(self) -> dict[str, Any]:
     """Return the schema as a plain dict (the format `from_dict` reads)."""
@@ -612,6 +902,8 @@ class FrontmatterSchema:
     }
     if self.jsonld is not None:
       result['jsonld'] = self.jsonld.to_dict()
+    if self.seo is not None:
+      result['seo'] = self.seo.to_dict()
     if self.published_values is not None:
       result['published_values'] = list(self.published_values)
     return result
@@ -641,6 +933,7 @@ class FrontmatterSchema:
     raw_fields = data.pop('fields', None) or {}
     extra = data.pop('extra', 'forbid')
     raw_jsonld = data.pop('jsonld', None)
+    raw_seo = data.pop('seo', None)
     raw_published_values = data.pop('published_values', None)
     if data:
       raise ValueError(f'Unknown schema key(s): {sorted(data)}')
@@ -660,6 +953,7 @@ class FrontmatterSchema:
     jsonld = (
       JsonLdConfig.from_dict(raw_jsonld) if raw_jsonld is not None else None
     )
+    seo = SeoConfig.from_dict(raw_seo) if raw_seo is not None else None
     published_values = (
       tuple(raw_published_values) if raw_published_values is not None else None
     )
@@ -667,6 +961,7 @@ class FrontmatterSchema:
       fields=tuple(specs),
       extra=extra,
       jsonld=jsonld,
+      seo=seo,
       published_values=published_values,
     )
 

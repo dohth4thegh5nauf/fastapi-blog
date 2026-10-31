@@ -91,7 +91,10 @@ def _export_graph(args: argparse.Namespace) -> dict[str, Any]:
     documents.append((slug, record.frontmatter, record.body.strip()))
 
   return jsonld_module.collection_to_jsonld(
-    documents, schema=schema, collection=args.collection
+    documents,
+    schema=schema,
+    collection=args.collection,
+    context=jsonld_module.resolve_context(schema),
   )
 
 
@@ -123,7 +126,7 @@ def _render(graph: dict[str, Any], fmt: str) -> str | None:
 def _cmd_export(args: argparse.Namespace) -> int:
   try:
     graph = _export_graph(args)
-  except (ValueError, OSError) as exc:
+  except (ValueError, OSError, jsonld_module.JsonLdError) as exc:
     print(f'error: {exc}', file=sys.stderr)
     return EXIT_USAGE_ERROR
 

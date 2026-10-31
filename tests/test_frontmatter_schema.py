@@ -705,3 +705,143 @@ def test_label_hint_hidden_round_trip_through_to_dict():
     'hint': 'Lifecycle state',
     'hidden': True,
   }
+
+
+# --- Merge on rewrite (TODO 4.5) ---------------------------------------------
+
+
+def _loose_title_schema(extra='allow'):
+  return FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),), extra=extra
+  )
+
+
+def test_update_preserves_unknown_keys_and_file_order():
+  schema = _loose_title_schema()
+  existing = {'zeta': 1, 'title': 'Old', 'alpha': 2}
+  instance = schema.model()(title='New')
+  result = schema.dump_for_write(instance, is_create=False, existing=existing)
+  assert result == {'zeta': 1, 'title': 'New', 'alpha': 2}
+  assert list(result) == ['zeta', 'title', 'alpha']
+
+
+def test_update_with_extra_ignore_drops_unknown_keys():
+  schema = _loose_title_schema(extra='ignore')
+  existing = {'title': 'Old', 'legacy': True}
+  instance = schema.model()(title='New')
+  result = schema.dump_for_write(instance, is_create=False, existing=existing)
+  assert result == {'title': 'New'}
+
+
+def test_update_drops_a_known_field_emptied_to_none():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('subtitle'),
+    ),
+    extra='allow',
+  )
+  existing = {'title': 'Old', 'subtitle': 'S', 'other': 1}
+  instance = schema.model()(title='New')
+  result = schema.dump_for_write(instance, is_create=False, existing=existing)
+  assert result == {'title': 'New', 'other': 1}
+
+
+def test_update_appends_schema_fields_the_file_did_not_have():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('tags', type='list[str]'),
+    ),
+    extra='allow',
+  )
+  existing = {'title': 'Old', 'other': 1}
+  instance = schema.model()(title='New', tags=['a'])
+  result = schema.dump_for_write(instance, is_create=False, existing=existing)
+  assert result == {'title': 'New', 'other': 1, 'tags': ['a']}
+
+
+def test_create_does_not_merge():
+  schema = _loose_title_schema()
+  instance = schema.model()(title='New')
+  result = schema.dump_for_write(
+    instance, is_create=True, existing={'legacy': 1}
+  )
+  assert result == {'title': 'New'}
+
+
+# --- link / file / image field types (TODO 5.1) -------------------------------
+
+
+def test_link_type_validates_as_a_string():
+  schema = FrontmatterSchema(fields=(FieldSpec('related', type='link'),))
+  instance = schema.model()(related='some-post')
+  assert schema.dump(instance) == {'related': 'some-post'}
+
+
+def test_link_options_require_a_link_field():
+  with pytest.raises(ValueError, match='needs a `link`'):
+    FieldSpec('title', collection='posts')
+  with pytest.raises(ValueError, match='needs a `link`'):
+    FieldSpec('tags', type='list[str]', filters=[{'field': 'x', 'values': [1]}])
+
+
+def test_link_filters_are_cleaned_to_tuples():
+  spec = FieldSpec(
+    'related',
+    type='link',
+    collection='posts',
+    value_field='title',
+    filters=[{'field': 'kind', 'values': ['a', 'b']}],
+  )
+  assert spec.filters == ({'field': 'kind', 'values': ['a', 'b']},)
+
+
+def test_link_filters_must_have_field_and_values():
+  with pytest.raises(ValueError, match='must be a list'):
+    FieldSpec('related', type='link', filters='nope')
+  with pytest.raises(ValueError, match='Each filter'):
+    FieldSpec('related', type='link', filters=[{'field': 'kind'}])
+
+
+def test_file_and_image_types_validate_their_options():
+  spec = FieldSpec('cover', type='image', media_dir='media', public_path='m/')
+  assert spec.media_dir == 'media'
+  with pytest.raises(ValueError, match='needs a `file` or `image`'):
+    FieldSpec('title', media_dir='media')
+  with pytest.raises(ValueError, match='needs `media_dir`'):
+    FieldSpec('cover', type='image', public_path='m/')
+  with pytest.raises(ValueError, match='relative path'):
+    FieldSpec('cover', type='image', media_dir='/etc')
+  with pytest.raises(ValueError, match='relative path'):
+    FieldSpec('cover', type='file', media_dir='a/../b')
+
+
+def test_pattern_applies_to_link_file_image():
+  for type_name in ('link', 'file', 'image'):
+    spec = FieldSpec('x', type=type_name, pattern=r'[a-z]+')
+    assert spec.pattern == r'[a-z]+'
+
+
+def test_item_pattern_applies_to_list_link():
+  spec = FieldSpec('tags', type='list[link]', item_pattern=r'[a-z]+')
+  assert spec.item_pattern == r'[a-z]+'
+  with pytest.raises(ValueError, match='item_pattern'):
+    FieldSpec('tags', type='list[str]', pattern=r'[a-z]+')
+
+
+def test_schema_round_trip_with_link_and_file_fields():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'related',
+        type='link',
+        collection='posts',
+        filters=[{'field': 'kind', 'values': ['a']}],
+      ),
+      FieldSpec('cover', type='image', media_dir='media/img'),
+    ),
+  )
+  restored = FrontmatterSchema.from_dict(schema.to_dict())
+  assert restored.to_dict() == schema.to_dict()
+  assert restored.fields[0].filters == ({'field': 'kind', 'values': ['a']},)

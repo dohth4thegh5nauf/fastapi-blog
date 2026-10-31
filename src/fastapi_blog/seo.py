@@ -6,22 +6,16 @@ describes. A schema author adds the whole set or a subset, and may rename
 or re-alias any of them — the returned `FieldSpec`s use the role name as
 the field name, nothing more.
 
-Only the *fields* are built here. Nothing reads them yet: `SeoConfig`
-(5.9.2), the substitution order (5.9.3) and the actual `<head>`/social-tag
-output (5.9.4) aren't built yet, so binding these roles has no visible
-effect on a rendered page so far.
+Only the *fields* are built here. `SeoConfig` (TODO 5.9.2, in
+`models/schema.py`) and the `seo=` argument of `add_blog_to_fastapi()`/
+`setup_fastapi_blog()` carry the site-wide settings (`site_name` already
+reaches the page header); the substitution order (5.9.3) and the full
+`<head>`/social-tag output (5.9.4) aren't built yet, so most of these roles
+still have no visible effect on a rendered page.
 """
 
-from .models import FieldSpec
+from .models import ROBOTS_DIRECTIVES, FieldSpec
 
-
-# Robots directives search engines actually act on (TODO 5.9.1's table).
-ROBOTS_DIRECTIVES: tuple[str, ...] = (
-  'noindex',
-  'nofollow',
-  'noarchive',
-  'nosnippet',
-)
 
 # One FieldSpec per SEO role, keyed by role name (also the field's default
 # name — `seo_fields()` returns them in this order).

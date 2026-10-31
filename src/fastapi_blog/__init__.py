@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from .auth import ConfigurationError
 from .editor import add_editor_to_app, get_api_router
 from .main import add_blog_to_fastapi
-from .models import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema
+from .models import DEFAULT_SCHEMA, FieldSpec, FrontmatterSchema, SeoConfig
 from .router import get_blog_router
 
 
@@ -69,6 +69,7 @@ def setup_fastapi_blog(
   secret_key: str | None = None,
   enable_role_management: bool = False,
   frontmatter_schema: FrontmatterSchema | None = None,
+  seo: SeoConfig | None = None,
   admin: bool = True,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
@@ -92,6 +93,8 @@ def setup_fastapi_blog(
       secret_key: Session secret key of the admin panel.
       enable_role_management: Add the role management views to the admin panel.
       frontmatter_schema: Custom schema of the post frontmatter.
+      seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
+          own `seo` section.
       admin: Add the admin panel (needs the `admin` extra). Default: `True`.
 
   Returns:
@@ -124,6 +127,7 @@ def setup_fastapi_blog(
     admin_username=admin_username,
     admin_password=admin_password,
     frontmatter_schema=frontmatter_schema,
+    seo=seo,
   )
   if add_admin is None:
     return {}

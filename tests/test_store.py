@@ -112,9 +112,94 @@ def test_compute_etag_is_stable_and_content_sensitive():
 # --- Collection / DocumentStore (4.1, 4.6, 4.7) -----------------------------
 
 
-def test_collection_rejects_nested_depth(tmp_path):
-  with pytest.raises(NotImplementedError, match='depth'):
-    store.Collection('posts', tmp_path, depth=1)
+def test_collection_rejects_negative_depth(tmp_path):
+  with pytest.raises(ValueError, match='depth'):
+    store.Collection('posts', tmp_path, depth=-1)
+
+
+def test_nested_collection_round_trip(tmp_path):
+  """`depth > 0`: the slug is the relative path without the extension."""
+  docs = store.DocumentStore(
+    store.Collection(
+      'posts', tmp_path, slug_pattern='{dirname}/{filename}', depth=1
+    )
+  )
+  etag = docs.write('notes/hello', {'title': 'Hi'}, 'Body\n')
+  assert docs.exists('notes/hello')
+  record = docs.read('notes/hello')
+  assert record.frontmatter == {'title': 'Hi'}
+  assert record.etag == etag
+  assert (tmp_path / 'notes' / 'hello.md').is_file()
+  assert docs.list() == ['notes/hello']
+  docs.delete('notes/hello')
+  assert not docs.exists('notes/hello')
+
+
+def test_nested_collection_slug_beyond_depth_is_invalid(tmp_path):
+  docs = store.DocumentStore(
+    store.Collection(
+      'posts', tmp_path, slug_pattern='{dirname}/{filename}', depth=1
+    )
+  )
+  with pytest.raises(ValueError, match='invalid slug'):
+    docs.write('a/b/post', {}, '')
+
+
+def test_nested_collection_rejects_path_traversal(tmp_path):
+  docs = store.DocumentStore(
+    store.Collection(
+      'posts', tmp_path, slug_pattern='{dirname}/{filename}', depth=1
+    )
+  )
+  with pytest.raises(ValueError, match='invalid slug'):
+    docs.write('notes/../escape', {}, '')
+
+
+def test_slug_pattern_template_placeholders(tmp_path):
+  """`{dirname}`/`{filename}` expand to one slug segment each."""
+  collection = store.Collection(
+    'posts', tmp_path, slug_pattern='{dirname}/{filename}'
+  )
+  pattern = collection.slug_pattern
+  assert pattern.fullmatch('anything/goes-here-1')
+  assert not pattern.fullmatch('flat')
+  assert not pattern.fullmatch('a/b/c')
+  assert not pattern.fullmatch('a/' + 'x' * 150)
+
+  # Plain regex tokens (`{m,n}` quantifiers, `\d`) survive the expansion.
+  dated = store.Collection(
+    'posts', tmp_path, slug_pattern=r'notes/\d{4}-{filename}'
+  )
+  assert dated.slug_pattern.fullmatch('notes/2024-hello')
+  assert not dated.slug_pattern.fullmatch('blog/2024-hello')
+
+
+def test_nested_collection_list_skips_files_that_are_not_valid_slugs(
+  tmp_path,
+):
+  collection_dir = tmp_path / 'posts'
+  (collection_dir / 'ok').mkdir(parents=True)
+  (collection_dir / 'ok' / 'fine.md').write_text('---\n---\n', encoding='utf-8')
+  (collection_dir / 'ok' / 'BAD NAME.md').write_text(
+    '---\n---\n', encoding='utf-8'
+  )
+  deep = collection_dir / 'a' / 'b'
+  deep.mkdir(parents=True)
+  (deep / 'too-deep.md').write_text('---\n---\n', encoding='utf-8')
+  docs = store.DocumentStore(
+    store.Collection(
+      'posts', collection_dir, slug_pattern='{dirname}/{filename}', depth=1
+    )
+  )
+  assert docs.list() == ['ok/fine']
+
+
+def test_blog_collections_builds_the_two_standard_collections(tmp_path):
+  collections = store.blog_collections(tmp_path / 'posts', 'pages')
+  assert collections['posts'].dir == tmp_path / 'posts'
+  assert str(collections['pages'].dir) == 'pages'
+  assert collections['posts'].depth == 0
+  assert collections['pages'].slug_pattern == store.DEFAULT_SLUG_PATTERN
 
 
 def test_collection_normalizes_extensions(tmp_path):
@@ -258,3 +343,41 @@ def test_document_store_delete_if_match_succeeds_with_current_etag(tmp_path):
   etag = docs.write('x', {}, '')
   docs.delete('x', if_match=etag)
   assert not docs.exists('x')
+
+
+# --- Error hierarchy ----------------------------------------------------------
+
+
+def test_store_errors_form_a_hierarchy_and_keep_builtin_compatibility():
+  """Specific errors subclass StoreError and the builtins callers catch."""
+  assert issubclass(store.InvalidSlugError, store.StoreError)
+  assert issubclass(store.ParseError, store.StoreError)
+  assert issubclass(store.NotFoundError, store.StoreError)
+  assert issubclass(store.OperationNotAllowedError, store.StoreError)
+  assert issubclass(store.ConflictError, store.StoreError)
+  # Existing `except ValueError` / `except FileNotFoundError` /
+  # `except PermissionError` callers keep working unchanged.
+  assert issubclass(store.InvalidSlugError, ValueError)
+  assert issubclass(store.ParseError, ValueError)
+  assert issubclass(store.NotFoundError, FileNotFoundError)
+  assert issubclass(store.OperationNotAllowedError, PermissionError)
+
+
+def test_store_raises_the_specific_errors(tmp_path):
+  docs = store.DocumentStore(store.Collection('posts', tmp_path))
+  with pytest.raises(store.InvalidSlugError, match='invalid slug'):
+    docs.write('../escape', {}, '')
+  with pytest.raises(store.NotFoundError):
+    docs.read('missing')
+  with pytest.raises(store.ParseError, match='invalid YAML'):
+    store.parse_document('---\nkey: [unterminated\n---\nBody\n')
+  with pytest.raises(store.OperationNotAllowedError, match='does not allow'):
+    store.DocumentStore(
+      store.Collection('posts', tmp_path, create=False)
+    ).write('new', {}, '')
+  locked = store.DocumentStore(
+    store.Collection('posts', tmp_path / 'locked', delete=False)
+  )
+  locked.write('kept', {}, '')
+  with pytest.raises(store.OperationNotAllowedError, match='does not allow'):
+    locked.delete('kept')

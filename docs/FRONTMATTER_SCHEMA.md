@@ -68,13 +68,15 @@ schema = FrontmatterSchema.from_file('schema.yaml')
 
 | Option | Meaning |
 | --- | --- |
-| `type` | `str` (default), `int`, `float`, `bool`, `datetime`, `date`, `list[str]`, `list[int]`, `dict`, `any` |
+| `type` | `str` (default), `int`, `float`, `bool`, `datetime`, `date`, `list[str]`, `list[int]`, `link`, `list[link]`, `file`, `image`, `dict`, `any` |
 | `required` | The field must be present. A required field can't have a `default` |
 | `default` | Value for an absent field. Without it: `False` for `bool`, empty for `list`/`dict`, `None` otherwise |
 | `alias` | Key in the markdown file when it differs from the internal name. Both are accepted on input |
 | `role` | Semantic role (see below) |
 | `min_length`, `max_length` | For `str` and `list` types |
 | `description` | Free text |
+| `collection`, `value_field`, `filters` | For `link` fields: the target collection (default: the same one), the target field whose value is stored (default: the `@id` field, else the slug), and `[{field, values}]` filters on valid targets |
+| `media_dir`, `public_path` | For `file`/`image` fields: the files' directory (relative to the project root, no `..`) and the prefix of the stored path (default: `media_dir`) |
 
 Field names must be Python identifiers that don't start with `_` or `model_` and
 don't clash with `pydantic.BaseModel` attributes (for example `json` or `copy`).
@@ -129,6 +131,11 @@ get_api_router(frontmatter_schema=schema)
 - `POST /create/{slug}`, `PUT /update/{slug}` and `POST /save` validate the
   `frontmatter` object with the schema. Keys can be external names (aliases) or
   internal names. Unknown keys follow `extra` (`forbid` gives a 422 error).
+- On a rewrite (`PUT`/`save` of an existing post) the frontmatter is merged
+  over the file (TODO 4.5): known keys keep their positions, unknown keys
+  are kept when the schema is `extra: 'allow'`, keys emptied to `None` are
+  dropped, and schema fields the file didn't have yet are appended in
+  schema order.
 - Posts are written to disk with the **external keys** (aliases), so files stay
   compatible with the other service. Empty (`None`) values are not written.
 - `GET /{slug}/raw` returns the frontmatter as it is in the file, so it can be sent
@@ -206,6 +213,26 @@ dates (`date` / `datetime` types); they are compared as ISO strings.
 
 Pages (`pages/*.md`) are not part of the schema yet.
 
+## The `jsonld:` section
+
+A schema may carry a `jsonld` section (`JsonLdConfig`) for the JSON-LD
+export (see `fastapi_blog.jsonld`):
+
+- `context`: an inline mapping, a path to a file inside the project root, a
+  URL, or a list of them. Files and URLs are loaded by
+  `jsonld.resolve_context(schema, project_root=...)`; nothing in a context
+  is executed. Remote contexts are refused unless listed in
+  `allow_remote_contexts` and only with the `jsonld` extra installed
+  (timeout, `max_context_bytes` size limit, redirects to another host are
+  refused).
+- `base`, `id_template`, `type`: defaults for `@id`/`@type` when no field
+  carries the alias; `id_template` is a plain `{base}`/`{collection}`/
+  `{slug}` format string.
+- `content_term`: the term the document body is emitted under.
+- `max_documents`: limit of documents in one exported `@graph`.
+- `jsonld.uncovered_keys(schema, project_root=...)` lists the schema keys
+  the (resolved) context doesn't cover — JSON-LD would silently drop them.
+
 ## Built-in schemas
 
 - `DEFAULT_SCHEMA` reproduces the old hardcoded behavior (`StrictFrontmatter`).
@@ -224,7 +251,11 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
   its own role, which is not available yet.
 - `PostModelView` (the SQL `Post` model) and the user/role views don't use the
   schema: they are unrelated to the markdown files.
-- Pages (`pages/*.md`) are not part of the schema.
+- Pages (`pages/*.md`) validate against a built-in schema with the fields
+  they have always had (`helpers.PAGES_SCHEMA`: `title`, `description`,
+  `author`; unknown keys are kept, a page that doesn't match is served with
+  its raw frontmatter). A configurable page schema is not part of the
+  public API yet.
 
 ## Roadmap
 

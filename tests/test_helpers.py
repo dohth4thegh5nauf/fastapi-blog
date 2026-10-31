@@ -43,3 +43,21 @@ def test_load_content_from_markdown_file_success():
     'Kraken Tech, an Octopus Energy Group subsidiary'
     in page['metadata']['description']
   )
+
+
+def test_page_frontmatter_validates_against_the_pages_schema(tmp_path):
+  path = tmp_path / 'page.md'
+  path.write_text(
+    '---\ntitle: Hi\nunknown_key: kept\n---\nBody\n', encoding='utf-8'
+  )
+  page = helpers.load_content_from_markdown_file(path)
+  assert page['metadata']['title'] == 'Hi'
+  assert page['metadata']['unknown_key'] == 'kept'
+
+
+def test_page_that_does_not_match_the_schema_is_served_raw(tmp_path, caplog):
+  path = tmp_path / 'page.md'
+  path.write_text('---\ntitle: [not, a, string]\n---\nBody\n', encoding='utf-8')
+  page = helpers.load_content_from_markdown_file(path)
+  assert page['metadata'] == {'title': ['not', 'a', 'string']}
+  assert any('raw frontmatter' in rec.message for rec in caplog.records)

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
 from .auth import add_startup_check, check_api_auth_config
-from .models import FrontmatterSchema
+from .models import FrontmatterSchema, SeoConfig
 from .router import get_blog_router
 
 
@@ -35,6 +35,7 @@ def add_blog_to_fastapi(
   admin_username: str | None = None,
   admin_password: str | None = None,
   frontmatter_schema: FrontmatterSchema | None = None,
+  seo: SeoConfig | None = None,
   api_auth_dependency: Callable[..., Any] | None = None,
   jsonld_routes: bool = False,
 ) -> FastAPI:
@@ -79,6 +80,9 @@ def add_blog_to_fastapi(
                           The admin panel (extra `admin`) uses it only if you
                           pass the same schema to `add_admin_to_app()`;
                           `setup_fastapi_blog()` does that for you.
+      seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
+                          own `seo` section. `None` (default) uses the
+                          schema's section.
 
   Returns:
       FastAPI application with blog routes added
@@ -147,6 +151,7 @@ def add_blog_to_fastapi(
     favorite_post_ids=favorite_post_ids,
     strict=strict_frontmatter,
     frontmatter_schema=frontmatter_schema,
+    seo=seo,
     sanitize_html=sanitize_html,
     posts_dirname=posts_dirname,
     pages_dirname=pages_dirname,
