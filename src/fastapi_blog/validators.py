@@ -26,6 +26,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .issues import Issue
+from .templates import SERVICE_TAGS, parse_template
 
 
 OUTCOMES: tuple[str, ...] = ('ok', 'warning', 'error', 'undefined')
@@ -33,7 +34,6 @@ OUTCOMES: tuple[str, ...] = ('ok', 'warning', 'error', 'undefined')
 DEFAULT_TIMEOUT = 30.0
 MAX_OUTPUT_BYTES = 4000
 
-_PLACEHOLDER = re.compile(r'\{(path|slug|collection|fields\.[A-Za-z0-9_]+)\}')
 _SAFE_VALUE = re.compile(r'[A-Za-z0-9._:-]+')
 _KEYS = {'name', 'argv', 'exit_map', 'timeout', 'unavailable', 'blocking'}
 
@@ -131,32 +131,33 @@ def _substitute(
   values = {'path': str(path), 'slug': slug, 'collection': collection_name}
   result = []
   for argument in validator.argv:
-
-    def replace(match: re.Match[str]) -> str:
-      key = match.group(1)
-      if key == 'path':
-        return values[key]
-      if key in values:
-        text = values[key]
-        label = key
-      else:
-        label = key.removeprefix('fields.')
-        raw = frontmatter.get(label)
-        if raw is None and frontmatter.get(key) is None:
+    try:
+      template = parse_template(
+        argument,
+        (*SERVICE_TAGS, 'path'),
+        frontmatter.keys(),
+      )
+      tag_values = {
+        'path': values['path'],
+        'slug': slug,
+        'collection': collection_name,
+      }
+      for expression in re.findall(r'\{[^{}]*\}', argument):
+        fragment = parse_template(
+          expression, (*SERVICE_TAGS, 'path'), frontmatter.keys()
+        ).render(tag_values, frontmatter)
+        if not _SAFE_VALUE.fullmatch(fragment) or fragment.startswith('-'):
           raise ValueError(
-            f'Placeholder {key!r} of validator {validator.name!r} matches '
-            'no frontmatter field'
+            f'Value in placeholder {expression!r} is not allowed in a '
+            'command (use letters, digits and `._:-`, and do not start '
+            'with a hyphen)'
           )
-        text = '' if raw is None else str(raw)
-      # A leading hyphen would let a value pass as an option of the command.
-      if not _SAFE_VALUE.fullmatch(text) or text.startswith('-'):
-        raise ValueError(
-          f'Value of {label!r} is not allowed in a command (use letters, '
-          "digits and `._:-`, and don't start with a hyphen)"
-        )
-      return text
-
-    result.append(_PLACEHOLDER.sub(replace, argument))
+      text = template.render(tag_values, frontmatter)
+    except ValueError as exc:
+      raise ValueError(
+        f'Invalid template in validator {validator.name!r}: {exc}'
+      ) from exc
+    result.append(text)
   return result
 
 

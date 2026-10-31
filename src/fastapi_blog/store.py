@@ -342,7 +342,7 @@ class DocumentStore:
   def __init__(self, collection: Collection) -> None:
     """Initialize a store over `collection`."""
     self.collection = collection
-    self._lock = threading.Lock()
+    self._lock = threading.RLock()
 
   def _check_slug(self, slug: str) -> None:
     """Raise InvalidSlugError unless `slug` is valid for this collection."""
@@ -490,6 +490,48 @@ class DocumentStore:
       target.parent.mkdir(parents=True, exist_ok=True)
       atomic_write_text(target, text)
     return compute_etag(text)
+
+  def write_generated(
+    self,
+    template: Any,
+    frontmatter: dict[str, Any],
+    body: str,
+    *,
+    title: str,
+    collection: str,
+    fields: dict[str, Any] | None = None,
+    date_value: Any = None,
+    created_at: Any = None,
+    dirname: str = '',
+    options: Any = None,
+  ) -> tuple[str, str]:
+    """Create a document with the next slug number under the store lock.
+
+    The sequence is derived from existing filenames and the file is written
+    before releasing the same in-process lock, so concurrent callers sharing
+    this store cannot claim the same number.
+    """
+    from .templates import build_slug
+
+    with self._lock:
+      slug = build_slug(
+        template,
+        title=title,
+        fields=fields,
+        collection=collection,
+        existing_slugs=self.list(),
+        date_value=date_value,
+        created_at=created_at,
+        dirname=dirname,
+        options=options,
+      )
+      if self.exists(slug):
+        raise ConflictError(
+          f'generated document slug already exists: {slug!r}',
+          status_code=409,
+        )
+      etag = self.write(slug, frontmatter, body)
+      return slug, etag
 
   def delete(self, slug: str, *, if_match: str | None = None) -> None:
     """Delete a document by slug.

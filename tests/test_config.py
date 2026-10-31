@@ -114,3 +114,38 @@ def test_collection_spec_carries_an_inline_schema():
   spec = config.CollectionSpec(name='notes', dir='x', schema=schema)
   assert spec.to_collection().name == 'notes'
   assert spec.schema is schema
+
+
+
+def test_slug_template_and_unique_seq_are_loaded(project_dir):
+  (project_dir / 'posts').mkdir()
+  (project_dir / 'schema.yaml').write_text(
+    'fields:\\n  title: {role: title}\\n', encoding='utf-8'
+  )
+  _write(
+    project_dir,
+    'collections:\\n  posts:\\n    dir: posts\\n    schema: schema.yaml\\n'
+    '    slug_template: "{seq|pad(4)}-{title_slug}"\\n'
+    '    unique: [seq]\\n'
+    '    summary: "{title}"\\n'
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections['posts']
+  assert spec.slug_template is not None
+  assert spec.unique == ('seq',)
+  assert spec.make_slug({'title': 'Hello World'}, []) == '0001-hello-world'
+  store = config.store.DocumentStore(spec.to_collection())
+  slug, _etag = spec.create_document(store, {'title': 'Hello World'}, 'Body')
+  assert slug == '0001-hello-world'
+  slug2, _etag2 = spec.create_document(store, {'title': 'Another'}, 'Body')
+  assert slug2 == '0002-another'
+  assert spec.summarize('0001-hello-world', {'title': 'Hello'}) == 'Hello'
+
+
+def test_unique_seq_requires_sequence_tag(project_dir):
+  _write(
+    project_dir,
+    'collections:\n  posts:\n    dir: posts\n'
+    '    slug_template: "{title_slug}"\n    unique: [seq]\n'
+  )
+  with pytest.raises(config.ConfigError, match='slug_template'):
+    config.load_project(project_dir / 'fastapi_blog.yaml')

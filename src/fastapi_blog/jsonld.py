@@ -26,6 +26,7 @@ from typing import Any
 import yaml
 
 from .models import FrontmatterSchema, JsonLdConfig
+from .templates import parse_template
 
 
 _RESERVED_ALIASES = ('@id', '@type', '@context')
@@ -195,9 +196,35 @@ def document_to_jsonld(
   if not _is_empty(doc_id):
     result['@id'] = doc_id
   elif config.id_template is not None:
-    result['@id'] = config.id_template.format(
-      base=config.base or '', collection=collection, slug=slug
+    field_values = {
+      spec.name: frontmatter.get(spec.key) for spec in schema.fields
+    }
+    tags: dict[str, Any] = {
+      'base': config.base or '',
+      'collection': collection,
+      'slug': slug,
+      'dirname': slug.rsplit('/', 1)[0] if '/' in slug else '',
+      'filename': slug.rsplit('/', 1)[-1],
+    }
+    date_spec = schema.field_for_role('date')
+    date_value = frontmatter.get(date_spec.key) if date_spec else None
+    if date_value:
+      if isinstance(date_value, str):
+        try:
+          date_value = datetime.date.fromisoformat(date_value[:10])
+        except ValueError:
+          date_value = None
+      if isinstance(date_value, datetime.datetime | datetime.date):
+        tags.update(
+          year=date_value.year, month=f'{date_value.month:02d}',
+          day=f'{date_value.day:02d}',
+        )
+    template = parse_template(
+      config.id_template,
+      ('base', 'collection', 'slug', 'title_slug', 'seq', 'year', 'month', 'day', 'dirname', 'filename'),
+      field_values.keys(),
     )
+    result['@id'] = template.render(tags, field_values)
 
   doc_type = frontmatter.get('@type')
   if not _is_empty(doc_type):

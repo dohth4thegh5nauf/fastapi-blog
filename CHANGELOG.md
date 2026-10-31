@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Template language, slug generation and uniqueness (TODO 6.4, partial)
+
+- Added a shared, non-evaluating template language for `slug_template`,
+  `jsonld.id_template`, `summary`, and validator arguments: fields,
+  `{fields.NAME}`, service tags and chained `lower`/`upper`/`truncate`/
+  `default`/`pad`/`date` filters are parsed strictly.
+- Added `build_slug()` with role-based title/date values, Unicode/ASCII
+  slug options, UTF-8 byte-safe filename limits and sequence discovery.
+  `DocumentStore.write_generated()` allocates and writes the next numbered
+  slug while holding the store's in-process re-entrant lock.
+- `unique` collection settings are validated at project load; `check`
+  reports duplicate configured fields and `{seq}` values.
+- `CollectionSpec.make_slug()` and `.summarize()` expose collection-aware
+  slug and caption rendering. Human-readable `check` output includes
+  configured summaries; JSON output remains backward compatible.
+- JSON-LD `id_template` now uses the shared parser instead of `str.format()`.
+  Validator arguments accept the same filters while retaining strict
+  per-placeholder argument-safety checks.
+- Still not wired: auto-generated slugs in REST/admin create forms, first-
+  save timestamps for all legacy/manual document flows, and admin-list
+  summary rendering (the collection API is ready for those callers).
+
+
 ### External validators and checked writes (TODO 6.2, 6.3)
 
 - New `validators.py`: a validator runs a command without a shell (argument

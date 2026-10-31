@@ -231,7 +231,12 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
 def _format_report(report: checks.Report) -> list[str]:
   if not report.issues:
-    return [f'{report.collection}: {report.documents} documents, no issues']
+    lines = [f'{report.collection}: {report.documents} documents, no issues']
+    lines.extend(
+      f'  {slug}: {summary}'
+      for slug, summary in sorted(report.summaries.items())
+    )
+    return lines
   counts = ', '.join(
     f'{report.count(level)} {level}{"" if report.count(level) == 1 else "s"}'
     for level in ('error', 'warning', 'undefined')
@@ -241,8 +246,15 @@ def _format_report(report: checks.Report) -> list[str]:
   for issue in report.issues:
     where = issue.slug or report.collection
     field = f' {issue.field}:' if issue.field else ''
+    summary = report.summaries.get(issue.slug or '')
+    label = f' — {summary}' if summary else ''
     lines.append(
-      f'  [{issue.level}] {issue.code} ({where}){field} {issue.message}'
+      f'  [{issue.level}] {issue.code} ({where}{label}){field} {issue.message}'
+    )
+  if report.summaries:
+    lines.extend(
+      f'  {slug}: {summary}'
+      for slug, summary in sorted(report.summaries.items())
     )
   return lines
 

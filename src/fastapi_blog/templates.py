@@ -361,7 +361,66 @@ def next_seq(template: Template, slugs: Iterable[str]) -> int:
   regex = template.slug_regex()
   highest = 0
   for slug in slugs:
-    match = regex.fullmatch(slug.rsplit('/', 1)[-1])
+    match = regex.fullmatch(slug)
     if match is not None and 'seq' in match.groupdict():
       highest = max(highest, int(match.group('seq')))
   return highest + 1
+
+
+def build_slug(
+  template: Template,
+  *,
+  title: str,
+  fields: Mapping[str, Any] | None = None,
+  collection: str = '',
+  existing_slugs: Iterable[str] = (),
+  date_value: Any = None,
+  created_at: datetime.datetime | None = None,
+  dirname: str = '',
+  options: SlugOptions | None = None,
+) -> str:
+  """Render a new document slug from a parsed collection template.
+
+  `created_at` is the first-save timestamp in UTC and is used only when the
+  schema has no date value. The caller must hold its collection's write lock
+  while obtaining `existing_slugs` and persisting the returned slug.
+  """
+  now = created_at or datetime.datetime.now(datetime.timezone.utc)
+  if now.tzinfo is None:
+    now = now.replace(tzinfo=datetime.timezone.utc)
+  else:
+    now = now.astimezone(datetime.timezone.utc)
+  moment = date_value or now
+  if isinstance(moment, str):
+    try:
+      moment = datetime.datetime.fromisoformat(moment.replace('Z', '+00:00'))
+    except ValueError:
+      moment = now
+  if isinstance(moment, datetime.datetime):
+    if moment.tzinfo is None:
+      moment = moment.replace(tzinfo=datetime.timezone.utc)
+    moment = moment.astimezone(datetime.timezone.utc)
+  elif isinstance(moment, datetime.date):
+    moment = datetime.datetime.combine(
+      moment, datetime.time(), tzinfo=datetime.timezone.utc
+    )
+  else:
+    moment = now
+  values = dict(fields or {})
+  tags = {
+    'seq': next_seq(template, existing_slugs),
+    'title_slug': make_slug_part(title, options),
+    'year': moment.year,
+    'month': f'{moment.month:02d}',
+    'day': f'{moment.day:02d}',
+    'collection': collection,
+    'dirname': dirname,
+  }
+  rendered = template.render(tags, values)
+  if dirname and not rendered.startswith(dirname + '/'):
+    rendered = f'{dirname}/{rendered}'
+  parts = rendered.split('/')
+  if any(not part or part in ('.', '..') for part in parts):
+    raise ValueError(f'slug template produced an invalid path: {rendered!r}')
+  parts[-1] = cut_bytes(parts[-1], MAX_FILE_NAME_BYTES).strip('-') or 'untitled'
+  return '/'.join(parts)

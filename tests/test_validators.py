@@ -1,5 +1,6 @@
 """Tests for external validators (TODO 6.2) and checked writes (TODO 6.3)."""
 
+import pathlib
 import sys
 
 import pytest
@@ -334,3 +335,18 @@ def test_ok_validator_lets_writes_through(tmp_path, checked_client):
   )
   assert response.status_code == 201
   assert (tmp_path / 'posts' / 'note.md').exists()
+
+
+
+def test_validator_uses_shared_template_filters():
+  validator = Validator(
+    name='example',
+    argv=('tool', '--status={fields.status|lower}', '{slug|truncate(8)}'),
+  )
+  assert validators._substitute(
+    validator,
+    'posts',
+    'Some-Slug',
+    pathlib.Path('posts/some.md'),
+    {'status': 'PUBLISHED'},
+  ) == ['tool', '--status=published', 'Some-Slu']

@@ -38,6 +38,7 @@ from .templates import (
   SlugOptions,
   Template,
   parse_template,
+  build_slug,
 )
 from .validators import Validator
 
@@ -95,9 +96,106 @@ class CollectionSpec:
     kwargs: dict[str, Any] = {}
     if self.slug_pattern is not None:
       kwargs['slug_pattern'] = self.slug_pattern
+    elif self.slug_template is not None:
+      # A generated template may deliberately use Unicode title slugs.
+      # Keep it to one safe path segment; `build_slug` enforces the byte cap.
+      kwargs['slug_pattern'] = r'^[^/\\\x00-\x20]{1,200}$'
     if self.extension is not None:
       kwargs['extension'] = self.extension
     return store.Collection(self.name, self.dir, **kwargs)
+
+  def make_slug(
+    self,
+    frontmatter: Mapping[str, Any],
+    existing_slugs: Any,
+    *,
+    created_at: Any = None,
+    dirname: str = '',
+  ) -> str:
+    """Build a new slug once, using the configured role bindings/template."""
+    if self.slug_template is None:
+      raise ConfigError(
+        f'Collection {self.name!r} has no `slug_template`'
+      )
+    fields = {
+      field.name: frontmatter.get(field.key)
+      for field in (self.schema.fields if self.schema else ())
+    }
+    title_spec = self.schema.field_for_role('title') if self.schema else None
+    date_spec = self.schema.field_for_role('date') if self.schema else None
+    title = (
+      frontmatter.get(title_spec.key, '') if title_spec else ''
+    )
+    date_value = frontmatter.get(date_spec.key) if date_spec else None
+    return build_slug(
+      self.slug_template,
+      title=str(title or ''),
+      fields=fields,
+      collection=self.name,
+      existing_slugs=existing_slugs,
+      date_value=date_value,
+      created_at=created_at,
+      dirname=dirname,
+      options=self.slug_options,
+    )
+
+  def create_document(
+    self,
+    documents: store.DocumentStore,
+    frontmatter: dict[str, Any],
+    body: str,
+    *,
+    created_at: Any = None,
+    dirname: str = '',
+  ) -> tuple[str, str]:
+    """Create a document using the configured slug template and sequence lock."""
+    if self.slug_template is None:
+      raise ConfigError(
+        f'Collection {self.name!r} has no `slug_template`'
+      )
+    fields = {
+      field.name: frontmatter.get(field.key)
+      for field in (self.schema.fields if self.schema else ())
+    }
+    title_spec = self.schema.field_for_role('title') if self.schema else None
+    date_spec = self.schema.field_for_role('date') if self.schema else None
+    title = frontmatter.get(title_spec.key, '') if title_spec else ''
+    date_value = frontmatter.get(date_spec.key) if date_spec else None
+    return documents.write_generated(
+      self.slug_template,
+      frontmatter,
+      body,
+      title=str(title or ''),
+      collection=self.name,
+      fields=fields,
+      date_value=date_value,
+      created_at=created_at,
+      dirname=dirname,
+      options=self.slug_options,
+    )
+
+  def summarize(
+    self, slug: str, frontmatter: Mapping[str, Any]
+  ) -> str:
+    """Render the configured caption, or fall back to the title role."""
+    title_spec = self.schema.field_for_role('title') if self.schema else None
+    title = frontmatter.get(title_spec.key) if title_spec else None
+    if self.summary is None:
+      return str(title or slug)
+    fields = {
+      field.name: frontmatter.get(field.key)
+      for field in (self.schema.fields if self.schema else ())
+    }
+    result = self.summary.render(
+      {
+        'slug': slug,
+        'collection': self.name,
+        'dirname': slug.rsplit('/', 1)[0] if '/' in slug else '',
+        'filename': slug.rsplit('/', 1)[-1],
+      },
+      fields,
+    )
+    return result or str(title or slug)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -178,6 +276,20 @@ def _collection_spec(
     unique = tuple(str(item) for item in unique)
   except TypeError as exc:
     raise ConfigError(f'Collection {name!r}: `unique` must be a list') from exc
+  if len(set(unique)) != len(unique):
+    raise ConfigError(f'Collection {name!r}: `unique` contains duplicates')
+  allowed_unique = field_names | {'seq'}
+  unknown_unique = sorted(set(unique) - allowed_unique)
+  if unknown_unique:
+    raise ConfigError(
+      f'Collection {name!r}: unknown `unique` field/tag(s) {unknown_unique}'
+    )
+  if 'seq' in unique and (
+    slug_template is None or 'seq' not in slug_template.tags
+  ):
+    raise ConfigError(
+      f'Collection {name!r}: `unique: [seq]` needs a slug_template using {{seq}}'
+    )
   return CollectionSpec(
     name=name,
     dir=root / str(entry['dir']),

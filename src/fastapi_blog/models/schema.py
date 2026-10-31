@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 
 import yaml
 
+from ..templates import SERVICE_TAGS, parse_template
+
 
 if TYPE_CHECKING:
   from pydantic import BaseModel
@@ -829,6 +831,15 @@ class FrontmatterSchema:
       raise ValueError(
         "`published_values` is set but no field has role 'status'"
       )
+    if self.jsonld is not None and self.jsonld.id_template is not None:
+      try:
+        parse_template(
+          self.jsonld.id_template,
+          ('base', 'collection', 'slug', 'title_slug', 'seq', 'year', 'month', 'day', 'dirname', 'filename'),
+          {spec.name for spec in self.fields},
+        )
+      except ValueError as exc:
+        raise ValueError(f'`jsonld.id_template`: {exc}') from exc
 
   def role_map(self) -> dict[str, str]:
     """Return a mapping from each bound role to its field name."""

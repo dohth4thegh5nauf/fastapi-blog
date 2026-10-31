@@ -17,6 +17,7 @@ Link checks, external validators, slug numbering and `check` config options
 """
 
 import dataclasses
+import json
 import pathlib
 from typing import Any
 
@@ -49,6 +50,7 @@ class Report:
   collection: str
   documents: int = 0
   issues: list[Issue] = dataclasses.field(default_factory=list)
+  summaries: dict[str, str] = dataclasses.field(default_factory=dict)
 
   def count(self, level: str) -> int:
     """Return how many issues have this level."""
@@ -190,6 +192,60 @@ def _check_validators(
       )
 
 
+def _check_unique(
+  spec: CollectionSpec,
+  documents: store.DocumentStore,
+  issues: list[Issue],
+) -> None:
+  """Report duplicate configured field values and sequence numbers."""
+  if not spec.unique:
+    return
+  seen: dict[str, dict[str, str]] = {name: {} for name in spec.unique}
+  seq_regex = spec.slug_template.slug_regex() if spec.slug_template else None
+  for slug in sorted(documents.list()):
+    try:
+      record = documents.read(slug)
+    except (store.ParseError, store.NotFoundError):
+      continue
+    for name in spec.unique:
+      if name == 'seq':
+        match = seq_regex.fullmatch(slug) if seq_regex else None
+        value = match.group('seq') if match and 'seq' in match.groupdict() else None
+        if value is None:
+          issues.append(
+            Issue(
+              'error',
+              'unique.sequence_missing',
+              'Slug does not match the configured sequence template',
+              slug,
+              'seq',
+            )
+          )
+          continue
+      else:
+        field = spec.schema.get(name) if spec.schema else None
+        key = field.key if field else name
+        value = record.frontmatter.get(key)
+      if value is None or value == '':
+        continue
+      # Canonical JSON representation makes lists/maps comparable without
+      # relying on insertion order.
+      marker = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+      previous = seen[name].get(marker)
+      if previous is not None:
+        issues.append(
+          Issue(
+            'error',
+            'unique.duplicate',
+            f'Value {value!r} of {name!r} is also used by {previous!r}',
+            slug,
+            name,
+          )
+        )
+      else:
+        seen[name][marker] = slug
+
+
 def check_collection(
   spec: CollectionSpec, *, root: str | pathlib.Path | None = None
 ) -> Report:
@@ -219,7 +275,16 @@ def check_collection(
     return report
   documents = store.DocumentStore(spec.to_collection())
   report.documents = len(documents.list())
+  has_title = bool(spec.schema and spec.schema.field_for_role('title'))
+  if spec.summary is not None or has_title:
+    for slug in sorted(documents.list()):
+      try:
+        record = documents.read(slug)
+      except (store.ParseError, store.NotFoundError):
+        continue
+      report.summaries[slug] = spec.summarize(slug, record.frontmatter)
   _check_documents(spec, documents, issues)
+  _check_unique(spec, documents, issues)
   _check_context(spec, base, issues)
   _check_validators(spec, base, issues)
   issues.sort(key=Issue.sort_key)
