@@ -104,10 +104,13 @@ fields:
 ```
 
 In the admin editor, an `object` is expanded into child inputs. A
-`list[object]` is edited as JSON, with validation performed by the same schema
-used by the REST API. The optional `group` setting can place a field into a
-named form section; by default, nested children are grouped beneath their
-object path and SEO semantic fields are grouped under `SEO`.
+`list[object]` is rendered as repeatable field groups with add/remove controls;
+its child inputs keep the same aliases, choices, patterns and read-only rules.
+Link fields use autocomplete from the configured target collection and apply
+`filters` to suggestions. The server still validates every value against the
+same schema used by the REST API. The optional `group` setting can place a
+field into a named form section; by default, nested children are grouped
+beneath their object path and SEO semantic fields are grouped under `SEO`.
 
 Field names must be Python identifiers that don't start with `_` or `model_` and
 don't clash with `pydantic.BaseModel` attributes (for example `json` or `copy`).
@@ -251,9 +254,12 @@ The markdown posts section of the admin is built from the schema:
   | `bool` | Yes/No select |
   | `date` (or `str` with the `date` role) | date picker |
   | `datetime` | date and time picker (the time zone is dropped) |
-  | `list[str]`, `list[int]` | comma-separated text |
-  | `dict`, `any`, `list[object]` | JSON text area |
+  | `list[str]`, `list[int]`, `list[link]` | comma-separated text (link lists get filtered suggestions) |
+  | `dict`, `any` | JSON text area |
   | `object` | Expanded child fields, grouped under the object label |
+  | `list[object]` | Repeatable nested field groups with add/remove controls |
+  | Any field with `choices` | Select; list types use a multi-select |
+  | `link` | Text input with autocomplete from its target collection and filters |
 
   Labels of fields with a role are translated (`Title`, `Date`, ...). Other fields
   use their `description`, or their name. Required `str`, number and date fields
@@ -262,11 +268,22 @@ The markdown posts section of the admin is built from the schema:
   `seo_title` and `description` show live character counters when `seo.check`
   is configured, using `title_max` and `description_max` respectively. An
   explicit `FieldSpec.group` overrides the default group.
-- **Saving** goes through the REST API (`POST /api/posts/save`) with the schema
-  keys (aliases), so the API must be enabled with the same schema:
-  `add_blog_to_fastapi(include_api=True, frontmatter_schema=schema)`.
-  Empty inputs are not sent, so the API applies the field defaults or reports a
-  missing required field.
+- **Validation and saving** go directly through `DocumentService` from the
+  admin CustomView; the admin does not call its own REST API, and the REST API
+  does not need to be enabled. The service validates the schema (including
+  choices, patterns, nested aliases, required fields and constraints), applies
+  `on_create`/`read_only`, checks uniqueness and blocking validators, then
+  writes through `DocumentStore`. The form sends external keys (aliases), and
+  empty optional inputs are omitted so schema defaults and required-field
+  validation remain authoritative on the server. Updates include an `ETag`; a
+  stale form gets a conflict response rather than overwriting newer content.
+- **Link autocomplete** uses the configured target collection, `value_field`
+  (or `@id`/slug default) and `filters`. Filter values match scalar fields or
+  any member of a list-valued field. Suggestions are hints only: the `check`
+  command remains responsible for reporting invalid references.
+- **Pattern validation** runs in the browser for immediate feedback and again
+  on the server through the schema model. A configured pattern message is
+  shown next to the control and is part of server-side validation errors.
 - **Post list**: the title and slug columns are always there. The date, status and
   tags columns are shown only if the `date`, `published` and `tags` roles are bound.
 - **Dashboard**: counts, latest posts and top tags use the roles. A post with an
@@ -389,8 +406,8 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
 
 ## Known limits
 
-- The admin form saves through `/api/posts/save` (the URL is fixed in the template),
-  so it needs the REST API at the default prefix.
+- Markdown admin writes use `DocumentService` directly and do not require the
+  REST API. Custom admin routes include Starlette Admin CSRF tokens.
 - The admin reads the posts directory from the `POSTS_DIR` environment variable
   (default `posts` in the working directory), not from `posts_dirname`.
 - `published` is a plain flag: a `draft: true` flag (the opposite meaning) needs

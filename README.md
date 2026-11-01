@@ -281,6 +281,17 @@ For separate setup, pass `frontmatter_schema=schema` to `add_blog_to_fastapi()` 
 
 Schemas can be loaded from YAML or JSON with `FrontmatterSchema.from_file()`. They support aliases, field validation, defaults, read-only and create-time values, extra-key policies, and roles. See [Frontmatter Schema](docs/FRONTMATTER_SCHEMA.md) for the full format and behavior.
 
+The Markdown admin editor is generated from the same schema. `choices` become
+select controls, `pattern`/`item_pattern` are checked in the browser and again
+on the server, `link` fields offer filtered autocomplete, and `object` /
+`list[object]` fields render nested controls. Saves go directly through
+`DocumentService` and `DocumentStore`; the admin does not make a request to its
+own REST API, so `include_api=True` is not required for editing. ETag conflicts,
+schema validation, `on_create`/`read_only` and blocking validators are enforced
+on the server. The live Markdown preview uses the public HTML sanitizer by
+default; `sanitize_html=False` explicitly opts out and should only be used when
+all authors are trusted.
+
 ### Built-in semantic roles
 
 | Role | Expected value | Purpose |
@@ -362,7 +373,7 @@ python -m fastapi_blog schema --schema frontmatter.yaml --json-schema --out fron
 | `locales` | `['en']` | Supported locales |
 | `default_locale` | `'en'` | Fallback locale |
 | `strict_frontmatter` | `True` | Use strict built-in validation; ignored when a custom schema is supplied |
-| `sanitize_html` | `True` | Sanitize HTML in Markdown content |
+| `sanitize_html` | `True` | Sanitize public Markdown and admin preview; `False` is an explicit trusted-content opt-out |
 | `frontmatter_schema` | built-in schema | Custom post frontmatter schema |
 | `seo` | `None` | Site-wide SEO configuration; overrides the schema's `seo` section |
 | `seo_routes` | `False` | Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects; requires `seo.site_url` |

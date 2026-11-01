@@ -128,8 +128,10 @@ def _create_admin_for_locale(
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
+  collection_specs: Mapping[str, CollectionSpec] | None = None,
   authorize: Authorizer | None = None,
   auth_users: Mapping[str, Mapping[str, str]] | None = None,
+  sanitize_html: bool = True,
 ) -> Admin:
   """Create an Admin instance for a specific locale.
 
@@ -254,7 +256,9 @@ def _create_admin_for_locale(
   from .markdown_crud import (
     MarkdownCreateView,
     MarkdownEditView,
+    MarkdownFileManager,
     MarkdownListView,
+    MarkdownSaveView,
     get_posts_directory,
   )
 
@@ -271,6 +275,7 @@ def _create_admin_for_locale(
     schema=frontmatter_schema,
     collection_spec=collection_spec,
     authorize=authorize,
+    collection_specs=collection_specs,
   )
   posts_list_view.menu_label = posts_label
   admin.add_view(posts_list_view)
@@ -283,6 +288,7 @@ def _create_admin_for_locale(
       schema=frontmatter_schema,
       collection_spec=collection_spec,
       authorize=authorize,
+      collection_specs=collection_specs,
     )
   )
   admin.add_view(
@@ -292,6 +298,19 @@ def _create_admin_for_locale(
       schema=frontmatter_schema,
       collection_spec=collection_spec,
       authorize=authorize,
+      collection_specs=collection_specs,
+    )
+  )
+  admin.add_view(
+    MarkdownSaveView(
+      MarkdownFileManager(
+        posts_dir,
+        frontmatter_schema or (collection_spec.schema if collection_spec else None),
+        collection_spec,
+        collection_specs=collection_specs,
+      ),
+      authorize=authorize,
+      sanitize_html=sanitize_html,
     )
   )
 
@@ -314,10 +333,12 @@ def add_admin_to_app(
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
+  collection_specs: Mapping[str, CollectionSpec] | None = None,
   insecure_dev: bool = False,
   https_only: bool = False,
   authorize: Authorizer | None = None,
   auth_users: Mapping[str, Mapping[str, str]] | None = None,
+  sanitize_html: bool = True,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -333,6 +354,8 @@ def add_admin_to_app(
     secret_key: Required session secret, or SECRET_KEY (32+ chars).
     insecure_dev: Enable old development credentials explicitly (unsafe).
     https_only: Set the session cookie Secure flag.
+    sanitize_html: Sanitize the admin Markdown preview like public pages.
+                  Set False only for trusted content that intentionally uses raw HTML.
     authorize: Shared `(request, resource, action) -> bool` permission callback.
     auth_users: Optional extra login accounts mapped to password and role.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
@@ -341,9 +364,8 @@ def add_admin_to_app(
     default_locale: Default locale for /admin redirect (default: 'en')
     enable_role_management: Enable role management views (default: False)
     frontmatter_schema: Custom schema of the post frontmatter (default: the
-      built-in fields). The post list, the post form and the dashboard are built
-      from it. Saving goes through the REST API, so pass the same schema to
-      `add_blog_to_fastapi(include_api=True, ...)`.
+      built-in fields). The post list, post form and dashboard are built from
+      it. Saves use the internal document service and do not require the REST API.
     posts_dirname: Directory with the markdown posts. Pass the same value
       given to `setup_fastapi_blog`/`add_blog_to_fastapi` so the admin panel
       and the blog/REST API always agree on where posts live (default:
@@ -531,8 +553,10 @@ def add_admin_to_app(
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
+    collection_specs=collection_specs,
     authorize=authorize,
     auth_users=auth_users,
+    sanitize_html=sanitize_html,
   )
 
   default_admin.mount_to(app)
@@ -567,8 +591,10 @@ def add_admin_to_app(
       frontmatter_schema=frontmatter_schema,
       posts_dirname=posts_dirname,
       collection_spec=collection_spec,
+      collection_specs=collection_specs,
       authorize=authorize,
       auth_users=auth_users,
+      sanitize_html=sanitize_html,
     )
 
     admin.mount_to(app)

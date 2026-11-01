@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Admin document service, schema-driven forms and safe preview (TODO phase E, 7.6–7.7)
+
+- Markdown admin writes now call `DocumentService` directly instead of making
+  a loopback request to `/api/posts/save`; the REST API is optional. The service
+  validates `FrontmatterSchema`, applies `on_create` and `read_only`, checks
+  configured uniqueness and blocking validators, writes through
+  `DocumentStore`, and emits change events only after a successful commit.
+- The form is generated from `FieldSpec`: `choices` render as select or
+  multi-select controls, `pattern`/`item_pattern` provide immediate validation
+  and messages, `link` fields use filtered target-collection autocomplete, and
+  `object`/`list[object]` render nested controls. Hidden/read-only fields,
+  diagnostics and ETag conflict handling are preserved.
+- Admin save/delete/preview custom routes include Starlette Admin CSRF tokens.
+  The live Markdown preview now uses the same server-side renderer and HTML
+  sanitizer as public pages by default; `sanitize_html=False` is an explicit
+  opt-out for trusted content only.
+- Origin checking remains limited to cookie-authenticated REST API writes;
+  admin routes rely on Starlette Admin's built-in CSRF protection.
+
 ### Review fixes for the security/SEO/object-types batch
 
 - `OriginCheckMiddleware` is no longer installed for the admin panel paths:
@@ -64,8 +83,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Added recursive `object` and `list[object]` schema fields with aliases,
   validation, serialization and nested read-only protection (maximum depth 3).
-- The admin editor expands `object` fields and edits `list[object]` values as
-  JSON; schemas reject unsupported child semantic roles and alias collisions.
+- The admin editor expands `object` fields and renders `list[object]` as
+  repeatable nested field groups; schemas reject unsupported child semantic
+  roles and alias collisions.
 
 
 ### Review fixes: collection flags, rollback and docs (TODO 4.6/6.3/6.4)
@@ -354,8 +374,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   positions, unknown keys survive when the schema is `extra: 'allow'`, a
   known field emptied to `None` is dropped, and schema fields the file
   didn't have yet are appended in schema order
-  (`FrontmatterSchema._merge_for_rewrite`). Admin-panel writes still bypass
-  schema validation — that remainder is TODO 7.6 (phase E)
+  (`FrontmatterSchema._merge_for_rewrite`). Admin-panel writes use the
+  schema-aware `DocumentService` (TODO phase E, 7.6).
 - `Collection(depth=N)` implements nested collections: the slug is the
   relative path without the extension (`a/b/0001-x`), each segment is
   checked against `slug_pattern`, and at most `N` segments are directories;

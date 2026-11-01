@@ -244,6 +244,8 @@ def _render_template(name, **context):
   env = jinja2.Environment(loader=loader, autoescape=True)
   env.globals['url_for'] = lambda *args, **kwargs: '/url'
   env.globals['__name__'] = 'admin'
+  env.globals['csrf_input'] = lambda request: ''
+  context.setdefault('request', SimpleNamespace())
   return env.get_template(name).render(**context)
 
 
@@ -339,11 +341,64 @@ def test_form_groups_seo_fields_and_shows_configured_counters():
   assert by_name['summary']['group'] == 'SEO'
   assert by_name['summary']['counter_max'] == 145
   assert by_name['metadata__source_url']['path'] == ['metadata', 'url']
-  assert by_name['references']['kind'] == 'json'
+  assert by_name['references']['kind'] == 'object_list'
+  assert by_name['references']['children'][1]['key'] == 'url'
+  assert 'data-object-list="references"' in html
+  assert 'js-add-object-row' in html
+  assert 'js-remove-object-row' in html
   assert 'SEO' in html
   assert 'data-counter-max="55"' in html
   assert 'data-counter-max="145"' in html
   assert 'field-references' in html
+  assert html.count('<datalist id="link-options-references__href">') == 1
+  assert 'previewRender: renderSanitizedPreview' in html
+
+
+
+def test_schema_controls_render_choices_patterns_and_nested_links():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'status',
+        choices=(
+          {'value': 'draft', 'label': 'Draft'},
+          {'value': 'published', 'label': 'Published'},
+        ),
+      ),
+      FieldSpec('code', pattern=(r'[A-Z]{2}-[0-9]{3}', 'Use AA-000 format')),
+      FieldSpec(
+        'references',
+        type='list[object]',
+        fields=(
+          FieldSpec('label', required=True),
+          FieldSpec(
+            'target',
+            type='link',
+            collection='articles',
+            value_field='identifier',
+          ),
+        ),
+      ),
+    )
+  )
+  fields, html = _edit_page(
+    schema,
+    {
+      'status': 'published',
+      'code': 'AB-123',
+      'references': [
+        {'label': 'Guide', 'target': 'article-1'},
+      ],
+    },
+  )
+  by_name = {field['name']: field for field in fields}
+  assert by_name['status']['kind'] == 'select'
+  assert by_name['status']['selected_values'] == ['published']
+  assert by_name['code']['pattern'] == r'[A-Z]{2}-[0-9]{3}'
+  assert by_name['references']['items'][0][1]['value'] == 'article-1'
+  assert 'Use AA-000 format' in html
+  assert '<option value="published" selected>Published</option>' in html
+  assert 'data-child-kind="link"' in html
 
 
 def test_edit_template_escapes_values():
@@ -651,3 +706,52 @@ def test_hidden_and_read_only_object_parent_are_respected_in_admin_form():
   assert by_name['private']['kind'] == 'hidden'
   assert by_name['locked__identifier']['read_only'] is True
   assert by_name['locked__label']['read_only'] is True
+
+
+def test_link_autocomplete_uses_collection_value_field_and_list_filters(
+  tmp_path,
+):
+  from fastapi_blog.admin.markdown_crud import MarkdownFileManager
+
+  articles_dir = tmp_path / 'articles'
+  articles_dir.mkdir()
+  (articles_dir / 'public.md').write_text(
+    '---\nidentifier: ref:public\ntitle: Public Article\n'
+    'tags: [allowed, featured]\n---\n\nBody\n',
+    encoding='utf-8',
+  )
+  (articles_dir / 'private.md').write_text(
+    '---\nidentifier: ref:private\ntitle: Private Article\n'
+    'tags: [private]\n---\n\nBody\n',
+    encoding='utf-8',
+  )
+  target_schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('identifier'),
+      FieldSpec('title', role='title'),
+      FieldSpec('tags', type='list[str]'),
+    )
+  )
+  target_spec = CollectionSpec('articles', articles_dir, schema=target_schema)
+  source_schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'related',
+        type='link',
+        collection='articles',
+        value_field='identifier',
+        filters=[{'field': 'tags', 'values': ['allowed']}],
+      ),
+    )
+  )
+  manager = MarkdownFileManager(
+    str(tmp_path / 'posts'),
+    source_schema,
+    collection_specs={'articles': target_spec},
+  )
+
+  assert manager.link_suggestions() == {
+    'related': [
+      {'value': 'ref:public', 'label': 'Public Article (public)'}
+    ]
+  }

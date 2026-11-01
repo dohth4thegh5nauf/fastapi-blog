@@ -21,10 +21,47 @@
 {% endblock %}
 
 {% block content %}
+  {% macro render_object_child(child, field_id, parent_name) %}
+    {% if child.kind == 'hidden' %}
+    <input type="hidden" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="hidden" data-child-parent="{{ parent_name }}" value="{{ child.value }}">
+    {% else %}
+    <div class="col-md-6 mb-2">
+      <label class="form-label{% if child.required %} required{% endif %}" for="{{ field_id }}">{{ child.label }}</label>
+      {% if child.kind == 'bool' %}
+      <select class="form-select" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="bool" data-child-parent="{{ parent_name }}"{% if child.read_only %} disabled{% endif %}>
+        <option value="true"{% if child.value == 'true' %} selected{% endif %}>{{ t.yes }}</option>
+        <option value="false"{% if child.value != 'true' %} selected{% endif %}>{{ t.no }}</option>
+      </select>
+      {% elif child.kind in ('select', 'multi_select') %}
+      <select class="form-select" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="{{ child.kind }}" data-child-parent="{{ parent_name }}"{% if child.multiple %} multiple{% endif %}{% if child.read_only %} disabled{% endif %}{% if child.required %} required{% endif %}>
+        {% if not child.multiple %}<option value=""></option>{% endif %}
+        {% for choice in child.choices %}<option value="{{ choice.value }}"{% if choice.value in child.selected_values %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+      </select>
+      {% elif child.kind in ('textarea', 'json') %}
+      <textarea class="form-control" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="{{ child.kind }}" data-child-parent="{{ parent_name }}"{% if child.read_only %} readonly{% endif %}{% if child.required %} required{% endif %}>{{ child.value }}</textarea>
+      {% else %}
+      <input type="{% if child.kind == 'date' %}date{% elif child.kind == 'datetime' %}datetime-local{% elif child.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="{{ child.kind }}" data-child-parent="{{ parent_name }}" value="{{ child.value }}"{% if child.kind == 'number' %} step="any"{% if child.min is not none %} min="{{ child.min }}"{% endif %}{% if child.max is not none %} max="{{ child.max }}"{% endif %}{% endif %}{% if child.max_length %} maxlength="{{ child.max_length }}"{% endif %}{% if child.datalist_id %} list="{{ child.datalist_id }}"{% endif %}{% if child.read_only %} readonly{% endif %}{% if child.required %} required{% endif %}>
+      {% endif %}
+      {% if child.pattern %}<small class="form-hint">{{ child.pattern_message or 'Expected format: ' ~ child.pattern }}</small>{% endif %}
+      {% if child.hint %}<small class="form-hint">{{ child.hint }}</small>{% endif %}
+    </div>
+    {% endif %}
+  {% endmacro %}
+  {% if diagnostics %}
+  <div class="alert alert-warning" role="status">
+    <h4>Document diagnostics</h4>
+    <ul class="mb-0">
+      {% for issue in diagnostics %}
+      <li><strong>{{ issue.level }} — {{ issue.code }}</strong>{% if issue.field %} ({{ issue.field }}){% endif %}: {{ issue.message }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   <div class="row">
     <div class="col-12">
       <div class="card">
         <form id="post-form">
+          {{ csrf_input(request) }}
           <div class="card-header">
             <div class="container-fluid">
               <div class="d-flex justify-content-between align-items-center">
@@ -33,6 +70,7 @@
             </div>
           </div>
           <div class="card-body border-bottom py-3">
+            {% if not is_new %}<input type="hidden" id="post-etag" name="etag" value="{{ post.etag }}">{% endif %}
             <div class="mb-3">
               <label class="form-label required" for="slug">{{ t.slug }}</label>
               <input type="text" class="form-control" id="slug" name="slug" value="{{ post.slug }}" {% if not (is_new and auto_slug) %}required{% endif %} {% if not is_new %}readonly{% endif %}>
@@ -55,10 +93,50 @@
                   <option value="true" {% if f.value == 'true' %}selected{% endif %}>{{ t.yes }}</option>
                   <option value="false" {% if f.value != 'true' %}selected{% endif %}>{{ t.no }}</option>
                 </select>
+                {% elif f.kind in ('select', 'multi_select') %}
+                <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}"{% if f.multiple %} multiple{% endif %}{% if f.read_only %} disabled{% endif %}{% if f.html_required %} required{% endif %}>
+                  {% if not f.multiple %}<option value=""></option>{% endif %}
+                  {% for choice in f.choices %}
+                  <option value="{{ choice.value }}"{% if choice.value in f.selected_values %} selected{% endif %}>{{ choice.label }}</option>
+                  {% endfor %}
+                </select>
+                {% elif f.kind == 'object_list' %}
+                <div id="field-{{ f.name }}" class="js-object-list" data-object-list="{{ f.name }}">
+                  {% for row_fields in f.items %}
+                  {% set row_index = loop.index0 %}
+                  <fieldset class="border rounded p-3 mb-3 js-object-row">
+                    <legend class="float-none w-auto px-2 fs-6">{{ loop.index }}</legend>
+                    <div class="row">
+                      {% for child in row_fields %}{{ render_object_child(child, 'field-' ~ f.name ~ '-' ~ row_index ~ '-' ~ loop.index0 ~ '-' ~ child.name, f.name) }}{% endfor %}
+                    </div>
+                    {% if not f.read_only %}<button type="button" class="btn btn-sm btn-outline-danger js-remove-object-row">Remove</button>{% endif %}
+                  </fieldset>
+                  {% endfor %}
+                </div>
+                <template id="object-template-{{ f.name }}">
+                  <fieldset class="border rounded p-3 mb-3 js-object-row">
+                    <legend class="float-none w-auto px-2 fs-6">New item</legend>
+                    <div class="row">
+                      {% for child in f.children %}{{ render_object_child(child, 'new-' ~ f.name ~ '-' ~ loop.index0 ~ '-' ~ child.name, f.name) }}{% endfor %}
+                    </div>
+                    {% if not f.read_only %}<button type="button" class="btn btn-sm btn-outline-danger js-remove-object-row">Remove</button>{% endif %}
+                  </fieldset>
+                </template>
+                {% for child in f.children %}
+                {% if child.datalist_id %}
+                <datalist id="{{ child.datalist_id }}">{% for suggestion in child.link_suggestions %}<option value="{{ suggestion.value }}" label="{{ suggestion.label }}"></option>{% endfor %}</datalist>
+                {% endif %}
+                {% endfor %}
+                {% if not f.read_only %}<button type="button" class="btn btn-sm btn-outline-secondary js-add-object-row" data-list="{{ f.name }}">Add item</button>{% endif %}
                 {% elif f.kind in ('textarea', 'json') %}
                 <textarea class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" rows="{{ 4 if f.kind == 'json' else 2 }}"{% if f.read_only %} readonly{% endif %}{% if f.html_required %} required{% endif %}>{{ f.value }}</textarea>
                 {% else %}
-                <input type="{% if f.kind == 'date' %}date{% elif f.kind == 'datetime' %}datetime-local{% elif f.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.kind == 'number' %} step="any"{% if f.min is not none %} min="{{ f.min }}"{% endif %}{% if f.max is not none %} max="{{ f.max }}"{% endif %}{% endif %}{% if f.max_length and f.kind == 'text' %} maxlength="{{ f.max_length }}"{% endif %}{% if f.read_only %} readonly{% endif %}{% if f.html_required %} required{% endif %}>
+                <input type="{% if f.kind == 'date' %}date{% elif f.kind == 'datetime' %}datetime-local{% elif f.kind == 'number' %}number{% else %}text{% endif %}" class="form-control" id="field-{{ f.name }}" name="{{ f.name }}" value="{{ f.value }}"{% if f.kind == 'number' %} step="any"{% if f.min is not none %} min="{{ f.min }}"{% endif %}{% if f.max is not none %} max="{{ f.max }}"{% endif %}{% endif %}{% if f.max_length and f.kind == 'text' %} maxlength="{{ f.max_length }}"{% endif %}{% if f.datalist_id %} list="{{ f.datalist_id }}"{% endif %}{% if f.read_only %} readonly{% endif %}{% if f.html_required %} required{% endif %}>
+                {% if f.datalist_id %}
+                <datalist id="{{ f.datalist_id }}">
+                  {% for suggestion in f.link_suggestions %}<option value="{{ suggestion.value }}" label="{{ suggestion.label }}"></option>{% endfor %}
+                </datalist>
+                {% endif %}
                 {% endif %}
                 {% if f.counter_max %}<small class="form-hint js-char-counter" data-counter-for="field-{{ f.name }}" data-counter-max="{{ f.counter_max }}"></small>{% endif %}
                 {% if f.hint %}<small class="form-hint">{{ f.hint }}</small>{% endif %}
@@ -87,6 +165,13 @@
 
 <script>
 const formFields = {{ form_fields_meta | tojson }};
+const saveUrl = {{ url_for(__name__ ~ ':posts:save') | tojson }};
+const previewUrl = `${saveUrl}/preview`;
+
+function csrfTokenValue() {
+  return document.querySelector('#post-form input[name="csrftoken"]')?.value
+    || document.querySelector('#post-form input[name="csrf_token"]')?.value;
+}
 
 function setNested(target, path, value) {
   let node = target;
@@ -96,6 +181,84 @@ function setNested(target, path, value) {
   }
   node[path[path.length - 1]] = value;
 }
+
+function validatePattern(element, kind, pattern, message) {
+  if (!pattern) return;
+  const values = ['multi_select'].includes(kind)
+    ? Array.from(element.selectedOptions).map(option => option.value)
+    : ['list', 'int_list', 'link_list'].includes(kind)
+      ? element.value.split(',').map(value => value.trim()).filter(Boolean)
+      : [element.value];
+  let expression;
+  try {
+    expression = new RegExp(`^(?:${pattern})$`);
+  } catch (error) {
+    element.setCustomValidity('Invalid pattern in the schema.');
+    return;
+  }
+  const valid = values.every(value => value === '' || expression.test(value));
+  element.setCustomValidity(valid ? '' : (message || 'Value does not match the required pattern.'));
+}
+
+for (const field of formFields) {
+  if (!field.pattern) continue;
+  const element = document.getElementById(`field-${field.name}`);
+  if (!element) continue;
+  const update = () => validatePattern(element, field.kind, field.pattern, field.pattern_message);
+  element.addEventListener('input', update);
+  element.addEventListener('change', update);
+  update();
+}
+
+function wireObjectRow(row) {
+  for (const element of row.querySelectorAll('[data-child-field]')) {
+    const child = formFields
+      .find(field => field.name === element.dataset.childParent)
+      ?.children?.find(item => item.name === element.dataset.childName);
+    if (!child || !child.pattern) continue;
+    const update = () => validatePattern(
+      element, child.kind, child.pattern, child.pattern_message
+    );
+    element.addEventListener('input', update);
+    element.addEventListener('change', update);
+    update();
+  }
+}
+
+document.querySelectorAll('.js-object-row').forEach(wireObjectRow);
+
+document.querySelectorAll('.js-add-object-row').forEach(button => {
+  button.addEventListener('click', () => {
+    const name = button.dataset.list;
+    const template = document.getElementById(`object-template-${name}`);
+    const container = document.getElementById(`field-${name}`);
+    const fragment = template.content.cloneNode(true);
+    const row = fragment.querySelector('.js-object-row');
+    for (const element of row.querySelectorAll('[data-child-field]')) {
+      if (element.dataset.childKind === 'select' || element.dataset.childKind === 'multi_select') {
+        element.disabled = false;
+      } else {
+        element.readOnly = false;
+      }
+      element.removeAttribute('disabled');
+      element.removeAttribute('readonly');
+    }
+    const rowSuffix = `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    for (const element of row.querySelectorAll('[id]')) {
+      const previousId = element.id;
+      element.id = `${previousId}-${rowSuffix}`;
+      const label = row.querySelector(`label[for="${previousId}"]`);
+      if (label) label.htmlFor = element.id;
+    }
+    container.appendChild(fragment);
+    wireObjectRow(row);
+  });
+});
+
+document.addEventListener('click', event => {
+  const button = event.target.closest('.js-remove-object-row');
+  if (button) button.closest('.js-object-row').remove();
+});
 
 for (const counter of document.querySelectorAll('.js-char-counter')) {
   const field = document.getElementById(counter.dataset.counterFor);
@@ -116,40 +279,54 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
   
   // Build frontmatter from the schema fields, under their external keys
   const frontmatter = {};
-  for (const field of formFields) {
-    if (field.kind === 'hidden') {
-      if (field.value !== '') setNested(frontmatter, field.path, JSON.parse(field.value));
-      continue;
-    }
-    const element = document.getElementById(`field-${field.name}`);
+  function readFieldValue(kind, element, name) {
     const raw = element.value;
-    const items = raw.split(',').map(t => t.trim()).filter(t => t);
-    let value;
-    if (field.kind === 'bool') {
-      value = raw === 'true';
-    } else if (field.kind === 'list') {
-      value = items;
-    } else if (field.kind === 'int_list') {
-      value = items.map(Number).filter(n => !Number.isNaN(n));
-    } else if (field.kind === 'number') {
-      value = raw === '' ? undefined : Number(raw);
-    } else if (field.kind === 'json') {
-      if (raw.trim() === '') {
-        value = undefined;
-      } else {
-        try {
-          value = JSON.parse(raw);
-        } catch (err) {
-          alert(`Error: ${field.name}: ${err.message}`);
-          return;
-        }
+    const items = raw.split(',').map(value => value.trim()).filter(Boolean);
+    if (kind === 'bool') return raw === 'true';
+    if (kind === 'select') return raw === '' ? undefined : raw;
+    if (kind === 'multi_select') return Array.from(element.selectedOptions).map(option => option.value);
+    if (kind === 'list' || kind === 'link_list') return items;
+    if (kind === 'int_list') return items.map(Number).filter(value => !Number.isNaN(value));
+    if (kind === 'number') return raw === '' ? undefined : Number(raw);
+    if (kind === 'json') {
+      if (raw.trim() === '') return undefined;
+      try { return JSON.parse(raw); }
+      catch (error) { throw new Error(`${name}: ${error.message}`); }
+    }
+    if (kind === 'hidden') {
+      if (raw === '') return undefined;
+      try { return JSON.parse(raw); }
+      catch (error) { throw new Error(`${name}: ${error.message}`); }
+    }
+    return raw === '' ? undefined : raw;
+  }
+
+  try {
+    for (const field of formFields) {
+      if (field.kind === 'hidden') {
+        if (field.value !== '') setNested(frontmatter, field.path, JSON.parse(field.value));
+        continue;
       }
-    } else {
-      value = raw === '' ? undefined : raw;
+      if (field.kind === 'object_list') {
+        const container = document.getElementById(`field-${field.name}`);
+        const value = Array.from(container.querySelectorAll('.js-object-row')).map(row => {
+          const item = {};
+          for (const child of row.querySelectorAll('[data-child-field]')) {
+            const childValue = readFieldValue(child.dataset.childKind, child, child.dataset.childName);
+            if (childValue !== undefined) item[child.dataset.childKey] = childValue;
+          }
+          return item;
+        });
+        setNested(frontmatter, field.path, value);
+        continue;
+      }
+      const element = document.getElementById(`field-${field.name}`);
+      const value = readFieldValue(field.kind, element, field.name);
+      if (value !== undefined) setNested(frontmatter, field.path, value);
     }
-    if (value !== undefined) {
-      setNested(frontmatter, field.path, value);
-    }
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+    return;
   }
   
   // Build request
@@ -157,12 +334,18 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     slug: formData.get('slug'),
     frontmatter: frontmatter,
     content: formData.get('content'),
+    etag: formData.get('etag'),
   };
   
   try {
-    const response = await fetch('/api/posts/save', {
+    const csrfToken = csrfTokenValue();
+    const response = await fetch(saveUrl, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+      },
       body: JSON.stringify(data),
     });
     
@@ -170,7 +353,13 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
       window.location.href = '{{ url_for(__name__ ~ ':posts:list') }}';
     } else {
       const error = await response.json();
-      alert(`Error: ${error.detail || 'Failed to save'}`);
+      if (response.status === 412 || response.status === 409) {
+        alert('This document changed after the form was opened. Reload the page before saving again.');
+      } else if (Array.isArray(error.detail?.issues)) {
+        alert(error.detail.issues.map(issue => `${issue.level}: ${issue.code}: ${issue.message}`).join('\n'));
+      } else {
+        alert(`Error: ${typeof error.detail === 'string' ? error.detail : 'Failed to save'}`);
+      }
     }
   } catch (err) {
     alert(`Error: ${err.message}`);
@@ -181,10 +370,37 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
 <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
 <script>
 // Initialize EasyMDE for content textarea
+let previewRequestId = 0;
+function renderSanitizedPreview(markdownText, preview) {
+  const requestId = ++previewRequestId;
+  const headers = {'Content-Type': 'application/json'};
+  const csrfToken = csrfTokenValue();
+  if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+  fetch(previewUrl, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({content: markdownText}),
+  }).then(async response => {
+    if (!response.ok) throw new Error(`Preview failed (${response.status})`);
+    return response.text();
+  }).then(html => {
+    if (requestId === previewRequestId && preview && preview.isConnected) {
+      preview.innerHTML = html;
+    }
+  }).catch(() => {
+    if (requestId === previewRequestId && preview && preview.isConnected) {
+      preview.textContent = 'The sanitized preview could not be loaded.';
+    }
+  });
+  return '<p class="text-muted">Rendering sanitized preview…</p>';
+}
+
 const easyMDE = new EasyMDE({
   element: document.getElementById('content'),
   autosave: { enabled: false },
   spellChecker: false,
+  previewRender: renderSanitizedPreview,
   status: ['lines', 'words', 'cursor'],
   toolbar: [
     'bold', 'italic', 'heading', '|',

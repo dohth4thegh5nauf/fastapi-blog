@@ -13,6 +13,7 @@
 {% endblock %}
 
 {% block content %}
+  <form id="delete-csrf-form" hidden>{{ csrf_input(request) }}</form>
   <div class="row">
     <div class="col-12">
       <div class="card">
@@ -75,7 +76,7 @@
                             <path d="M16 5l3 3" />
                           </svg>
                         </a>
-                        <button class="btn btn-sm btn-icon btn-danger" onclick="deletePost('{{ post.slug }}')" title="{{ t.delete }}" aria-label="{{ t.delete }}">
+                        <button class="btn btn-sm btn-icon btn-danger" onclick="deletePost('{{ post.slug }}', '{{ post.etag }}')" title="{{ t.delete }}" aria-label="{{ t.delete }}">
                           <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                             <path d="M4 7l16 0" />
@@ -111,12 +112,22 @@ const translations = {
   failedToDelete: '{{ t.failed_to_delete }}'
 };
 
-async function deletePost(slug) {
+const mutationUrl = {{ url_for(__name__ ~ ':posts:save') | tojson }};
+
+async function deletePost(slug, etag) {
   if (!confirm(`${translations.deleteConfirm} "${slug}"?`)) return;
   
   try {
-    const response = await fetch(`/api/posts/delete/${slug}`, {
+    const response = await fetch(`${mutationUrl}/${encodeURIComponent(slug)}`, {
       method: 'DELETE',
+      headers: {
+        'If-Match': etag,
+        ...((document.querySelector('#delete-csrf-form input[name="csrftoken"]')?.value
+          || document.querySelector('#delete-csrf-form input[name="csrf_token"]')?.value)
+          ? {'X-CSRFToken': document.querySelector('#delete-csrf-form input[name="csrftoken"]')?.value
+            || document.querySelector('#delete-csrf-form input[name="csrf_token"]')?.value}
+          : {}),
+      },
     });
     
     if (response.ok) {

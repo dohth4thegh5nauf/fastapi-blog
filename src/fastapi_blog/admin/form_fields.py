@@ -14,7 +14,17 @@ from ..models import MISSING, FieldSpec, FrontmatterSchema
 
 
 _HALF_WIDTH_KINDS = ('date', 'datetime', 'bool', 'number')
-_REQUIRABLE_KINDS = ('text', 'textarea', 'date', 'datetime', 'number')
+_REQUIRABLE_KINDS = (
+  'text',
+  'textarea',
+  'date',
+  'datetime',
+  'number',
+  'select',
+  'multi_select',
+  'link',
+  'link_list',
+)
 _ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}')
 _SEO_ROLES = frozenset(
   {
@@ -50,9 +60,13 @@ def field_kind(spec: FieldSpec) -> str:
   """Return the kind of input used to edit a schema field."""
   if spec.hidden:
     return 'hidden'
+  if spec.choices is not None:
+    return 'multi_select' if spec.type.startswith('list[') else 'select'
   if spec.type == 'bool':
     return 'bool'
-  if spec.type in ('object', 'list[object]', 'dict', 'any'):
+  if spec.type == 'list[object]':
+    return 'object_list'
+  if spec.type in ('object', 'dict', 'any'):
     return 'json'
   if spec.type == 'date' or (spec.role == 'date' and spec.type == 'str'):
     return 'date'
@@ -60,8 +74,10 @@ def field_kind(spec: FieldSpec) -> str:
     return 'datetime'
   if spec.type in ('int', 'float'):
     return 'number'
+  if spec.type == 'link':
+    return 'link'
   if spec.type == 'list[str]' or spec.type == 'list[link]':
-    return 'list'
+    return 'link_list' if spec.type == 'list[link]' else 'list'
   if spec.type == 'list[int]':
     return 'int_list'
   if spec.role == 'description' or (spec.max_length and spec.max_length > 200):
@@ -85,12 +101,14 @@ def format_value(kind: str, value: Any) -> str:
     if isinstance(value, datetime.datetime):
       return value.replace(tzinfo=None).isoformat(timespec='minutes')
     return str(value).replace(' ', 'T')[:16]
-  if kind in ('list', 'int_list'):
+  if kind in ('list', 'int_list', 'link_list', 'multi_select'):
     if isinstance(value, list | tuple):
       return ', '.join(str(item) for item in value)
     return str(value)
   if kind == 'json':
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
+  if kind == 'object_list':
+    return ''
   return str(value)
 
 
@@ -105,7 +123,7 @@ def new_value(spec: FieldSpec, kind: str) -> Any:
     return now if kind == 'datetime' else now.strftime('%Y-%m-%d')
   if kind == 'json' and spec.type in ('object', 'dict'):
     return {}
-  if kind == 'json' and spec.type == 'list[object]':
+  if kind == 'object_list' and spec.type == 'list[object]':
     return []
   return None
 
@@ -150,15 +168,124 @@ def _group(spec: FieldSpec, parents: tuple[FieldSpec, ...]) -> str:
   return ''
 
 
+def _choices_for(spec: FieldSpec) -> list[dict[str, str]]:
+  """Return normalized option labels and values for a schema field."""
+  if spec.choices is None:
+    return []
+  return [
+    {
+      'value': (
+        str(item.get('value')) if isinstance(item, Mapping) else str(item)
+      ),
+      'label': str(item.get('label') or item.get('value'))
+      if isinstance(item, Mapping)
+      else str(item),
+    }
+    for item in spec.choices
+  ]
+
+
+def _pattern_for(spec: FieldSpec) -> tuple[str | None, str]:
+  """Return a regular expression and its user-facing validation message."""
+  pattern = spec.pattern if spec.pattern is not None else spec.item_pattern
+  if isinstance(pattern, tuple):
+    return pattern[0], pattern[1]
+  if isinstance(pattern, list):
+    return pattern[0], pattern[1]
+  return pattern, ''
+
+
+def _object_child_fields(
+  spec: FieldSpec,
+  *,
+  is_new: bool,
+  parent_read_only: bool,
+  link_choices: Mapping[str, list[dict[str, str]]],
+  parent_name: str,
+) -> list[dict[str, Any]]:
+  """Describe the controls rendered inside one list[object] row."""
+  children: list[dict[str, Any]] = []
+  for child in spec.fields or ():
+    kind = field_kind(child)
+    # Deep object values remain an explicit JSON editor inside a row. The
+    # top-level list itself is rendered as repeatable nested field groups.
+    if kind == 'object_list':
+      kind = 'json'
+    pattern, pattern_message = _pattern_for(child)
+    child_name = f'{parent_name}__{child.name}'
+    default_value = new_value(child, kind)
+    selected_values = (
+      [str(item) for item in default_value]
+      if isinstance(default_value, (list, tuple))
+      else ([str(default_value)] if default_value is not None else [])
+    )
+    children.append(
+      {
+        'name': child.name,
+        'key': child.key,
+        'kind': kind,
+        'type': child.type,
+        'label': child.label or child.description or child.name,
+        'value': format_value(kind, default_value),
+        'required': child.required,
+        'read_only': not is_new and (parent_read_only or child.read_only),
+        'choices': _choices_for(child),
+        'selected_values': selected_values,
+        'multiple': kind == 'multi_select',
+        'pattern': pattern,
+        'pattern_message': pattern_message,
+        'datalist_id': (
+          f'link-options-{child_name}'
+          if kind in ('link', 'link_list')
+          else ''
+        ),
+        'link_suggestions': link_choices.get(child_name, []),
+        'hint': child.hint or '',
+        'min': child.min,
+        'max': child.max,
+        'max_length': child.max_length,
+      }
+    )
+  return children
+
+
+def _object_item_fields(
+  spec: FieldSpec,
+  item: Mapping[str, Any],
+  children: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Return row-specific child values while retaining schema metadata."""
+  result: list[dict[str, Any]] = []
+  child_specs = {child.name: child for child in spec.fields or ()}
+  for child in children:
+    field = child_specs[child['name']]
+    value = get_field_value(item, field, new_value(field, child['kind']))
+    selected_values = (
+      [str(item) for item in value]
+      if isinstance(value, (list, tuple))
+      else ([str(value)] if value is not None else [])
+    )
+    result.append(
+      {
+        **child,
+        'value': format_value(child['kind'], value),
+        'selected_values': selected_values,
+      }
+    )
+  return result
+
+
 def build_form_fields(
   schema: FrontmatterSchema,
   frontmatter: Mapping[str, Any],
   labels: Mapping[str, str],
   *,
   is_new: bool = False,
+  link_choices: Mapping[str, list[dict[str, str]]] | None = None,
 ) -> list[dict[str, Any]]:
   """Describe every form input in schema order, including nested fields."""
   result: list[dict[str, Any]] = []
+  link_choices = link_choices or {}
   seo_check = schema.seo.check if schema.seo and schema.seo.check else None
   for parents, spec in _flatten(schema.fields):
     kind = field_kind(spec)
@@ -178,6 +305,35 @@ def build_form_fields(
         counter_max = seo_check.title_max
       elif spec.role == 'description':
         counter_max = seo_check.description_max
+    choices = _choices_for(spec)
+    pattern_regex, pattern_message = _pattern_for(spec)
+    children = (
+      _object_child_fields(
+        spec,
+        is_new=is_new,
+        parent_read_only=(
+          spec.read_only or any(parent.read_only for parent in parents)
+        ),
+        link_choices=link_choices,
+        parent_name=name,
+      )
+      if spec.type == 'list[object]'
+      else []
+    )
+    items = (
+      [
+        _object_item_fields(spec, item, children)
+        for item in (value or [])
+        if isinstance(item, Mapping)
+      ]
+      if spec.type == 'list[object]'
+      else []
+    )
+    selected_values = (
+      [str(item) for item in value]
+      if isinstance(value, (list, tuple))
+      else ([str(value)] if value is not None else [])
+    )
     result.append(
       {
         'name': name,
@@ -185,6 +341,19 @@ def build_form_fields(
         'path': path,
         'type': spec.type,
         'kind': kind,
+        'choices': choices,
+        'multiple': kind == 'multi_select',
+        'selected_values': selected_values,
+        'pattern': pattern_regex,
+        'pattern_message': pattern_message or '',
+        'link_suggestions': link_choices.get(name, []),
+        'datalist_id': (
+          f'link-options-{name}'
+          if kind in ('link', 'link_list')
+          else ''
+        ),
+        'children': children,
+        'items': items,
         'group': _group(spec, parents),
         'label': label or spec.description or spec.name,
         'value': format_value(kind, value),
@@ -214,6 +383,22 @@ def form_fields_meta(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
       'path': field['path'],
       'kind': field['kind'],
       'type': field['type'],
+      'choices': field.get('choices', []),
+      'multiple': field.get('multiple', False),
+      'pattern': field.get('pattern'),
+      'pattern_message': field.get('pattern_message', ''),
+      'link_suggestions': field.get('link_suggestions', []),
+      'children': [
+        {
+          'name': child['name'],
+          'key': child['key'],
+          'kind': child['kind'],
+          'type': child['type'],
+          'pattern': child.get('pattern'),
+          'pattern_message': child.get('pattern_message', ''),
+        }
+        for child in field.get('children', [])
+      ],
       **({'value': field['value']} if field['kind'] == 'hidden' else {}),
     }
     for field in fields

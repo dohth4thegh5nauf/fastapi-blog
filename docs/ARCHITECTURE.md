@@ -181,11 +181,13 @@ callback, the policy grants:
 Missing or unknown roles, resources and actions are denied. A session role is
 preserved when the session cookie is also used for REST API authentication.
 Starlette Admin's built-in CSRF protection continues to guard its own forms.
-Cookie-authenticated unsafe requests to admin and API paths additionally
-require an `Origin` whose scheme and authority exactly match the request
-scheme and `Host`; missing, duplicate or malformed Origin/Host headers are
-rejected. The guard also rejects protocol-relative and opaque Origins.
-Basic-auth and other non-cookie requests are not subject to this Origin gate.
+Cookie-authenticated unsafe requests to REST API paths additionally require
+an `Origin` whose scheme and authority exactly match the request scheme and
+`Host`; missing, duplicate or malformed Origin/Host headers are rejected. The
+guard also rejects protocol-relative and opaque Origins. It is deliberately
+not installed on admin paths: Starlette Admin's built-in CSRF middleware
+protects its own login, forms and custom-view routes. Basic-auth and other
+non-cookie REST requests are not subject to this Origin gate.
 
 Starlette Admin's synchronous `ModelView` hooks accept a synchronous custom
 authorizer. REST and Markdown custom routes also accept awaitable callbacks;
@@ -193,7 +195,12 @@ ModelView hooks deny an awaitable result rather than treating it as permission.
 
 ### Storage and request boundaries
 
-The public blog reads Markdown documents through `DocumentStore`. The REST API
-and admin Markdown views share the same collection configuration and the
-frontmatter schema. The optional SQL database stores admin accounts and role
-management data; it is not a mirror of Markdown content.
+The public blog, REST API and admin Markdown views read the same files through
+`DocumentStore` and share the collection configuration and frontmatter
+schema. Admin create/update operations go directly through `DocumentService`
+(no loopback HTTP request): it applies schema validation and write-time
+`on_create`/`read_only` rules, checks configured uniqueness and blocking
+validators, commits atomically, then emits change events and invalidates the
+post cache. The REST API retains its HTTP-specific request/response boundary.
+The optional SQL database stores admin accounts and role-management data; it
+is not a mirror of Markdown content.
