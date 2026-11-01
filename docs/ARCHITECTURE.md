@@ -197,10 +197,12 @@ ModelView hooks deny an awaitable result rather than treating it as permission.
 
 The public blog, REST API and admin Markdown views read the same files through
 `DocumentStore` and share the collection configuration and frontmatter
-schema. Admin create/update operations go directly through `DocumentService`
-(no loopback HTTP request): it applies schema validation and write-time
-`on_create`/`read_only` rules, checks configured uniqueness and blocking
-validators, commits atomically, then emits change events and invalidates the
-post cache. The REST API retains its HTTP-specific request/response boundary.
-The optional SQL database stores admin accounts and role-management data; it
-is not a mirror of Markdown content.
+schema. Writes go through `DocumentService` on both boundaries (no loopback
+HTTP request from the admin panel): it applies schema validation and
+write-time `on_create`/`read_only` rules, checks configured uniqueness and
+blocking validators, commits atomically, then emits change events and
+invalidates the post cache. The REST API validates request payloads and maps
+failures to HTTP status codes before delegating to the same commit path; the
+admin form supplies etags and renders the service's diagnostics. The optional
+SQL database stores admin accounts and role-management data; it is not a
+mirror of Markdown content.

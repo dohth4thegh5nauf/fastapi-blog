@@ -2,7 +2,6 @@ import pathlib
 import re
 import warnings
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import Any
 
 import jinja2
@@ -37,7 +36,12 @@ from .permissions import (
   user_from_session,
 )
 from .security import install_origin_check_middleware
-from .validators import Validator, run_blocking
+from .service import (
+  BlockingValidationError,
+  DocumentService,
+  UniqueViolationError,
+)
+from .validators import Validator
 
 
 def _event_actor(user: Any) -> Any:
@@ -244,6 +248,13 @@ def get_api_router(
     if collection_spec is not None
     else store.blog_collections(posts_dirname)['posts']
   )
+  document_service = DocumentService(
+    docs,
+    frontmatter_schema,
+    collection_spec=collection_spec,
+    validators=validators,
+    cwd=pathlib.Path.cwd(),
+  )
   Payload = payload_model(strict, frontmatter_schema)
 
   def _require_if_match(if_match: str | None) -> None:
@@ -253,144 +264,51 @@ def get_api_router(
         detail='If-Match header is required',
       )
 
-  def _document_path(slug: str) -> pathlib.Path:
-    path = docs.path_for(slug)
-    if path is not None:
-      return path
-    return pathlib.Path(posts_dirname) / f'{slug}.md'
-
-  def _check_unique_on_create(slug: str, frontmatter: dict[str, Any]) -> None:
-    """Reject duplicate configured values before a new file is written."""
-    if collection_spec is None or not collection_spec.unique:
-      return
-    schema = collection_spec.schema or frontmatter_schema
-    seq_regex = (
-      collection_spec.slug_template.slug_regex()
-      if collection_spec.slug_template is not None
-      else None
-    )
-    new_seq = None
-    if 'seq' in collection_spec.unique:
-      match = seq_regex.fullmatch(slug) if seq_regex is not None else None
-      if match is None or 'seq' not in match.groupdict():
-        raise HTTPException(
-          status_code=status.HTTP_400_BAD_REQUEST,
-          detail='Slug does not match the configured sequence template',
-        )
-      new_seq = match.group('seq')
-    new_values: dict[str, Any] = {}
-    for name in collection_spec.unique:
-      if name == 'seq':
-        new_values[name] = new_seq
-      else:
-        field = schema.get(name) if schema is not None else None
-        key = field.key if field is not None else name
-        new_values[name] = frontmatter.get(key)
-    for existing_slug in docs.list():
-      try:
-        existing = docs.read(existing_slug).frontmatter
-      except (store.ParseError, store.NotFoundError):
-        continue
-      for name, value in new_values.items():
-        if value is None or value == '':
-          continue
-        if name == 'seq':
-          match = seq_regex.fullmatch(existing_slug) if seq_regex else None
-          existing_value = (
-            match.group('seq')
-            if match is not None and 'seq' in match.groupdict()
-            else None
-          )
-        else:
-          field = schema.get(name) if schema is not None else None
-          key = field.key if field is not None else name
-          existing_value = existing.get(key)
-        if existing_value == value:
-          raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-              f'Value {value!r} of unique field {name!r} is already used '
-              f'by {existing_slug!r}'
-            ),
-          )
-
-  def _remove_created(slug: str) -> None:
-    """Remove a file created by this request, even when deletes are off.
-
-    Rollback of a just-created document is not a user-facing delete, so a
-    collection with `delete: false` must not stop it.
-    """
-    target = docs.path_for(slug)
-    if target is None:
-      return
-    try:
-      docs.delete(slug, notify=False)
-    except store.OperationNotAllowedError:
-      target.unlink()
-
-  def _write_validated(
-    slug: str,
+  def _write_document(
+    slug: str | None,
     frontmatter: dict[str, Any],
     body: str,
     *,
-    previous_text: str | None,
     if_match: str | None = None,
     user: dict[str, Any] | None = None,
-  ) -> str:
-    """Write, run the blocking validators, roll back on a blocking outcome.
+  ) -> tuple[str, str]:
+    """Write through the shared document service, mapping failures to HTTP.
 
-    A blocking outcome restores the previous bytes (or removes a file that
-    was just created) and raises HTTP 422 with the findings. Between the
-    write and a rollback the new content is on disk and visible to
-    concurrent readers; checking a temporary copy first is out of scope
-    (TODO 6.3 documents this).
+    The service checks configured uniqueness, writes, runs the blocking
+    validators and rolls back on a blocking outcome (TODO 6.3): a blocking
+    outcome restores the previous bytes (or removes a just-created file) and
+    raises HTTP 422 with the findings. Between the write and a rollback the
+    new content is on disk and visible to concurrent readers; checking a
+    temporary copy first is out of scope.
     """
-    # A configured `unique` constraint must be checked in the same critical
-    # section as the write. In particular, `unique: [seq]` applies to manual
-    # slugs too, not only to slugs produced by `POST /create`.
-    with docs._lock:
-      if previous_text is None and collection_spec is not None:
-        _check_unique_on_create(slug, frontmatter)
-      try:
-        etag = docs.write(
-          slug,
-          frontmatter,
-          body,
-          if_match=if_match,
-          user=_event_actor(user),
-          notify=False,
-        )
-      except store.OperationNotAllowedError as exc:
-        raise HTTPException(
-          status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
-        ) from exc
-    blocking = run_blocking(
-      validators,
-      collection_name=(collection_spec.name if collection_spec else 'posts'),
-      slug=slug,
-      path=_document_path(slug),
-      frontmatter=frontmatter,
-      cwd=pathlib.Path.cwd(),
-    )
-    if not blocking:
-      docs.notify_change(
-        'updated' if previous_text is not None else 'created',
+    try:
+      result = document_service.commit(
         slug,
-        etag,
+        frontmatter,
+        body,
+        if_match=if_match,
         user=_event_actor(user),
       )
-      return etag
-    if previous_text is None:
-      _remove_created(slug)
-    else:
-      target = docs.path_for(slug)
-      if target is not None:
-        store.atomic_write_text(target, previous_text)
-    helpers.clear_posts_cache()
-    raise HTTPException(
-      status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-      detail={'issues': [issue.to_dict() for issue in blocking]},
-    )
+    except BlockingValidationError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={'issues': [issue.to_dict() for issue in exc.issues]},
+      ) from exc
+    except UniqueViolationError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+      ) from exc
+    except store.OperationNotAllowedError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+      ) from exc
+    except store.ConflictError as exc:
+      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except (ValueError, OSError) as exc:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+      ) from exc
+    return result.slug, result.etag
 
   # Setup authentication dependency
   auth_func: Callable[..., Any]
@@ -461,52 +379,8 @@ def get_api_router(
   def _create_generated(
     payload: Any, user: dict[str, Any] | None = None
   ) -> tuple[str, str]:
-    if collection_spec is None or collection_spec.slug_template is None:
-      raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=(
-          'A slug is required; configure a collection slug_template to '
-          'generate it.'
-        ),
-      )
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
-    try:
-      slug, etag = collection_spec.create_document(
-        docs,
-        fm_dump,
-        _body(payload),
-        created_at=datetime.now(UTC),
-        user=_event_actor(user),
-        notify=False,
-      )
-    except store.OperationNotAllowedError as exc:
-      raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
-      ) from exc
-    except store.ConflictError as exc:
-      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    except (ValueError, OSError) as exc:
-      raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-      ) from exc
-
-    blocking = run_blocking(
-      validators,
-      collection_name=collection_spec.name,
-      slug=slug,
-      path=docs.path_for(slug) or (pathlib.Path(posts_dirname) / f'{slug}.md'),
-      frontmatter=fm_dump,
-      cwd=pathlib.Path.cwd(),
-    )
-    if blocking:
-      _remove_created(slug)
-      raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        detail={'issues': [issue.to_dict() for issue in blocking]},
-      )
-    docs.notify_change('created', slug, etag, user=_event_actor(user))
-    helpers.clear_posts_cache()
-    return slug, etag
+    return _write_document(None, fm_dump, _body(payload), user=user)
 
   @api_router.post('/create', status_code=status.HTTP_201_CREATED)
   async def create_generated_post(
@@ -551,10 +425,7 @@ def get_api_router(
         detail=f"Post '{slug}' already exists",
       )
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
-    etag = _write_validated(
-      slug, fm_dump, _body(payload), previous_text=None, user=user
-    )
-    helpers.clear_posts_cache()
+    _slug, etag = _write_document(slug, fm_dump, _body(payload), user=user)
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
 
@@ -577,22 +448,9 @@ def get_api_router(
     fm_dump = _frontmatter_dump(
       payload, frontmatter_schema, is_create=False, existing=existing
     )
-    previous_path = docs.path_for(slug)
-    previous_text = (
-      previous_path.read_text(encoding='utf-8') if previous_path else None
+    _slug, etag = _write_document(
+      slug, fm_dump, _body(payload), if_match=if_match, user=user
     )
-    try:
-      etag = _write_validated(
-        slug,
-        fm_dump,
-        _body(payload),
-        previous_text=previous_text,
-        if_match=if_match,
-        user=user,
-      )
-    except store.ConflictError as exc:
-      raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    helpers.clear_posts_cache()
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'updated'}
 
@@ -604,7 +462,7 @@ def get_api_router(
   ) -> None:
     _require_if_match(if_match)
     try:
-      docs.delete(slug, if_match=if_match, user=_event_actor(user))
+      document_service.delete(slug, if_match=if_match, user=_event_actor(user))
     except store.OperationNotAllowedError as exc:
       raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
@@ -616,7 +474,6 @@ def get_api_router(
       ) from exc
     except store.ConflictError as exc:
       raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    helpers.clear_posts_cache()
 
   @api_router.post('/save')
   async def save_post(
@@ -654,17 +511,7 @@ def get_api_router(
     fm_dump = _frontmatter_dump(
       payload, frontmatter_schema, is_create=is_new, existing=existing
     )
-    if is_new:
-      previous_text = None
-    else:
-      previous_path = docs.path_for(slug)
-      previous_text = (
-        previous_path.read_text(encoding='utf-8') if previous_path else None
-      )
-    etag = _write_validated(
-      slug, fm_dump, _body(payload), previous_text=previous_text, user=user
-    )
-    helpers.clear_posts_cache()
+    _slug, etag = _write_document(slug, fm_dump, _body(payload), user=user)
     response.headers['ETag'] = etag
 
     return JSONResponse(

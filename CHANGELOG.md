@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Refactoring: one write transaction, one uniqueness check
+
+- `DocumentService.commit()` is now the single write transaction shared by
+  the admin panel and the REST API: uniqueness checks, the store write,
+  blocking validators, rollback and `on_change` notification live in one
+  place (`service.py`). The REST API validates its payloads as before and
+  commits the dumped frontmatter through it; `save()` validates and
+  delegates. The REST API's private copies of the uniqueness check and of
+  the write/validate/rollback flow are gone from `editor.py`.
+- The uniqueness rule itself moved to `CollectionSpec`
+  (`unique_value`/`find_unique_violation`), shared by `check`, the write
+  transaction and the REST error mapping. Duplicate values raise the new
+  `UniqueViolationError` so the REST API keeps answering HTTP 409 while
+  other callers get a plain `ValueError` family error.
+
 ### Release-candidate review fixes
 
 - `markdown_edit.html` addressed the repeated `list[object]` rows as

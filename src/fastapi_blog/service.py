@@ -1,7 +1,7 @@
 """Validated document operations for schema-aware admin writes."""
 
 import pathlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -20,6 +20,20 @@ class BlockingValidationError(ValueError):
     """Store the findings on the exception for the caller to report."""
     self.issues = issues
     super().__init__('Document failed configured validation checks')
+
+
+class UniqueViolationError(ValueError):
+  """A configured `unique` value is already used by another document."""
+
+  def __init__(self, name: str, value: Any, other_slug: str):
+    """Keep the parts on the exception so callers can map them to errors."""
+    self.name = name
+    self.value = value
+    self.other_slug = other_slug
+    super().__init__(
+      f'Value {value!r} of unique field {name!r} is already used '
+      f'by {other_slug!r}'
+    )
 
 
 @dataclass(frozen=True)
@@ -88,54 +102,11 @@ class DocumentService:
     spec = self.collection_spec
     if spec is None or not spec.unique:
       return
-    slug_regex = (
-      spec.slug_template.slug_regex()
-      if spec.slug_template is not None
-      else None
-    )
-    new_values: dict[str, Any] = {}
-    for name in spec.unique:
-      if name == 'seq':
-        # A generated slug receives its sequence while DocumentStore holds
-        # the same lock; manual slugs must be checked against the template.
-        if slug is None:
-          continue
-        match = slug_regex.fullmatch(slug) if slug_regex is not None else None
-        if match is None or 'seq' not in match.groupdict():
-          raise ValueError(
-            'Slug does not match the configured sequence template'
-          )
-        new_values[name] = match.group('seq')
-      else:
-        field = self.schema.get(name)
-        key = field.key if field is not None else name
-        new_values[name] = frontmatter.get(key)
-    for other_slug in self.documents.list():
-      if other_slug == slug:
-        continue
-      try:
-        existing = self.documents.read(other_slug).frontmatter
-      except (store.ParseError, store.NotFoundError):
-        continue
-      for name, value in new_values.items():
-        if value is None or value == '':
-          continue
-        if name == 'seq':
-          match = slug_regex.fullmatch(other_slug) if slug_regex else None
-          existing_value = match.group('seq') if match else None
-        else:
-          field = self.schema.get(name)
-          key = field.key if field is not None else name
-          existing_value = existing.get(key)
-        if existing_value == value:
-          raise ValueError(
-            f'Value {value!r} of unique field {name!r} is already used '
-            f'by {other_slug!r}'
-          )
+    violation = spec.find_unique_violation(self.documents, slug, frontmatter)
+    if violation is not None:
+      raise UniqueViolationError(*violation)
 
-  def _check_blocking(
-    self, slug: str, frontmatter: Mapping[str, Any]
-  ) -> None:
+  def _check_blocking(self, slug: str, frontmatter: Mapping[str, Any]) -> None:
     if not self.validators:
       return
     path = self.documents.path_for(slug)
@@ -156,9 +127,7 @@ class DocumentService:
     if blocking:
       raise BlockingValidationError(blocking)
 
-  def _rollback(
-    self, slug: str, *, previous_text: str | None
-  ) -> None:
+  def _rollback(self, slug: str, *, previous_text: str | None) -> None:
     path = self.documents.path_for(slug)
     if path is None:
       return
@@ -185,21 +154,51 @@ class DocumentService:
     supply the previously read etag to reject stale forms with HTTP-neutral
     `store.ConflictError` semantics.
     """
-    is_generated = not slug
     if not isinstance(content, str) or not content.strip():
       raise ValueError('Document content must not be empty')
     if slug:
       self.documents.path_for(slug)
+    body = f'\n{content.rstrip()}\n'
+    return self.commit(
+      slug,
+      frontmatter,
+      body,
+      prepare=lambda is_new, existing: self._validated_frontmatter(
+        frontmatter, is_create=is_new, existing=existing
+      ),
+      if_match=if_match,
+      expected_exists=expected_exists,
+      user=user,
+    )
+
+  def commit(
+    self,
+    slug: str | None,
+    frontmatter: Mapping[str, Any],
+    body: str,
+    *,
+    prepare: Callable[[bool, Mapping[str, Any] | None], Mapping[str, Any]]
+    | None = None,
+    if_match: str | None = None,
+    expected_exists: bool | None = None,
+    user: Any = None,
+  ) -> SaveResult:
+    """Write a document, run the blocking validators, roll back on failure.
+
+    For callers whose frontmatter is already schema-validated (the REST API
+    validates its payloads before writing); `save()` validates and delegates
+    here. Uniqueness, the store write, the blocking validators and any
+    rollback run in one critical section; `on_change` fires after the commit,
+    outside the lock.
+    """
+    is_generated = not slug
     if is_generated and (
-      self.collection_spec is None
-      or self.collection_spec.slug_template is None
+      self.collection_spec is None or self.collection_spec.slug_template is None
     ):
       raise ValueError(
         'A slug is required; configure a collection slug_template '
         'to generate it.'
       )
-
-    body = f'\n{content.rstrip()}\n'
     actor = _actor(user)
 
     # Keep schema merging, uniqueness checks, the write and any rollback in
@@ -221,8 +220,10 @@ class DocumentService:
         path = self.documents.path_for(str(slug))
         previous_text = path.read_text(encoding='utf-8') if path else None
 
-      validated = self._validated_frontmatter(
-        frontmatter, is_create=is_new, existing=existing
+      validated: dict[str, Any] = (
+        dict(prepare(is_new, existing))
+        if prepare is not None
+        else dict(frontmatter)
       )
 
       if is_generated:

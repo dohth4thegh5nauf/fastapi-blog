@@ -191,6 +191,77 @@ class CollectionSpec:
       notify=notify,
     )
 
+  def unique_value(
+    self,
+    name: str,
+    *,
+    slug: str,
+    frontmatter: Mapping[str, Any],
+  ) -> Any:
+    """Return the value one `unique` name takes for a document.
+
+    `seq` is read from the slug through the slug template's regex; field
+    names are read from the frontmatter by external key. Returns `None`
+    when the slug doesn't match the sequence template or the field is unset.
+    """
+    if name == 'seq':
+      regex = self.slug_template.slug_regex() if self.slug_template else None
+      match = regex.fullmatch(slug) if regex is not None else None
+      if match is None or 'seq' not in match.groupdict():
+        return None
+      return match.group('seq')
+    schema = self.schema or DEFAULT_SCHEMA
+    field = schema.get(name)
+    key = field.key if field is not None else name
+    return frontmatter.get(key)
+
+  def find_unique_violation(
+    self,
+    documents: store.DocumentStore,
+    slug: str | None,
+    frontmatter: Mapping[str, Any],
+  ) -> tuple[str, Any, str] | None:
+    """Return `(name, value, other_slug)` for the first duplicate value.
+
+    A `None` slug (about to be generated) skips the `seq` tag: the sequence
+    number is allocated under the store's lock while writing. Documents that
+    fail to read are skipped, like `check` does. A manual slug that doesn't
+    match the sequence template raises `ValueError`.
+    """
+    if not self.unique:
+      return None
+    new_values: dict[str, Any] = {}
+    for name in self.unique:
+      if name == 'seq':
+        if slug is None:
+          continue
+        value = self.unique_value(name, slug=slug, frontmatter=frontmatter)
+        if value is None:
+          raise ValueError(
+            'Slug does not match the configured sequence template'
+          )
+        new_values[name] = value
+      else:
+        new_values[name] = self.unique_value(
+          name, slug=slug or '', frontmatter=frontmatter
+        )
+    for other_slug in sorted(documents.list()):
+      if other_slug == slug:
+        continue
+      try:
+        existing = documents.read(other_slug).frontmatter
+      except (store.ParseError, store.NotFoundError):
+        continue
+      for name, value in new_values.items():
+        if value is None or value == '':
+          continue
+        existing_value = self.unique_value(
+          name, slug=other_slug, frontmatter=existing
+        )
+        if existing_value == value:
+          return (name, value, other_slug)
+    return None
+
   def summarize(self, slug: str, frontmatter: Mapping[str, Any]) -> str:
     """Render the configured caption, or fall back to the title role."""
     schema = self.schema or DEFAULT_SCHEMA

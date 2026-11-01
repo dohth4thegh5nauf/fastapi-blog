@@ -144,7 +144,7 @@ def test_manual_slug_cannot_reuse_a_unique_sequence(app_dir):
 def test_generated_slug_uses_utc_first_save_when_date_is_empty(
   app_dir, monkeypatch
 ):
-  from fastapi_blog import editor
+  from fastapi_blog import service
 
   class FrozenDateTime:
     @staticmethod
@@ -152,7 +152,8 @@ def test_generated_slug_uses_utc_first_save_when_date_is_empty(
       assert tz is UTC
       return datetime(2024, 2, 3, 23, 30, tzinfo=UTC)
 
-  monkeypatch.setattr(editor, 'datetime', FrozenDateTime)
+  # The first-save timestamp is taken by the document service.
+  monkeypatch.setattr(service, 'datetime', FrozenDateTime)
   schema = FrontmatterSchema(
     fields=(FieldSpec('title', required=True, role='title'),)
   )

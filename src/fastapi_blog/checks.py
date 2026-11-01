@@ -204,33 +204,24 @@ def _check_unique(
   if not spec.unique:
     return
   seen: dict[str, dict[str, str]] = {name: {} for name in spec.unique}
-  seq_regex = spec.slug_template.slug_regex() if spec.slug_template else None
   for slug in sorted(documents.list()):
     try:
       record = documents.read(slug)
     except (store.ParseError, store.NotFoundError):
       continue
     for name in spec.unique:
-      if name == 'seq':
-        match = seq_regex.fullmatch(slug) if seq_regex else None
-        value = (
-          match.group('seq') if match and 'seq' in match.groupdict() else None
-        )
-        if value is None:
-          issues.append(
-            Issue(
-              'error',
-              'unique.sequence_missing',
-              'Slug does not match the configured sequence template',
-              slug,
-              'seq',
-            )
+      value = spec.unique_value(name, slug=slug, frontmatter=record.frontmatter)
+      if name == 'seq' and value is None:
+        issues.append(
+          Issue(
+            'error',
+            'unique.sequence_missing',
+            'Slug does not match the configured sequence template',
+            slug,
+            'seq',
           )
-          continue
-      else:
-        field = spec.schema.get(name) if spec.schema else None
-        key = field.key if field else name
-        value = record.frontmatter.get(key)
+        )
+        continue
       if value is None or value == '':
         continue
       # Canonical JSON representation makes lists/maps comparable without
