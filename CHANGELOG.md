@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Release-candidate review fixes
+
+- `markdown_edit.html` addressed the repeated `list[object]` rows as
+  `f.items`, which Jinja resolves to the dict method instead of the field
+  metadata key; subscript syntax (`f['items']`) renders nested object lists
+  correctly.
+- Aligned the new service/admin tests with the strict built-in schema
+  (frontmatter requires `date`) and with the service contract (blocking
+  validators must be configured for `run_blocking` to run).
+
 ### Admin document service, schema-driven forms and safe preview (TODO phase E, 7.6–7.7)
 
 - Markdown admin writes now call `DocumentService` directly instead of making

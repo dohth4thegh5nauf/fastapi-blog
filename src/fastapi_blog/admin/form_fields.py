@@ -235,9 +235,7 @@ def _object_child_fields(
         'pattern': pattern,
         'pattern_message': pattern_message,
         'datalist_id': (
-          f'link-options-{child_name}'
-          if kind in ('link', 'link_list')
-          else ''
+          f'link-options-{child_name}' if kind in ('link', 'link_list') else ''
         ),
         'link_suggestions': link_choices.get(child_name, []),
         'hint': child.hint or '',
@@ -348,9 +346,7 @@ def build_form_fields(
         'pattern_message': pattern_message or '',
         'link_suggestions': link_choices.get(name, []),
         'datalist_id': (
-          f'link-options-{name}'
-          if kind in ('link', 'link_list')
-          else ''
+          f'link-options-{name}' if kind in ('link', 'link_list') else ''
         ),
         'children': children,
         'items': items,

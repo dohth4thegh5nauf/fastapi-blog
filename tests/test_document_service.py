@@ -57,8 +57,7 @@ def test_service_preserves_omitted_read_only_fields_and_checks_etag(service):
 
   assert updated.status == 'updated'
   assert (
-    record.frontmatter['immutable_id']
-    == original.frontmatter['immutable_id']
+    record.frontmatter['immutable_id'] == original.frontmatter['immutable_id']
   )
   assert record.frontmatter['title'] == 'Updated'
   assert record.body.strip() == 'Changed body'
@@ -107,6 +106,13 @@ def test_service_rejects_schema_values(service):
 def test_blocking_validation_rolls_back_a_previous_document(
   service, monkeypatch
 ):
+  from fastapi_blog.validators import Validator
+
+  validator = Validator.from_dict(
+    {'name': 'gate', 'argv': ['true'], 'blocking': ['error']}
+  )
+  # `run_blocking` is replaced below, so the command itself never runs.
+  service.validators = (validator,)
   created = service.save(
     'first-note', {'title': 'First', 'status': 'draft'}, 'Original body'
   )

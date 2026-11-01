@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import ValidationError
-
 from . import helpers, store
 from .config import CollectionSpec
 from .issues import Issue
@@ -19,6 +17,7 @@ class BlockingValidationError(ValueError):
   """A document failed a configured blocking validator."""
 
   def __init__(self, issues: list[Issue]):
+    """Store the findings on the exception for the caller to report."""
     self.issues = issues
     super().__init__('Document failed configured validation checks')
 
@@ -44,6 +43,18 @@ class DocumentService:
     validators: tuple[Validator, ...] = (),
     cwd: pathlib.Path | None = None,
   ):
+    """Bind the service to a store, schema and validators.
+
+    Args:
+        documents: The store the documents are written to.
+        schema: Frontmatter schema for validation; defaults to the
+            collection spec's schema, then to the built-in schema.
+        collection_spec: Optional project collection settings (schema,
+            validators, slug template, `unique` constraints).
+        validators: Blocking validators; defaults to the collection spec's.
+        cwd: Project root used as the validators' working directory.
+
+    """
     self.documents = documents
     self.schema: FrontmatterSchema = (
       schema

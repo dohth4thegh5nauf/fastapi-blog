@@ -121,9 +121,11 @@ class MarkdownFileManager:
   ):
     """Initialize file manager with posts directory and frontmatter schema."""
     self.posts_dir = Path(posts_dir)
-    self.schema = schema or (
-      collection_spec.schema if collection_spec else None
-    ) or DEFAULT_SCHEMA
+    self.schema = (
+      schema
+      or (collection_spec.schema if collection_spec else None)
+      or DEFAULT_SCHEMA
+    )
     self.collection_spec = (
       replace(collection_spec, schema=self.schema)
       if collection_spec is not None
@@ -318,9 +320,7 @@ class MarkdownFileManager:
       collections=collections,
     )
     return [
-      issue.to_dict()
-      for issue in report.issues
-      if issue.slug in (None, slug)
+      issue.to_dict() for issue in report.issues if issue.slug in (None, slug)
     ]
 
   def delete_post(self, slug: str) -> bool:
@@ -356,6 +356,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
     *,
     sanitize_html: bool = True,
   ):
+    """Wire the save endpoint to the file manager and the policy."""
     super().__init__(
       menu_label=_('Save Post'),
       path='/posts/save',

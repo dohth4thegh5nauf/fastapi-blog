@@ -106,7 +106,7 @@ def test_admin_save_uses_service_without_rest_api(manager):
       'body': json.dumps(
         {
           'slug': 'service-created',
-          'frontmatter': {'title': 'Created in admin'},
+          'frontmatter': {'title': 'Created in admin', 'date': '2024-01-01'},
           'content': 'Body',
         }
       ).encode(),

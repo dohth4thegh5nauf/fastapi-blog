@@ -158,6 +158,9 @@ def _create_admin_for_locale(
           callback; the default authorizer is used when not given
       auth_users: Extra users (besides `admin_username`) allowed to sign in
           to the admin panel, mapped to their password hashes
+      collection_specs: All collections of the project, keyed by name; used
+          to resolve `link` fields that point at another collection
+      sanitize_html: Sanitize the admin Markdown preview like public pages
 
   Returns:
       Configured Admin instance
@@ -305,7 +308,8 @@ def _create_admin_for_locale(
     MarkdownSaveView(
       MarkdownFileManager(
         posts_dir,
-        frontmatter_schema or (collection_spec.schema if collection_spec else None),
+        frontmatter_schema
+        or (collection_spec.schema if collection_spec else None),
         collection_spec,
         collection_specs=collection_specs,
       ),
@@ -370,6 +374,10 @@ def add_admin_to_app(
       given to `setup_fastapi_blog`/`add_blog_to_fastapi` so the admin panel
       and the blog/REST API always agree on where posts live (default:
       `POSTS_DIR`, deprecated, or a cwd-based guess).
+    collection_spec: Project-file collection spec for the managed collection
+      (takes precedence over `posts_dirname`/`frontmatter_schema`).
+    collection_specs: All collections of the project, keyed by name; used to
+      resolve `link` fields that point at another collection.
     collection_spec: Project-file collection spec; takes precedence over
       `posts_dirname`/`frontmatter_schema` for the managed collection
 

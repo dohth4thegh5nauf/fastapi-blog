@@ -45,15 +45,18 @@ no development credentials are enabled implicitly.
 
 ## Evidence and current state
 
-The maintainer's review reported **750 passed, 2 skipped**, with Ruff checks,
-format verification and mypy clean on the reviewed working tree. That report
-predates the final service-backed form and preview changes in this release
-candidate. The current editing container does not include all locked runtime
-and development dependencies (`markdown`, `nh3`, `starlette-admin`, `ruff` and
-`mypy`), so the full `make all` and the complete admin test suite could not be
-re-run here. Syntax compilation and standalone Jinja template checks are run
-for this candidate; they do not replace the required CI matrix above.
+The final release-candidate review re-ran the full gate in the locked
+environment (Python 3.12): `make all` is green — Ruff checks, format
+verification, mypy and the complete pytest suite report **759 passed,
+2 skipped**. This run covers the service-backed form and preview changes; it
+supersedes the earlier 750-test report. The review also fixed the
+`f.items` template lookup (Jinja resolved it to the dict method, breaking
+`list[object]` rendering) and aligned four newly added tests with the strict
+schema and the service contract.
 
-**Release status: implementation complete; final test/CI acceptance pending.**
+The CI matrix (Python 3.12 and 3.13, `core` and `all` jobs, security checks)
+still has to pass on the release candidate; the local run does not replace it.
+
+**Release status: implementation complete; final CI acceptance pending.**
 Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the release verification
 above is green. Do not create a git tag or commit as part of this preparation.

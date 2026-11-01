@@ -102,7 +102,8 @@
                 </select>
                 {% elif f.kind == 'object_list' %}
                 <div id="field-{{ f.name }}" class="js-object-list" data-object-list="{{ f.name }}">
-                  {% for row_fields in f.items %}
+                  {# Subscript: `f.items` would resolve to the dict method. #}
+                  {% for row_fields in f['items'] %}
                   {% set row_index = loop.index0 %}
                   <fieldset class="border rounded p-3 mb-3 js-object-row">
                     <legend class="float-none w-auto px-2 fs-6">{{ loop.index }}</legend>

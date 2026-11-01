@@ -350,9 +350,8 @@ def test_form_groups_seo_fields_and_shows_configured_counters():
   assert 'data-counter-max="55"' in html
   assert 'data-counter-max="145"' in html
   assert 'field-references' in html
-  assert html.count('<datalist id="link-options-references__href">') == 1
+  assert html.count('<datalist id="link-options-metadata__source_url">') == 1
   assert 'previewRender: renderSanitizedPreview' in html
-
 
 
 def test_schema_controls_render_choices_patterns_and_nested_links():
@@ -751,7 +750,5 @@ def test_link_autocomplete_uses_collection_value_field_and_list_filters(
   )
 
   assert manager.link_suggestions() == {
-    'related': [
-      {'value': 'ref:public', 'label': 'Public Article (public)'}
-    ]
+    'related': [{'value': 'ref:public', 'label': 'Public Article (public)'}]
   }
