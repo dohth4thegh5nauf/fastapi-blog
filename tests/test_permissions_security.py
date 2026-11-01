@@ -22,65 +22,147 @@ def test_default_role_permissions_are_explicit_and_fail_closed():
 
 def _scope(method, path, headers):
   return {
-    'type': 'http', 'scheme': 'https', 'method': method, 'path': path,
+    'type': 'http',
+    'scheme': 'https',
+    'method': method,
+    'path': path,
     'headers': [
-      (key.lower().encode(), value.encode())
-      for key, value in headers.items()
+      (key.lower().encode(), value.encode()) for key, value in headers.items()
     ],
   }
 
 
 def test_origin_check_rejects_cross_site_cookie_writes_and_missing_origin():
   middleware = OriginCheckMiddleware(lambda *_: None, prefixes=('/api',))
-  assert middleware._rejected(_scope('POST', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'https://attacker.example',
-  })) is True
-  assert middleware._rejected(_scope('POST', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-  })) is True
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/api/posts/save',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+          'origin': 'https://attacker.example',
+        },
+      )
+    )
+    is True
+  )
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/api/posts/save',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+        },
+      )
+    )
+    is True
+  )
 
 
 def test_origin_check_allows_same_origin_and_non_cookie_requests():
   middleware = OriginCheckMiddleware(lambda *_: None, prefixes=('/api',))
-  assert middleware._rejected(_scope('POST', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'https://example.org',
-  })) is False
-  assert middleware._rejected(_scope('POST', '/api/posts/save', {
-    'authorization': 'Basic dTpw', 'host': 'example.org',
-  })) is False
-  assert middleware._rejected(_scope('GET', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-  })) is False
-  assert middleware._rejected(_scope('POST', '/outside', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'https://attacker.example',
-  })) is False
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/api/posts/save',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+          'origin': 'https://example.org',
+        },
+      )
+    )
+    is False
+  )
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/api/posts/save',
+        {
+          'authorization': 'Basic dTpw',
+          'host': 'example.org',
+        },
+      )
+    )
+    is False
+  )
+  assert (
+    middleware._rejected(
+      _scope(
+        'GET',
+        '/api/posts/save',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+        },
+      )
+    )
+    is False
+  )
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/outside',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+          'origin': 'https://attacker.example',
+        },
+      )
+    )
+    is False
+  )
 
 
 def test_origin_check_rejects_wrong_scheme_and_ambiguous_headers():
   middleware = OriginCheckMiddleware(lambda *_: None, prefixes=('/api',))
-  wrong_scheme = _scope('POST', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'http://example.org',
-  })
+  wrong_scheme = _scope(
+    'POST',
+    '/api/posts/save',
+    {
+      'cookie': 'session=abc',
+      'host': 'example.org',
+      'origin': 'http://example.org',
+    },
+  )
   assert middleware._rejected(wrong_scheme) is True
 
-  duplicate = _scope('POST', '/api/posts/save', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'https://example.org',
-  })
+  duplicate = _scope(
+    'POST',
+    '/api/posts/save',
+    {
+      'cookie': 'session=abc',
+      'host': 'example.org',
+      'origin': 'https://example.org',
+    },
+  )
   duplicate['headers'].append((b'origin', b'https://attacker.example'))
   assert middleware._rejected(duplicate) is True
 
 
 def test_root_prefix_matches_all_unsafe_paths():
   middleware = OriginCheckMiddleware(lambda *_: None)
-  assert middleware._rejected(_scope('POST', '/anything', {
-    'cookie': 'session=abc', 'host': 'example.org',
-    'origin': 'https://attacker.example',
-  })) is True
+  assert (
+    middleware._rejected(
+      _scope(
+        'POST',
+        '/anything',
+        {
+          'cookie': 'session=abc',
+          'host': 'example.org',
+          'origin': 'https://attacker.example',
+        },
+      )
+    )
+    is True
+  )
 
 
 def test_viewer_and_editor_permissions_are_enforced_by_the_rest_api(tmp_path):
@@ -123,9 +205,7 @@ def test_viewer_and_editor_permissions_are_enforced_by_the_rest_api(tmp_path):
       '/api/posts/create/editor-post', json=payload, headers=headers
     )
     assert created.status_code == 201
-    deleted = client.delete(
-      '/api/posts/delete/editor-post', headers=headers
-    )
+    deleted = client.delete('/api/posts/delete/editor-post', headers=headers)
     assert deleted.status_code == 403
 
 
@@ -159,9 +239,7 @@ def test_legacy_editor_api_also_checks_cookie_origin_and_roles(tmp_path):
 
   with TestClient(app) as client:
     client.get('/test-session/editor')
-    without_origin = client.post(
-      '/legacy-api/create/editor-post', json=payload
-    )
+    without_origin = client.post('/legacy-api/create/editor-post', json=payload)
     assert without_origin.status_code == 403
 
     created = client.post(

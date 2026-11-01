@@ -30,6 +30,8 @@ async def test_admin_lifespan_composition():
     app,
     database_url='sqlite+aiosqlite:///:memory:',
     init_database=True,
+    admin_password='test-password',
+    secret_key='s' * 64,
   )
 
   # The TestClient context manager will trigger startup and shutdown events.

@@ -158,7 +158,11 @@ fastapi_blog.add_blog_to_fastapi(
 )
 
 # Add session middleware
-app.add_middleware(SessionMiddleware, same_site='lax', secret_key='example-only-session-secret-value-0123456789abcdef0123456789')
+app.add_middleware(
+  SessionMiddleware,
+  same_site='lax',
+  secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
+)
 
 # Create database engine
 engine, _ = create_engine_and_session()

@@ -16,6 +16,7 @@ def test_api_with_unified_auth_via_basic():
     include_api=True,
     admin_username='testadmin',
     admin_password='testpass',
+    secret_key='s' * 64,
   )
 
   client = TestClient(app)
@@ -56,6 +57,7 @@ def test_api_with_invalid_basic_auth():
     include_api=True,
     admin_username='testadmin',
     admin_password='testpass',
+    secret_key='s' * 64,
   )
 
   client = TestClient(app)

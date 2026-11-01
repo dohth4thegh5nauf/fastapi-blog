@@ -102,10 +102,15 @@ def test_role_view_accessible_only_for_root_user(app_with_roles):
   assert role_view.admin_username == 'admin'
 
   # Create mock request (no need to set app.state - view reads from self.admin_username)
-  request = Request({
-    'type': 'http', 'method': 'GET', 'path': '/', 'headers': [],
-    'session': {'user': 'admin', 'role': 'admin'},
-  })
+  request = Request(
+    {
+      'type': 'http',
+      'method': 'GET',
+      'path': '/',
+      'headers': [],
+      'session': {'user': 'admin', 'role': 'admin'},
+    }
+  )
 
   # Test root user access
   assert role_view.is_accessible(request) is True
@@ -154,10 +159,15 @@ def test_user_roles_view_accessible_only_for_root_user(app_with_roles):
   assert user_roles_view.admin_username == 'admin'
 
   # Create mock request (no need to set app.state - view reads from self.admin_username)
-  request = Request({
-    'type': 'http', 'method': 'GET', 'path': '/', 'headers': [],
-    'session': {'user': 'admin', 'role': 'admin'},
-  })
+  request = Request(
+    {
+      'type': 'http',
+      'method': 'GET',
+      'path': '/',
+      'headers': [],
+      'session': {'user': 'admin', 'role': 'admin'},
+    }
+  )
 
   # Test root user access
   assert user_roles_view.is_accessible(request) is True
@@ -323,20 +333,25 @@ def test_is_accessible_does_not_use_app_state(app_with_roles):
   assert role_view is not None
   assert role_view.admin_username == 'admin'
 
-  # Create mock request WITHOUT app.state
-  request = Mock(spec=Request)
-  # Intentionally delete 'app' attribute to ensure view doesn't access it
-  if hasattr(request, 'app'):
-    delattr(request, 'app')
-
-  # View should work without accessing app.state
-  request.scope = {'session': {'user': 'admin', 'role': 'admin'}}
+  # Real request without 'app' in scope: the view must not touch request.app.
+  request = Request(
+    {
+      'type': 'http',
+      'session': {'user': 'admin', 'role': 'admin'},
+      'headers': [],
+    }
+  )
   assert role_view.is_accessible(request) is True, (
     'is_accessible should work without request.app (reads from self.admin_username)'
   )
 
-  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
-  request.state.blog_user = None
+  request = Request(
+    {
+      'type': 'http',
+      'session': {'user': 'other_user', 'role': 'viewer'},
+      'headers': [],
+    }
+  )
   assert role_view.is_accessible(request) is False
 
 
@@ -361,10 +376,14 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
 
   assert role_dropdown is not None, 'Role management dropdown not found'
 
-  # Create mock request for non-root user (no need to set app.state)
-  request = Mock(spec=Request)
-  request.scope['session'] = {'user': 'other_user', 'role': 'viewer'}
-  request.state.blog_user = None
+  # Real request without 'app' in scope (no need to set app.state).
+  request = Request(
+    {
+      'type': 'http',
+      'session': {'user': 'other_user', 'role': 'viewer'},
+      'headers': [],
+    }
+  )
 
   # DropDown.is_accessible checks if ANY nested view is accessible
   # Since all nested views check for root user, dropdown should be inaccessible
@@ -373,7 +392,13 @@ def test_role_dropdown_not_accessible_for_non_root_user(app_with_roles):
   )
 
   # Now check for root user - should have access
-  request.scope = {'session': {'user': 'admin', 'role': 'admin'}}
+  request = Request(
+    {
+      'type': 'http',
+      'session': {'user': 'admin', 'role': 'admin'},
+      'headers': [],
+    }
+  )
   assert role_dropdown.is_accessible(request), (
     'Role dropdown should be accessible to root user'
   )

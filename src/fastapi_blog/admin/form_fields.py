@@ -16,10 +16,21 @@ from ..models import MISSING, FieldSpec, FrontmatterSchema
 _HALF_WIDTH_KINDS = ('date', 'datetime', 'bool', 'number')
 _REQUIRABLE_KINDS = ('text', 'textarea', 'date', 'datetime', 'number')
 _ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}')
-_SEO_ROLES = frozenset({
-  'title', 'description', 'seo_title', 'canonical', 'robots', 'image', 'image_alt',
-  'updated', 'author', 'lang', 'redirect_from',
-})
+_SEO_ROLES = frozenset(
+  {
+    'title',
+    'description',
+    'seo_title',
+    'canonical',
+    'robots',
+    'image',
+    'image_alt',
+    'updated',
+    'author',
+    'lang',
+    'redirect_from',
+  }
+)
 
 
 def get_field_value(
@@ -118,7 +129,11 @@ def _nested(
   """Walk a nested object using each parent's external key."""
   current: Any = frontmatter
   for parent in parents:
-    current = get_field_value(current, parent, {}) if isinstance(current, Mapping) else {}
+    current = (
+      get_field_value(current, parent, {})
+      if isinstance(current, Mapping)
+      else {}
+    )
   return current if isinstance(current, Mapping) else {}
 
 
@@ -163,27 +178,30 @@ def build_form_fields(
         counter_max = seo_check.title_max
       elif spec.role == 'description':
         counter_max = seo_check.description_max
-    result.append({
-      'name': name,
-      'key': spec.key,
-      'path': path,
-      'type': spec.type,
-      'kind': kind,
-      'group': _group(spec, parents),
-      'label': label or spec.description or spec.name,
-      'value': format_value(kind, value),
-      'required': spec.required,
-      'html_required': spec.required and kind in _REQUIRABLE_KINDS,
-      'max_length': spec.max_length,
-      'counter_max': counter_max,
-      'min': spec.min,
-      'max': spec.max,
-      'read_only': (
-        not is_new and (spec.read_only or any(p.read_only for p in parents))
-      ),
-      'col': 'col-md-6' if kind in _HALF_WIDTH_KINDS else 'col-12',
-      'hint': spec.hint or (labels.get('tags_hint', '') if kind == 'list' else ''),
-    })
+    result.append(
+      {
+        'name': name,
+        'key': spec.key,
+        'path': path,
+        'type': spec.type,
+        'kind': kind,
+        'group': _group(spec, parents),
+        'label': label or spec.description or spec.name,
+        'value': format_value(kind, value),
+        'required': spec.required,
+        'html_required': spec.required and kind in _REQUIRABLE_KINDS,
+        'max_length': spec.max_length,
+        'counter_max': counter_max,
+        'min': spec.min,
+        'max': spec.max,
+        'read_only': (
+          not is_new and (spec.read_only or any(p.read_only for p in parents))
+        ),
+        'col': 'col-md-6' if kind in _HALF_WIDTH_KINDS else 'col-12',
+        'hint': spec.hint
+        or (labels.get('tags_hint', '') if kind == 'list' else ''),
+      }
+    )
   return result
 
 

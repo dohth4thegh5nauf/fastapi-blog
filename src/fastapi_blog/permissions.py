@@ -62,7 +62,9 @@ def user_from_session(request: Request) -> dict[str, Any] | None:
 def default_authorize(request: Request, resource: str, action: str) -> bool:
   """Default role policy. Missing and unrecognized roles are denied."""
   user = current_user(request)
-  return bool(user) and role_has_permission(user.get('role'), resource, action)
+  if user is None:
+    return False
+  return role_has_permission(user.get('role'), resource, action)
 
 
 async def ensure_allowed(

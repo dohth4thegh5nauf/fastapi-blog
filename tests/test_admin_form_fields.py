@@ -186,5 +186,13 @@ def test_external_schema_form_for_a_new_post():
 def test_form_fields_meta():
   fields = build_form_fields(EXTERNAL_SCHEMA, {}, LABELS)
   meta = form_fields_meta(fields)
-  assert meta[0] == {'name': 'headline', 'key': 'title', 'kind': 'text'}
-  assert meta[1] == {'name': 'pub_date', 'key': 'pubDate', 'kind': 'date'}
+  assert (meta[0]['name'], meta[0]['key'], meta[0]['kind']) == (
+    'headline',
+    'title',
+    'text',
+  )
+  assert (meta[1]['name'], meta[1]['key'], meta[1]['kind']) == (
+    'pub_date',
+    'pubDate',
+    'date',
+  )

@@ -12,7 +12,7 @@ from starlette_admin.contrib.sqla import ModelView
 from starlette_admin.routing import route
 
 from ..models import DEFAULT_SCHEMA, FrontmatterSchema
-from ..permissions import default_authorize, user_from_session
+from ..permissions import Authorizer, default_authorize, user_from_session
 from .passwords import get_password_hasher
 
 
@@ -67,7 +67,7 @@ def validate_and_prepare_password(password: str) -> str:
 class _AuthorizedModelView:
   """Shared synchronous permission hooks used by Starlette Admin views."""
 
-  authorize = None
+  authorize: Authorizer | None = None
   resource = 'posts'
 
   def _allowed(self, request: Request, action: str) -> bool:
@@ -100,8 +100,16 @@ class _AuthorizedModelView:
   def can_import(self, request: Request) -> bool:
     return self._allowed(request, 'create')
 
-  def is_action_allowed(self, request: Request, name: str) -> bool:
-    return self._allowed(request, 'update')
+  async def is_action_allowed(self, request: Request, name: str) -> bool:
+    # Starlette Admin awaits this hook (unlike the sync `can_*` ones), so an
+    # asynchronous authorizer can be supported here.
+    if getattr(request.state, 'blog_user', None) is None:
+      request.state.blog_user = user_from_session(request)
+    callback = self.authorize or default_authorize
+    result = callback(request, self.resource, 'update')
+    if inspect.isawaitable(result):
+      result = await result
+    return bool(result)
 
 
 class UserModelView(_AuthorizedModelView, ModelView):

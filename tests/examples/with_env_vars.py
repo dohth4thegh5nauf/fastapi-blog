@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 
 import fastapi_blog
 
+
 # Clear any cached imports
 for mod in list(sys.modules.keys()):
   if mod.startswith('fastapi_blog'):

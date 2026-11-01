@@ -142,8 +142,12 @@ admins = fastapi_blog.add_admin_to_app(
 The primary `admin_username`/`admin_password` account always receives the
 `admin` role. Additional `auth_users` are panel login identities; the role is
 stored in the signed session and is preserved when that cookie authenticates
-REST API calls. Unknown or missing roles are denied. The `insecure_dev=True`
-flag enables legacy development credentials only as an explicit local opt-in.
+REST API calls. Unknown or unrecognized roles are denied. An
+authenticated principal without any role (a custom `auth_dependency`,
+a legacy session) keeps the pre-role-management write access; pass a
+custom `authorize=` callback to enforce a stricter policy. The
+`insecure_dev=True` flag enables legacy development credentials only
+as an explicit local opt-in.
 
 ## Usage
 
@@ -187,9 +191,17 @@ def authorize(request: Request, resource: str, action: str) -> bool:
   role = principal.get('role')
   if role == 'owner':
     return True
-  return role == 'writer' and resource == 'posts' and action in {
-    'read', 'create', 'update', 'publish',
-  }
+  return (
+    role == 'writer'
+    and resource == 'posts'
+    and action
+    in {
+      'read',
+      'create',
+      'update',
+      'publish',
+    }
+  )
 ```
 
 Starlette Admin's synchronous ModelView permission hooks require a synchronous

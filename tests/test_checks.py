@@ -206,7 +206,8 @@ def test_seo_check_reports_length_missing_and_invalid_values(tmp_path):
   )
   spec = _spec(tmp_path, schema)
   _write(
-    spec.dir, 'one',
+    spec.dir,
+    'one',
     '---\ntitle: A very long title\ndescription: too long description\n'
     'canonical: javascript:alert(1)\nrobots: [unknown]\nimage: /missing.png\n---\n',
   )
@@ -228,11 +229,15 @@ def test_seo_check_reports_duplicates_and_respects_levels(tmp_path):
       FieldSpec('title', role='title'),
       FieldSpec('description', role='description'),
     ),
-    seo=SeoConfig(check=SeoCheckConfig(
-      title_max=100, description_max=200,
-      missing_description='off', duplicate_title='error',
-      duplicate_description='warn',
-    )),
+    seo=SeoConfig(
+      check=SeoCheckConfig(
+        title_max=100,
+        description_max=200,
+        missing_description='off',
+        duplicate_title='error',
+        duplicate_description='warn',
+      )
+    ),
   )
   spec = _spec(tmp_path, schema)
   _write(spec.dir, 'a', '---\ntitle: Same\ndescription: Shared\n---\n')
@@ -264,11 +269,13 @@ def test_seo_check_reports_redirect_collisions_chains_and_loops(tmp_path):
   _write(spec.dir, 'current', '---\nredirect_from: [legacy]\n---\n')
   # The canonical destinations form a two-node redirect cycle.
   _write(
-    spec.dir, 'cycle-a',
+    spec.dir,
+    'cycle-a',
     '---\ncanonical: /posts/old-b\nredirect_from: [old-a]\n---\n',
   )
   _write(
-    spec.dir, 'cycle-b',
+    spec.dir,
+    'cycle-b',
     '---\ncanonical: /posts/old-a\nredirect_from: [old-b]\n---\n',
   )
   report = checks.check_collection(spec, root=tmp_path)

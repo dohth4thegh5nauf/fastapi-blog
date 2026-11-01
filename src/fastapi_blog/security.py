@@ -18,10 +18,18 @@ MIN_SECRET_LENGTH = 32
 DEV_USERNAME = 'admin'
 DEV_PASSWORD = 'Admin123!'  # nosec B105
 DEV_SECRET = 'change-me-in-production-please-use-strong-secret'  # nosec B105
-WEAK_SECRETS = frozenset({
-  '', 'change-me-in-production-please-use-strong-secret', 'changeme',
-  'change-me', 'secret', 'test-secret-key', 'password', 'development',
-})
+WEAK_SECRETS = frozenset(
+  {
+    '',
+    'change-me-in-production-please-use-strong-secret',
+    'changeme',
+    'change-me',
+    'secret',
+    'test-secret-key',
+    'password',
+    'development',
+  }
+)
 _GENERATE_HINT = "python -c 'import secrets; print(secrets.token_hex(32))'"
 
 
@@ -72,7 +80,8 @@ def resolve_admin_credentials(
     )
   if problems:
     raise ConfigurationError(
-      'Unsafe admin configuration: ' + '; '.join(problems)
+      'Unsafe admin configuration: '
+      + '; '.join(problems)
       + '. For local development only, pass insecure_dev=True.'
     )
   assert password is not None and secret_key is not None
@@ -82,9 +91,7 @@ def resolve_admin_credentials(
 _UNSAFE_METHODS = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
 
 
-def install_origin_check_middleware(
-  app: Any, prefixes: Sequence[str]
-) -> None:
+def install_origin_check_middleware(app: Any, prefixes: Sequence[str]) -> None:
   """Install one Origin guard and merge prefixes on repeated setup calls."""
   requested = tuple(dict.fromkeys(prefixes))
   for middleware in app.user_middleware:
@@ -108,6 +115,7 @@ class OriginCheckMiddleware:
   """
 
   def __init__(self, app: ASGIApp, prefixes: Sequence[str] = ('/',)) -> None:
+    """Store the wrapped app and the path prefixes to protect."""
     self.app = app
     self.prefixes = tuple(prefixes)
 
@@ -123,8 +131,7 @@ class OriginCheckMiddleware:
     if scope['method'].upper() not in _UNSAFE_METHODS:
       return False
     if not any(
-      self._matches_prefix(scope['path'], prefix)
-      for prefix in self.prefixes
+      self._matches_prefix(scope['path'], prefix) for prefix in self.prefixes
     ):
       return False
 

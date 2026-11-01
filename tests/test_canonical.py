@@ -122,7 +122,11 @@ def test_no_canonical_header_on_admin():
   """Test Link header NOT added to admin pages."""
   app = FastAPI()
   fastapi_blog.setup_fastapi_blog(
-    app, locales=['en', 'ru'], default_locale='en', admin_password='test123'
+    app,
+    locales=['en', 'ru'],
+    default_locale='en',
+    admin_password='test123',
+    secret_key='s' * 64,
   )
   client = TestClient(app, follow_redirects=False)
 
@@ -135,7 +139,11 @@ def test_no_canonical_header_on_locale_admin():
   """Test Link header NOT added to localized admin pages."""
   app = FastAPI()
   fastapi_blog.setup_fastapi_blog(
-    app, locales=['en', 'ru'], default_locale='en', admin_password='test123'
+    app,
+    locales=['en', 'ru'],
+    default_locale='en',
+    admin_password='test123',
+    secret_key='s' * 64,
   )
   client = TestClient(app, follow_redirects=False)
 

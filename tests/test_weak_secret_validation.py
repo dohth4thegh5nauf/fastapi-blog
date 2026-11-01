@@ -14,7 +14,11 @@ def test_admin_setup_requires_password_and_secret():
 
 @pytest.mark.parametrize(
   'secret',
-  ['short', 'test-secret-key', 'change-me-in-production-please-use-strong-secret'],
+  [
+    'short',
+    'test-secret-key',
+    'change-me-in-production-please-use-strong-secret',
+  ],
 )
 def test_weak_secret_is_rejected(secret):
   with pytest.raises(ConfigurationError, match='session secret is weak'):
@@ -40,9 +44,12 @@ def test_insecure_dev_explicitly_enables_development_credentials():
 def test_insecure_dev_with_supplied_values_still_warns():
   with pytest.warns(UserWarning, match='insecure_dev=True'):
     fastapi_blog.add_admin_to_app(
-      FastAPI(), admin_username='test-admin',
-      admin_password='safe-test-password', secret_key='a' * 64,
-      insecure_dev=True, init_database=False,
+      FastAPI(),
+      admin_username='test-admin',
+      admin_password='safe-test-password',
+      secret_key='a' * 64,
+      insecure_dev=True,
+      init_database=False,
     )
 
 
@@ -52,8 +59,10 @@ def test_strong_secret_and_password_are_accepted_without_warning():
   with warnings.catch_warnings():
     warnings.simplefilter('error')
     fastapi_blog.add_admin_to_app(
-      FastAPI(), admin_username='test-admin',
-      admin_password='safe-test-password', secret_key='a' * 64,
+      FastAPI(),
+      admin_username='test-admin',
+      admin_password='safe-test-password',
+      secret_key='a' * 64,
       init_database=False,
     )
 

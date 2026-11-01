@@ -26,11 +26,13 @@ def test_no_duplication_when_not_added_manually():
     init_database=False,
   )
 
-  # Session, Origin protection and the locale redirect are installed.
-  assert len(app.user_middleware) == 3
+  # Session and the locale redirect are installed. The Origin guard is NOT:
+  # starlette-admin 1.0 protects its own forms with CSRF tokens, so the
+  # middleware is added for the REST API only (TODO 7.4).
+  assert len(app.user_middleware) == 2
   middleware_classes = [m.cls.__name__ for m in app.user_middleware]
   assert 'SessionMiddleware' in middleware_classes
-  assert 'OriginCheckMiddleware' in middleware_classes
+  assert 'OriginCheckMiddleware' not in middleware_classes
   assert 'AdminDefaultLocaleRedirectMiddleware' in middleware_classes
 
 
@@ -65,8 +67,9 @@ def test_warning_when_middleware_already_added():
     assert issubclass(middleware_warnings[0].category, UserWarning)
     assert 'add_session_middleware=False' in str(middleware_warnings[0].message)
 
-  # Manual Session + Origin protection + Admin redirect middleware.
-  assert len(app.user_middleware) == 3
+  # Manual Session + Admin redirect middleware (no Origin guard: it is a
+  # REST API concern, starlette-admin has its own CSRF protection).
+  assert len(app.user_middleware) == 2
   middleware_classes = [m.cls.__name__ for m in app.user_middleware]
   assert middleware_classes.count('SessionMiddleware') == 1
 
@@ -97,8 +100,9 @@ def test_explicit_false_no_warning():
     ]
     assert len(middleware_warnings) == 0
 
-  # Manual Session + Origin protection + Admin redirect middleware.
-  assert len(app.user_middleware) == 3
+  # Manual Session + Admin redirect middleware (no Origin guard: it is a
+  # REST API concern, starlette-admin has its own CSRF protection).
+  assert len(app.user_middleware) == 2
   middleware_classes = [m.cls.__name__ for m in app.user_middleware]
   assert middleware_classes.count('SessionMiddleware') == 1
 

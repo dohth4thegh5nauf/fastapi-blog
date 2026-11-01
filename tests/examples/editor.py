@@ -8,7 +8,11 @@ import fastapi_blog
 app = FastAPI()
 
 # Add session middleware for authentication (required by editor)
-app.add_middleware(SessionMiddleware, same_site='lax', secret_key='example-only-session-secret-value-0123456789abcdef0123456789')
+app.add_middleware(
+  SessionMiddleware,
+  same_site='lax',
+  secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
+)
 
 # Existing example posts use extra frontmatter fields and raw HTML,
 # so strict validation and HTML sanitization are disabled here.

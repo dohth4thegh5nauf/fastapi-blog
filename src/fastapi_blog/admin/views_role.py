@@ -45,8 +45,17 @@ class _RoleProtectedView(ModelView):
   def can_import(self, request: Request) -> bool:
     return self._allowed(request, 'create')
 
-  def is_action_allowed(self, request: Request, name: str) -> bool:
-    return self._allowed(request, 'update')
+  async def is_action_allowed(self, request: Request, name: str) -> bool:
+    # Starlette Admin awaits this hook (unlike the sync `can_*` ones).
+    principal = getattr(request.state, 'blog_user', None)
+    if principal is None:
+      principal = user_from_session(request)
+      request.state.blog_user = principal
+    callback = getattr(self, 'authorize', None) or default_authorize
+    result = callback(request, self.resource, 'update')
+    if inspect.isawaitable(result):
+      result = await result
+    return bool(result)
 
 
 class RoleModelView(_RoleProtectedView):

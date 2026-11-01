@@ -90,13 +90,17 @@ class SimpleAuthProvider(AuthProvider):
     if role is None:
       raise LoginFailed('Invalid username or password')
 
-    request.session.update({
-      'user': username,
-      'is_admin': role == ADMIN,
-      'role': role,
-    })
+    request.session.update(
+      {
+        'user': username,
+        'is_admin': role == ADMIN,
+        'role': role,
+      }
+    )
     request.state.blog_user = {
-      'username': username, 'role': role, 'is_admin': role == ADMIN
+      'username': username,
+      'role': role,
+      'is_admin': role == ADMIN,
     }
     return RedirectResponse(url=self.redirect_after_login, status_code=303)
 
@@ -108,7 +112,9 @@ class SimpleAuthProvider(AuthProvider):
     if role is None and request.session.get('is_admin'):
       role = ADMIN
     request.state.blog_user = {
-      'username': user, 'role': role, 'is_admin': role == ADMIN
+      'username': user,
+      'role': role,
+      'is_admin': role == ADMIN,
     }
     return AdminUser(username=user)
 

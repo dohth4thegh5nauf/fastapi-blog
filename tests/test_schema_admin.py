@@ -55,6 +55,7 @@ class FakeRequest:
     """Store path params the same way Starlette's Request does."""
     self.path_params = path_params
     self.scope = {'root_path': '/admin'}
+    self.state = SimpleNamespace()
 
 
 class FakeTemplates:
@@ -66,7 +67,14 @@ class FakeTemplates:
 
 def render(view, **path_params):
   view.templates = FakeTemplates()
-  return asyncio.run(view.index(FakeRequest(**path_params)))
+  request = FakeRequest(**path_params)
+  # Views enforce the shared policy: act as a signed-in administrator.
+  request.state.blog_user = {
+    'username': 'tester',
+    'role': 'admin',
+    'is_admin': True,
+  }
+  return asyncio.run(view.index(request))
 
 
 @pytest.fixture
@@ -190,11 +198,12 @@ def test_edit_view_builds_the_form_from_the_schema(posts_dir):
   assert fields['is_public']['value'] == 'true'
   assert fields['labels']['value'] == 'x, y'
   assert context['post']['content'] == 'Body A'
-  assert context['form_fields_meta'][1] == {
-    'name': 'pub_date',
-    'key': 'pubDate',
-    'kind': 'date',
-  }
+  meta = context['form_fields_meta'][1]
+  assert (meta['name'], meta['key'], meta['kind']) == (
+    'pub_date',
+    'pubDate',
+    'date',
+  )
   assert 'Alpha' in context['title']
 
 
@@ -299,13 +308,19 @@ def test_form_groups_seo_fields_and_shows_configured_counters():
     fields=(
       FieldSpec('title', role='title'),
       FieldSpec('summary', role='description'),
-      FieldSpec('metadata', type='object', fields=(
-        FieldSpec('source_url', type='link', alias='url'),
-      )),
-      FieldSpec('references', type='list[object]', fields=(
-        FieldSpec('label'),
-        FieldSpec('href', alias='url'),
-      )),
+      FieldSpec(
+        'metadata',
+        type='object',
+        fields=(FieldSpec('source_url', type='link', alias='url'),),
+      ),
+      FieldSpec(
+        'references',
+        type='list[object]',
+        fields=(
+          FieldSpec('label'),
+          FieldSpec('href', alias='url'),
+        ),
+      ),
     ),
     seo=SeoConfig(check=SeoCheckConfig(title_max=55, description_max=145)),
   )
@@ -608,18 +623,28 @@ def test_posts_dirname_argument_skips_the_deprecation_warning(
 
 
 def test_hidden_and_read_only_object_parent_are_respected_in_admin_form():
-  schema = FrontmatterSchema(fields=(
-    FieldSpec('private', type='object', hidden=True, fields=(
-      FieldSpec('value'),
-    )),
-    FieldSpec('locked', type='object', read_only=True, fields=(
-      FieldSpec('identifier'),
-      FieldSpec('label'),
-    )),
-  ))
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'private', type='object', hidden=True, fields=(FieldSpec('value'),)
+      ),
+      FieldSpec(
+        'locked',
+        type='object',
+        read_only=True,
+        fields=(
+          FieldSpec('identifier'),
+          FieldSpec('label'),
+        ),
+      ),
+    )
+  )
   fields = build_form_fields(
     schema,
-    {'private': {'value': 'secret'}, 'locked': {'identifier': 'id', 'label': 'A'}},
+    {
+      'private': {'value': 'secret'},
+      'locked': {'identifier': 'id', 'label': 'A'},
+    },
     {},
   )
   by_name = {field['name']: field for field in fields}

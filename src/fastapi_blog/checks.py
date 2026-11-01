@@ -27,8 +27,8 @@ from pydantic import ValidationError
 
 from . import jsonld, store
 from .config import CollectionSpec
-from .models import ROBOTS_DIRECTIVES, SeoCheckConfig, is_http_url_or_root_path
 from .issues import Issue
+from .models import ROBOTS_DIRECTIVES, SeoCheckConfig, is_http_url_or_root_path
 from .validators import run_validator
 
 
@@ -499,7 +499,6 @@ def _check_files(
           )
 
 
-
 def _seo_field_value(
   schema: Any, frontmatter: Mapping[str, Any], role: str
 ) -> Any:
@@ -531,9 +530,7 @@ def _redirect_path(value: Any) -> str | None:
   if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
     return None
   text = decoded.strip('/')
-  if not text or any(
-    part in ('', '.', '..') for part in text.split('/')
-  ):
+  if not text or any(part in ('', '.', '..') for part in text.split('/')):
     return None
   return f'/posts/{text}' if '/' not in text else f'/{text}'
 
@@ -556,20 +553,11 @@ def _check_seo(
 ) -> None:
   """Check SEO metadata and redirects across the collection (TODO 5.9.7)."""
   schema = spec.schema
-  if schema is None:
+  if schema is None or schema.seo is None:
+    # Without an `seo` section the behavior is unchanged (TODO 5.9.0, П6):
+    # SEO findings are produced only for schemas that opted into them.
     return
-  seo_roles = {
-    'title', 'description', 'seo_title', 'canonical', 'robots', 'image',
-    'image_alt', 'redirect_from',
-  }
-  if schema.seo is None and not any(
-    field.role in seo_roles for field in schema.fields
-  ):
-    return
-  config = (
-    schema.seo.check
-    if schema.seo and schema.seo.check else SeoCheckConfig()
-  )
+  config = schema.seo.check if schema.seo.check else SeoCheckConfig()
   seen_titles: dict[str, str] = {}
   seen_descriptions: dict[str, str] = {}
   live_paths = {f'/posts/{slug}': slug for slug in documents.list()}
@@ -583,7 +571,10 @@ def _check_seo(
       issues.append(
         Issue(
           'warning' if level == 'warn' else 'error',
-          code, message, slug, field,
+          code,
+          message,
+          slug,
+          field,
         )
       )
 
@@ -592,10 +583,9 @@ def _check_seo(
       frontmatter = documents.read(slug).frontmatter
     except (store.ParseError, store.NotFoundError):
       continue
-    title = (
-      _seo_field_value(schema, frontmatter, 'seo_title')
-      or _seo_field_value(schema, frontmatter, 'title')
-    )
+    title = _seo_field_value(
+      schema, frontmatter, 'seo_title'
+    ) or _seo_field_value(schema, frontmatter, 'title')
     description = _seo_field_value(schema, frontmatter, 'description')
     image = _seo_field_value(schema, frontmatter, 'image')
     image_alt = _seo_field_value(schema, frontmatter, 'image_alt')
@@ -624,8 +614,11 @@ def _check_seo(
       previous = seen_titles.get(marker)
       if previous is not None:
         add_configured(
-          config.duplicate_title, 'seo.duplicate_title',
-          f'Title is also used by {previous!r}', slug, 'seo_title',
+          config.duplicate_title,
+          'seo.duplicate_title',
+          f'Title is also used by {previous!r}',
+          slug,
+          'seo_title',
         )
       else:
         seen_titles[marker] = slug
@@ -647,26 +640,38 @@ def _check_seo(
       previous = seen_descriptions.get(marker)
       if previous is not None:
         add_configured(
-          config.duplicate_description, 'seo.duplicate_description',
-          f'Description is also used by {previous!r}', slug, 'description',
+          config.duplicate_description,
+          'seo.duplicate_description',
+          f'Description is also used by {previous!r}',
+          slug,
+          'description',
         )
       else:
         seen_descriptions[marker] = slug
     else:
       add_configured(
-        config.missing_description, 'seo.missing_description',
-        'SEO description is missing', slug, 'description',
+        config.missing_description,
+        'seo.missing_description',
+        'SEO description is missing',
+        slug,
+        'description',
       )
 
     if image in (None, ''):
       add_configured(
-        config.missing_image, 'seo.missing_image',
-        'Social preview image is missing', slug, 'image',
+        config.missing_image,
+        'seo.missing_image',
+        'Social preview image is missing',
+        slug,
+        'image',
       )
     elif image_alt in (None, ''):
       add_configured(
-        config.image_alt_required, 'seo.image_alt_required',
-        'Image alt text is required when an image is set', slug, 'image_alt',
+        config.image_alt_required,
+        'seo.image_alt_required',
+        'Image alt text is required when an image is set',
+        slug,
+        'image_alt',
       )
 
     canonical_valid = True
@@ -676,11 +681,15 @@ def _check_seo(
       except ValueError:
         canonical_valid = False
       if not canonical_valid:
-        issues.append(Issue(
-          'error', 'seo.canonical_invalid',
-          'Canonical must be an absolute HTTP(S) URL or a root-relative path',
-          slug, 'canonical',
-        ))
+        issues.append(
+          Issue(
+            'error',
+            'seo.canonical_invalid',
+            'Canonical must be an absolute HTTP(S) URL or a root-relative path',
+            slug,
+            'canonical',
+          )
+        )
     if isinstance(robots, str):
       robots = [robots]
     if isinstance(robots, (list, tuple)):
@@ -709,19 +718,27 @@ def _check_seo(
     for raw_alias in aliases_for_post:
       source = _redirect_path(raw_alias)
       if source is None:
-        issues.append(Issue(
-          'error', 'seo.redirect_from_invalid',
-          f'Redirect source {raw_alias!r} is not a valid slug or site path',
-          slug, 'redirect_from',
-        ))
+        issues.append(
+          Issue(
+            'error',
+            'seo.redirect_from_invalid',
+            f'Redirect source {raw_alias!r} is not a valid slug or site path',
+            slug,
+            'redirect_from',
+          )
+        )
         continue
-      previous = aliases.get(source)
-      if previous is not None:
-        issues.append(Issue(
-          'error', 'seo.redirect_from_duplicate',
-          f'Redirect source {source!r} is already claimed by {previous[0]!r}',
-          slug, 'redirect_from',
-        ))
+      claimed = aliases.get(source)
+      if claimed is not None:
+        issues.append(
+          Issue(
+            'error',
+            'seo.redirect_from_duplicate',
+            f'Redirect source {source!r} is already claimed by {claimed[0]!r}',
+            slug,
+            'redirect_from',
+          )
+        )
       else:
         aliases[source] = (slug, target)
         redirect_edges[source] = target

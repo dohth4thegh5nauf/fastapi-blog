@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette_admin.routing import route

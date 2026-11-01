@@ -442,8 +442,20 @@ def get_api_router(
       request.state.blog_user = principal
       if not require_auth and authorize is None:
         return principal
+      if (
+        authorize is None
+        and principal is not None
+        and principal.get('role') is None
+        and not principal.get('is_admin')
+      ):
+        # Authenticated without a role (custom dependency, legacy session):
+        # keep the pre-role-management contract that any authenticated
+        # caller may write. Pass `authorize=` to enforce a stricter policy;
+        # role-bearing principals are always checked against their role.
+        return principal
       await ensure_allowed(permission_check, request, 'posts', action)
       return principal
+
     return guard
 
   def _create_generated(
@@ -704,6 +716,8 @@ def add_editor_to_app(
           (optional), see `get_api_router()`
       collection_spec: Optional project collection settings. A configured
           `slug_template` enables `POST /create` and blank-slug `/save`.
+      authorize: Shared `(request, resource, action) -> bool` permission
+          callback; when not given, authenticated users may write (optional)
 
   Returns:
       FastAPI application with editor routes added
@@ -819,6 +833,15 @@ def _add_ui_routes(
     principal = dict(user) if isinstance(user, dict) else None
     request.state.blog_user = principal
     if not require_auth and authorize is None:
+      return
+    if (
+      authorize is None
+      and principal is not None
+      and principal.get('role') is None
+      and not principal.get('is_admin')
+    ):
+      # Authenticated without a role: legacy callers keep write access
+      # (see the REST guard in `get_api_router`).
       return
     await ensure_allowed(permission_check, request, 'posts', action)
 

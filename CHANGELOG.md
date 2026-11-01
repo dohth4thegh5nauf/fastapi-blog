@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Review fixes for the security/SEO/object-types batch
+
+- `OriginCheckMiddleware` is no longer installed for the admin panel paths:
+  starlette-admin 1.0 already protects its own forms with CSRF tokens (TODO
+  7.4 says not to duplicate them), and the guard rejected legitimate
+  cookie-carrying requests without an `Origin` header (e.g. its own login).
+  The middleware now protects the REST API only.
+- `_AuthorizedModelView.is_action_allowed` and the role views' override are
+  `async` again: starlette-admin 1.0 awaits this hook (`await
+  view.is_action_allowed(...)`), so the synchronous override crashed with
+  `TypeError` whenever a bulk action ran. The async hook also supports
+  asynchronous `authorize` callbacks.
+- With the default policy, an authenticated principal without a role (custom
+  `auth_dependency`, legacy session) keeps the pre-role-management write
+  access, as documented in README; role-bearing principals are checked
+  against their role, and a custom `authorize=` replaces the policy
+  wholesale.
+- SEO findings of `check` are produced only for schemas with an `seo`
+  section; schemas without one stay clean (TODO 5.9.0, П6).
+- `object`/`list[object]` fields reject nesting deeper than three levels
+  (the depth check was off by one and allowed four).
+- Added the missing `Mock` import and aligned the admin/editor/role tests
+  with the new contracts (explicit `secret_key`/`admin_password`,
+  permission-aware view rendering, real `Request` objects instead of
+  `Mock(spec=Request)`, which cannot emulate sessions).
+
 ### Security and authorization (TODO phase E, 7.1–7.4)
 
 - Added a shared `authorize(request, resource, action)` policy for REST API

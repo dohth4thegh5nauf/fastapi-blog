@@ -20,10 +20,7 @@ from starlette_admin.i18n import I18nConfig
 from ..config import CollectionSpec
 from ..models import FrontmatterSchema
 from ..permissions import Authorizer
-from ..security import (
-  install_origin_check_middleware,
-  resolve_admin_credentials,
-)
+from ..security import resolve_admin_credentials
 from .auth_provider import SimpleAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
@@ -155,6 +152,10 @@ def _create_admin_for_locale(
           `markdown_crud.get_posts_directory`)
       collection_spec: Project-file collection spec; takes precedence over
           `posts_dirname`/`frontmatter_schema` for the managed collection
+      authorize: Shared `(request, resource, action) -> bool` permission
+          callback; the default authorizer is used when not given
+      auth_users: Extra users (besides `admin_username`) allowed to sign in
+          to the admin panel, mapped to their password hashes
 
   Returns:
       Configured Admin instance
@@ -225,7 +226,10 @@ def _create_admin_for_locale(
 
     # Create role management views with admin_username for access control
     role_view = RoleModelView(
-      Role, locale=locale, admin_username=admin_username, icon='fa fa-shield',
+      Role,
+      locale=locale,
+      admin_username=admin_username,
+      icon='fa fa-shield',
       authorize=authorize,
     )
     user_roles_view = UserWithRolesModelView(
@@ -368,8 +372,12 @@ def add_admin_to_app(
     admins = add_admin_to_app(
       app,
       title='My Blog Admin',
-      admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
-      secret_key=os.environ['SECRET_KEY'],
+      admin_password=os.environ[
+        'FASTAPI_BLOG_ADMIN_PASSWORD'
+      ],
+      secret_key=os.environ[
+        'SECRET_KEY'
+      ],
       locales=[
         'en',
         'ru',
@@ -381,8 +389,12 @@ def add_admin_to_app(
     admins = add_admin_to_app(
       app,
       title='Админ-панель блога',
-      admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
-      secret_key=os.environ['SECRET_KEY'],
+      admin_password=os.environ[
+        'FASTAPI_BLOG_ADMIN_PASSWORD'
+      ],
+      secret_key=os.environ[
+        'SECRET_KEY'
+      ],
       locales=[
         'en',
         'ru',
@@ -443,14 +455,9 @@ def add_admin_to_app(
       'add_session_middleware=False requires an existing SessionMiddleware.'
     )
 
-  # Protect cookie-authenticated writes to every mounted admin locale.
-  install_origin_check_middleware(
-    app,
-    tuple(
-      path for locale in locales
-      for path in ('/admin', f'/{locale}/admin')
-    ),
-  )
+  # Starlette Admin 1.0 protects its own forms with CSRF tokens (TODO 7.4:
+  # don't duplicate them). The Origin guard is installed for the REST API
+  # only (see `add_blog_to_fastapi`/`add_editor_to_app`).
 
   # Create engine and session
   engine, session_factory = create_engine_and_session(database_url)

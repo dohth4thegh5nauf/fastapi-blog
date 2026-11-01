@@ -76,7 +76,11 @@ def test_default_locale_admin_redirects_to_clean_url():
   """Test that GET /en/admin redirects to /admin when en is default."""
   app = FastAPI()
   fastapi_blog.setup_fastapi_blog(
-    app, locales=['en', 'ru'], default_locale='en', admin_password='test123'
+    app,
+    locales=['en', 'ru'],
+    default_locale='en',
+    admin_password='test123',
+    secret_key='s' * 64,
   )
   client = TestClient(app, follow_redirects=False)
 
@@ -89,7 +93,11 @@ def test_default_locale_admin_with_paths_redirects():
   """Test that GET /en/admin/* redirects to /admin/* when en is default."""
   app = FastAPI()
   fastapi_blog.setup_fastapi_blog(
-    app, locales=['en', 'ru'], default_locale='en', admin_password='test123'
+    app,
+    locales=['en', 'ru'],
+    default_locale='en',
+    admin_password='test123',
+    secret_key='s' * 64,
   )
   client = TestClient(app, follow_redirects=False)
 

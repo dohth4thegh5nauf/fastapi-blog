@@ -165,7 +165,10 @@ _MIN_MAX_TYPES: tuple[str, ...] = ('int', 'float')
 
 # Types `min_items`/`max_items` are supported for.
 _ITEMS_TYPES: tuple[str, ...] = (
-  'list[str]', 'list[int]', 'list[link]', 'list[object]'
+  'list[str]',
+  'list[int]',
+  'list[link]',
+  'list[object]',
 )
 
 
@@ -400,9 +403,12 @@ class FieldSpec:
         f'Field {self.name!r} of type {self.type!r} needs non-empty `fields`'
       )
     if any(not isinstance(child, FieldSpec) for child in self.fields):
-      raise ValueError(f'`fields` of {self.name!r} must contain FieldSpec values')
+      raise ValueError(
+        f'`fields` of {self.name!r} must contain FieldSpec values'
+      )
     object.__setattr__(self, 'fields', tuple(self.fields))
-    _validate_nested_fields(self.fields, depth=1, parent=self.name)
+    # The children of a top-level object field sit at nesting level 2.
+    _validate_nested_fields(self.fields, depth=2, parent=self.name)
 
   def _check_link_options(self) -> None:
     """Validate `collection`/`value_field`/`filters` (TODO 5.1 link type)."""
@@ -517,7 +523,8 @@ def _validate_nested_fields(
       seen[token] = child.name
     if child.type in ('object', 'list[object]'):
       _validate_nested_fields(
-        child.fields or (), depth=depth + 1,
+        child.fields or (),
+        depth=depth + 1,
         parent=f'{parent}.{child.name}',
       )
 
@@ -664,8 +671,11 @@ class SeoCheckConfig:
       if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ValueError(f'`seo.check.{key}` must be a positive integer')
     for key in (
-      'missing_description', 'missing_image', 'duplicate_title',
-      'duplicate_description', 'image_alt_required',
+      'missing_description',
+      'missing_image',
+      'duplicate_title',
+      'duplicate_description',
+      'image_alt_required',
     ):
       value = getattr(self, key)
       if value not in ('off', 'warn', 'error'):
@@ -1086,6 +1096,7 @@ class FrontmatterSchema:
         ValueError: A `read_only` field's value would change.
 
     """
+
     def apply_create(specs: tuple[FieldSpec, ...], model: Any) -> None:
       """Apply on_create rules recursively to nested model instances."""
       set_fields = model.model_fields_set
@@ -1101,7 +1112,9 @@ class FrontmatterSchema:
             apply_create(field.fields or (), item)
 
     def check_read_only(
-      specs: tuple[FieldSpec, ...], model: Any, old: Mapping[str, Any],
+      specs: tuple[FieldSpec, ...],
+      model: Any,
+      old: Mapping[str, Any],
       prefix: str = '',
     ) -> None:
       """Reject read-only changes recursively, including object lists."""
@@ -1140,18 +1153,26 @@ class FrontmatterSchema:
             elif isinstance(compared, list):
               compared = [
                 item.model_dump(by_alias=True, exclude_none=True)
-                if hasattr(item, 'model_dump') else item for item in compared
+                if hasattr(item, 'model_dump')
+                else item
+                for item in compared
               ]
             if compared != old_value:
               raise ValueError(
                 f'Field {label!r} is read-only and cannot be changed'
               )
-        if field.type == 'object' and value is not None and isinstance(old_value, Mapping):
+        if (
+          field.type == 'object'
+          and value is not None
+          and isinstance(old_value, Mapping)
+        ):
           check_read_only(field.fields or (), value, old_value, label)
         elif field.type == 'list[object]' and isinstance(old_value, list):
           for index, item in enumerate(value or []):
             if index < len(old_value) and isinstance(old_value[index], Mapping):
-              check_read_only(field.fields or (), item, old_value[index], f'{label}[{index}]')
+              check_read_only(
+                field.fields or (), item, old_value[index], f'{label}[{index}]'
+              )
 
     if is_create:
       apply_create(self.fields, instance)
@@ -1457,10 +1478,8 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
       nested_schema = FrontmatterSchema(
         fields=spec.fields or (), extra=schema.extra
       )
-      nested_model = _build_model(nested_schema)
-      annotation = (
-        nested_model if spec.type == 'object' else list[nested_model]
-      )
+      nested_model: Any = _build_model(nested_schema)
+      annotation = nested_model if spec.type == 'object' else list[nested_model]
     options: dict[str, Any] = {}
     if spec.alias:
       options['alias'] = spec.alias
