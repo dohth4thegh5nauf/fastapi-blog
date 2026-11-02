@@ -27,11 +27,11 @@ Run from the repository root using the locked dependency set and supported
 Python versions (3.12 and 3.13):
 
 ```bash
-uv sync --extra dev --extra admin --extra jsonld
+uv sync --locked --extra dev --extra admin --extra jsonld
 make all
 ```
 
-The CI matrix (see `.github/workflows/`) must also pass:
+The GitHub workflows have not yet had a run on this branch. A push starts the Tier 1 validation workflow; a pull request targeting `main` starts the Tier 2 test, API/Compose and security workflows. The CI matrix (see `.github/workflows/`) must pass before release:
 
 - Tier 1 `push-validate` — ruff, format, mypy, gitleaks on every push;
 - Tier 2 `pr-test-fastapi-blog` — Python 3.12.16 and 3.13.18, `core` and `all` extras;
@@ -40,24 +40,39 @@ The CI matrix (see `.github/workflows/`) must also pass:
 - Tier 2 `pr-test-api` — Compose model validation, Trivy OS scan and an
   API/contract smoke against the running container and its health probes.
 
-Before publishing, verify the source distribution and wheel contain the
-expected package templates and translations, install the wheel in a clean
-environment, and run the smoke tests for `setup_fastapi_blog(admin=False)` and
-for the admin extra. Confirm that missing credentials fail at startup and that
-no development credentials are enabled implicitly.
+Trivy is configured with `severity: CRITICAL,HIGH`, `ignore-unfixed: true`
+and `exit-code: 1`. The first run may therefore fail deliberately when the
+base image contains a HIGH/CRITICAL OS vulnerability with an available fix.
+Treat that as a security finding to investigate and resolve or document; do
+not change the exit code or severity threshold merely to make CI green. Trivy
+has not been run locally in this handoff environment.
+
+Configure branch protection for `main` manually in GitHub Settings. Require
+the four stable aggregate checks listed in
+[`.github/workflows/README.md`](../.github/workflows/README.md):
+`Validate PR / validate-required`, `Test fastapi-blog / tests-passed`,
+`API Contract / api-smoke` and `Security / security-passed`.
+
+Before publishing the final candidate, verify the source distribution and
+wheel contain the expected package templates and translations, install the
+wheel in a clean environment, and run smoke tests for
+`setup_fastapi_blog(admin=False)` and the admin extra. Confirm that missing
+credentials fail at startup and that no development credentials are enabled
+implicitly. This is a manual final-candidate gate and has not been completed
+for the release candidate in this handoff. On the tagged release, also update
+`compose.yaml`'s `image: fastapi-blog:<version>` to match the published image
+tag (currently the file says `fastapi-blog:0.9.0`) and validate with
+`docker compose config --quiet`.
 
 ## Evidence and current state
 
-The final release-candidate review re-ran the full gate in the locked
-environment (Python 3.12): `make all` is green — Ruff checks, format
-verification, mypy and the complete pytest suite report **759 passed,
-2 skipped**. The same suite was also run against the locked dependency set
-from a clean environment (`uv pip install -e '.[dev,admin,jsonld]'`,
-fastapi 0.162 / starlette 1.10 / starlette-admin 1.0.3): **759 passed,
-2 skipped** there as well. The review also fixed the `f.items` template
-lookup (Jinja resolved it to the dict method, breaking `list[object]`
-rendering), aligned four newly added tests with the strict schema and the
-service contract, and landed the single write-transaction refactor.
+The project owner reports that the latest full local run in the project's
+virtual-environment/Docker setup passes **765+ tests**. The exact pytest
+summary and CI run links have not been attached to this handoff, so this is
+recorded as owner-reported evidence rather than independently verified
+release evidence. Retain the exact `make all` output and the Docker/Compose
+smoke result with the final release candidate; the GitHub matrix remains
+pending its first push/PR run.
 
 Release verification performed locally on top of the test gate:
 
@@ -86,10 +101,14 @@ Release verification performed locally on top of the test gate:
   with an explicit password and strong secret it mounts the `en`/`ru`
   panels.
 
-What remains before publishing: push the branch and let the CI matrix run
-(Python 3.13 in particular was not exercised locally), set the changelog
-release date, build the final artifacts from the tagged commit, and publish.
+What remains before publishing: push the branch and open/update a PR to `main`
+so every workflow gets its first run; resolve any Trivy findings; configure
+branch protection; install the final wheel in a clean environment and run
+core/admin smoke tests; update the Compose image tag for the release; set the
+changelog release date; build final artifacts from the tagged commit; and
+publish.
 
-**Release status: locally verified; CI acceptance and tagging pending.**
-Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the CI matrix above is
-green.
+**Release status: local test result owner-reported; GitHub CI, branch
+protection and final-wheel smoke are pending.** Keep `CHANGELOG.md` at
+`[0.9.0] - Unreleased` until the CI matrix and manual release gates above
+are green.

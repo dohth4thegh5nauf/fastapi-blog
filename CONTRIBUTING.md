@@ -4,6 +4,11 @@ Thank you for your interest in contributing to fastapi-blog!
 
 ## 🚀 Quick Start
 
+The Makefile uses `uv run` and the committed `uv.lock` for every development
+check. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+before running `make install`. The target syncs the locked `dev`, `admin` and
+`jsonld` extras into the project environment.
+
 ```bash
 # Clone and setup
 git clone https://github.com/pydanny/fastapi-blog.git

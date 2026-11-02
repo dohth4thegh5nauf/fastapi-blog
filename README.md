@@ -414,7 +414,10 @@ The admin interface has its own templates and translations, separate from the pu
 
 ### Requirements and setup
 
-The project targets Python 3.12+ and follows the repository's Ubuntu latest-LTS development guideline. The recommended development workflow uses `uv` and the Makefile:
+The project targets Python 3.12+ and follows the repository's Ubuntu latest-LTS development guideline. The recommended development workflow uses `uv` and the Makefile. Install
+[uv](https://docs.astral.sh/uv/getting-started/installation/) first;
+`make install` syncs the locked `dev`, `admin` and `jsonld` extras, while all
+Makefile checks execute inside that same locked environment:
 
 ```bash
 git clone https://github.com/pydanny/fastapi-blog.git

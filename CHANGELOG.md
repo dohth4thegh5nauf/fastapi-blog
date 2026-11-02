@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Development tooling and release workflow
+
+- Routed Makefile lint, format, type-check and test commands through the
+  locked `uv` environment, matching CI and avoiding unrelated executables
+  earlier in `PATH`.
+- Excluded root-level `env/`, `venv/` and backup virtual-environment
+  directories from container build contexts.
+- Refreshed the release status and checklist: local test counts are marked as
+  owner-reported, GitHub CI/branch protection/final-wheel smoke remain pending,
+  and the Compose image tag is an explicit release-time update.
+
 ### Health probes (draft-inadarei-api-health-check-06)
 
 - Added `fastapi_blog.health` and the opt-in `health_routes=True` parameter
