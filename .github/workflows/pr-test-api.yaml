@@ -57,7 +57,7 @@ jobs:
       - name: Blog index, root redirect and a published post respond
         run: |
           curl -fsS http://localhost:8000/blog/ > /dev/null
-          curl -fsS http://localhost:8000/blog/welcome > /dev/null
+          curl -fsS http://localhost:8000/blog/posts/no-tags > /dev/null
           curl -fsS http://localhost:8000/ > /dev/null
 
       - name: Tear down the stack

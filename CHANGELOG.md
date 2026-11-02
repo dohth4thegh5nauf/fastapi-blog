@@ -23,10 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Added `compose.yaml` (Compose Specification, no obsolete top-level
   `version`): a single `blog` service built from the `Containerfile` with a
-  spec-conformant `healthcheck` against `/api/v1/health/ready` and a bind
-  mount keeping posts on the host. The image now serves the
-  `compose_demo` example application and declares the same readiness probe
-  via `HEALTHCHECK`.
+  spec-conformant `healthcheck` against `/api/v1/health/ready` and the
+  shared example posts bind-mounted read-only from `tests/examples/posts`
+  (edits on the host show up immediately). The image now serves the
+  `compose_demo` example application (lenient frontmatter, like the other
+  example apps) and declares the same readiness probe via `HEALTHCHECK`.
 
 ### CI: tiered workflows, pinned actions, defense in depth
 

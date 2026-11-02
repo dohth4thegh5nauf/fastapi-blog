@@ -265,7 +265,7 @@ All answers use `Content-Type: application/health+json` with a `Cache-Control` l
 
 ## Development with containers
 
-`docker compose up --build --wait` builds the core-only demo image and starts the blog on <http://localhost:8000/blog/>. The Compose health check uses `/api/v1/health/ready`. Put Markdown files in `./posts`; the bind mount makes them available to the container. This demo intentionally does not enable the optional admin panel or REST API.
+`docker compose up --build --wait` builds the core-only demo image and starts the blog on <http://localhost:8000/blog/>. The Compose health check uses `/api/v1/health/ready`. The demo serves the example posts from `tests/examples/posts` (bind-mounted read-only, so edits on the host show up immediately). This demo intentionally does not enable the optional admin panel or REST API.
 
 ## Frontmatter schemas
 

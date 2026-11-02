@@ -20,7 +20,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --chown=10001:10001 tests/examples/compose_demo.py ./compose_demo.py
-COPY --chown=10001:10001 posts ./posts
+COPY --chown=10001:10001 tests/examples/posts ./posts
 COPY --chown=10001:10001 tests/examples/pages ./pages
 
 EXPOSE 8000

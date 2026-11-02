@@ -15,10 +15,9 @@ services:
       PORT: 8000
     volumes:
       - type: bind
-        source: ./posts
+        source: ./tests/examples/posts
         target: /app/posts
-        bind:
-          create_host_path: true
+        read_only: true
     healthcheck:
       test:
         - CMD
