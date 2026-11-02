@@ -355,7 +355,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Every row of the TODO 5.9.3 substitution table now has a test
   (`tests/test_seo_resolution.py`).
 
-### Sitemap, robots.txt and permanent redirects (TODO 5.9.5, partial)
+### Sitemap, robots.txt and permanent redirects (TODO 5.9.5)
 
 - Added opt-in `seo_routes=True` (`add_blog_to_fastapi`, `setup_fastapi_blog`):
   deterministic `GET /sitemap.xml` and `GET /robots.txt`, `seo.disallow`
@@ -377,8 +377,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `/robots.txt` and `/sitemap.xml` with a 404 page.
 - Enabling `seo_routes` without `seo.site_url` fails at startup with
   `ConfigurationError`.
-- Not covered yet: redirects under non-default locale prefixes and the
-  conflict diagnostics of `check` (TODO 5.9.7).
+- A bare-slug alias now redirects under every mounted locale, not only the
+  default one: `/{locale}/{prefix}/posts/{alias}` answers `301` to the
+  document's address in that locale (e.g. `/ru/blog/posts/old` →
+  `/ru/blog/posts/current`). A document canonical elsewhere keeps that
+  foreign target for every locale. The live-address and reserved-path
+  protection covers the localized addresses too, so an alias still can't
+  loop or hide a localized page. Conflict diagnostics live in `check`
+  (TODO 5.9.7).
 
 
 ### Site-wide SEO settings: `SeoConfig` and the `seo:` section (TODO 5.9.2)

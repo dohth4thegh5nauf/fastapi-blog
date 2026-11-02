@@ -110,7 +110,8 @@ def setup_fastapi_blog(
       seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
           own `seo` section.
       seo_routes: Add `sitemap.xml`, `robots.txt` and `redirect_from`
-          redirects (TODO 5.9.5). Requires `seo.site_url`. Default: `False`.
+          redirects (TODO 5.9.5); bare-slug aliases redirect under every
+          mounted locale. Requires `seo.site_url`. Default: `False`.
       health_routes: Add the `/api/v1/health{,/live,/ready}` probes in the
           draft-inadarei-api-health-check-06 format. Default: `False`.
       sanitize_html: Sanitize Markdown HTML in public pages and admin preview.

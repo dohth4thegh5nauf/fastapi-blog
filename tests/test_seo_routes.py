@@ -416,3 +416,77 @@ def test_redirect_index_follows_changes_in_the_posts_directory(blog_dir):
     )
     assert client.get('/blog/posts/newer-alias').status_code == 301
     assert client.get('/blog/posts/old-live').status_code == 404
+
+
+# --- Localized redirect_from (5.9.5) ----------------------------------------
+
+
+def _localized_seo_app(monkeypatch, posts, **kwargs):
+  monkeypatch.setattr(helpers, 'list_posts', lambda **kw: posts)
+  app = FastAPI()
+  add_blog_to_fastapi(
+    app,
+    locales=['en', 'ru'],
+    default_locale='en',
+    seo=SeoConfig(site_url=SITE),
+    seo_routes=True,
+    **kwargs,
+  )
+  return app
+
+
+def test_redirect_from_covers_locales_with_prefix(monkeypatch):
+  posts = ({'slug': 'first-post', 'title': 'F', 'redirect_from': ['old-post']},)
+  app = _localized_seo_app(monkeypatch, posts)
+  with TestClient(app, follow_redirects=False) as client:
+    default = client.get('/blog/posts/old-post')
+    localized = client.get('/ru/blog/posts/old-post')
+    head = client.head('/ru/blog/posts/old-post')
+  assert default.headers['location'] == f'{SITE}/blog/posts/first-post'
+  assert localized.status_code == head.status_code == 301
+  assert localized.headers['location'] == f'{SITE}/ru/blog/posts/first-post'
+
+
+def test_redirect_from_shares_a_foreign_canonical_across_locales(monkeypatch):
+  posts = (
+    {
+      'slug': 'elsewhere',
+      'title': 'E',
+      'canonical': 'https://other.example/elsewhere',
+      'redirect_from': ['gone'],
+    },
+  )
+  app = _localized_seo_app(monkeypatch, posts)
+  with TestClient(app, follow_redirects=False) as client:
+    localized = client.get('/ru/blog/posts/gone')
+  assert localized.status_code == 301
+  assert localized.headers['location'] == 'https://other.example/elsewhere'
+
+
+def test_redirect_from_never_hides_a_live_localized_post(monkeypatch):
+  posts = (
+    {
+      'slug': 'a',
+      'title': 'A',
+      'redirect_from': ['/ru/blog/posts/b', 'ru/blog'],
+    },
+    {'slug': 'b', 'title': 'B'},
+  )
+  app = _localized_seo_app(monkeypatch, posts)
+  with TestClient(
+    app, follow_redirects=False, raise_server_exceptions=False
+  ) as client:
+    # The mocked posts have no files, so the live page itself answers 500,
+    # never 301; the reserved localized index keeps its own answer too.
+    assert client.get('/ru/blog/posts/b').status_code != 301
+    assert client.get('/ru/blog').status_code != 301
+    assert client.get('/ru/blog/').status_code != 301
+
+
+def test_redirect_from_covers_locales_without_a_blog_prefix(monkeypatch):
+  posts = ({'slug': 'first-post', 'title': 'F', 'redirect_from': ['old-post']},)
+  app = _localized_seo_app(monkeypatch, posts, prefix=None)
+  with TestClient(app, follow_redirects=False) as client:
+    localized = client.get('/ru/posts/old-post')
+  assert localized.status_code == 301
+  assert localized.headers['location'] == f'{SITE}/ru/posts/first-post'

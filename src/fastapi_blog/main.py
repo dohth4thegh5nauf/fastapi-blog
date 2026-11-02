@@ -108,7 +108,8 @@ def add_blog_to_fastapi(
                      published posts are served; see `fastapi_blog.jsonld`.
       seo_routes: Add `GET /sitemap.xml`, `GET /robots.txt` and permanent
                   redirects for the `redirect_from` role (TODO 5.9.5;
-                  default: False). Needs `seo.site_url`: without it the app
+                  default: False). Bare-slug aliases redirect under every
+                  mounted locale. Needs `seo.site_url`: without it the app
                   fails at startup with `ConfigurationError`.
       health_routes: Add the health probes `GET /api/v1/health`,
                   `GET /api/v1/health/live` and `GET /api/v1/health/ready`
@@ -212,6 +213,7 @@ def add_blog_to_fastapi(
       prefix=prefix,
       posts_dirname=posts_dirname,
       strict=strict_frontmatter,
+      locales=locales,
       default_locale=default_locale,
     )
 
@@ -401,6 +403,7 @@ def _mount_seo_routes(
   prefix: str | None,
   posts_dirname: str,
   strict: bool,
+  locales: list[str],
   default_locale: str,
 ) -> None:
   """Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects (5.9.5).
@@ -408,6 +411,9 @@ def _mount_seo_routes(
   Only published posts take part. The sitemap entries and the alias index
   are built once per state of the posts directory (`helpers.list_posts`
   returns the same tuple until a file changes), not once per request.
+  A bare-slug alias redirects under every mounted locale: the old address
+  `/{locale}/{prefix}/posts/{alias}` leads to the document's address in
+  that locale, unless the document declares a canonical elsewhere.
   """
   config = resolve_seo_config(seo, frontmatter_schema)
   if config is None or not config.site_url:
@@ -422,12 +428,16 @@ def _mount_seo_routes(
 
   site_url = config.site_url
   blog_path = f'/{prefix}' if prefix is not None else ''
+  # Non-default locales serve the same documents under `/{locale}`.
+  locale_paths = tuple(
+    f'/{locale}{blog_path}' for locale in locales if locale != default_locale
+  )
 
   def absolute(path: str) -> str:
     return site_url + '/' + path.lstrip('/')
 
-  def post_path(slug: Any) -> str:
-    return f'{blog_path}/posts/{quote(str(slug), safe="")}'
+  def post_path(slug: Any, base: str = blog_path) -> str:
+    return f'{base}/posts/{quote(str(slug), safe="")}'
 
   def build_snapshot(
     posts: tuple[dict, ...],
@@ -439,6 +449,11 @@ def _mount_seo_routes(
     tags: set[str] = set()
     # Lookup keys use the decoded form: that is what `request.url.path` is.
     live = {f'{blog_path}/posts/{post["slug"]}' for post in posts}
+    live.update(
+      f'{locale_path}/posts/{post["slug"]}'
+      for locale_path in locale_paths
+      for post in posts
+    )
     reserved = {
       '/',
       '/robots.txt',
@@ -448,6 +463,15 @@ def _mount_seo_routes(
       f'{blog_path}/posts',
       f'{blog_path}/tags',
     }
+    for locale_path in locale_paths:
+      reserved.update(
+        (
+          locale_path,
+          f'{locale_path}/',
+          f'{locale_path}/posts',
+          f'{locale_path}/tags',
+        )
+      )
     aliases: dict[str, str] = {}
     for post in posts:
       own_path = f'{blog_path}/posts/{post["slug"]}'
@@ -460,11 +484,20 @@ def _mount_seo_routes(
         page_type='article',
       )
       target = head.get('canonical_url') or own_url
+      is_own = target.rstrip('/') == own_url
       robots = {str(item).lower() for item in head.get('robots') or []}
       # Excluded: `noindex` documents and documents canonical elsewhere.
-      if 'noindex' not in robots and target.rstrip('/') == own_url:
+      if 'noindex' not in robots and is_own:
         entries[target] = _lastmod(post)
         tags.update(str(tag) for tag in post.get('tags') or [])
+      # A document canonical at its own address redirects each locale's old
+      # URLs to that locale's address; a foreign canonical is shared.
+      localized_targets = {
+        locale_path: (
+          absolute(post_path(post['slug'], locale_path)) if is_own else target
+        )
+        for locale_path in locale_paths
+      }
       raw_aliases = post.get('redirect_from') or []
       if isinstance(raw_aliases, str):
         raw_aliases = [raw_aliases]
@@ -472,14 +505,24 @@ def _mount_seo_routes(
         text = unquote(str(alias).strip()).strip('/')
         if not text:
           continue
-        # A bare word is a slug of the current URL scheme; anything with a
-        # `/` is a site path (it may include the blog prefix itself).
-        path = f'/{text}' if '/' in text else f'{blog_path}/posts/{text}'
-        # A live address or the document's own never redirects (no loops, no
-        # hijacked pages); two documents claiming one alias: the first wins.
-        if path in live or path in reserved or path == own_path:
-          continue
-        aliases.setdefault(path, target)
+        # A bare word is a slug of every mounted URL scheme; anything with
+        # a `/` is a site path (it may include the blog prefix itself).
+        if '/' in text:
+          candidates = [(f'/{text}', target)]
+        else:
+          candidates = [
+            (f'{blog_path}/posts/{text}', target),
+            *(
+              (f'{locale_path}/posts/{text}', localized_target)
+              for locale_path, localized_target in localized_targets.items()
+            ),
+          ]
+        for path, alias_target in candidates:
+          # A live address or the document's own never redirects (no loops,
+          # no hijacked pages); two documents claiming one alias: first wins.
+          if path in live or path in reserved or path == own_path:
+            continue
+          aliases.setdefault(path, alias_target)
     if not config.noindex_tags:
       for tag in tags:
         entries[absolute(f'{blog_path}/tags/{quote(tag, safe="")}')] = None
