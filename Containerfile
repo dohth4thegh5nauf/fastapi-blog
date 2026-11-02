@@ -29,10 +29,13 @@ ENV PORT=8000
 # Expose the port the app runs on
 EXPOSE 8000
 
+# Health probe in the draft-inadarei-api-health-check-06 format
+# (python one-liner: the alpine image ships no curl/wget)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready',timeout=4).status==200 else 1)"
+
 # Change to the examples directory for running the app
 WORKDIR /app/tests/examples
 
-# Run the application
-# RUN make run
-# CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
-CMD ["uvicorn", "defaults:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application (core demo with the health probes)
+CMD ["uvicorn", "compose_demo:app", "--host", "0.0.0.0", "--port", "8000"]

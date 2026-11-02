@@ -1,0 +1,14 @@
+# Dependabot keeps the locked dependency set and the pinned action SHAs
+# current; its pull requests go through the same Tier 2 checks as any other.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly

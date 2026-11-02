@@ -66,6 +66,7 @@ def add_blog_to_fastapi(
   api_auth_dependency: Callable[..., Any] | None = None,
   jsonld_routes: bool = False,
   seo_routes: bool = False,
+  health_routes: bool = False,
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
   collection_spec: CollectionSpec | None = None,
@@ -109,6 +110,12 @@ def add_blog_to_fastapi(
                   redirects for the `redirect_from` role (TODO 5.9.5;
                   default: False). Needs `seo.site_url`: without it the app
                   fails at startup with `ConfigurationError`.
+      health_routes: Add the health probes `GET /api/v1/health`,
+                  `GET /api/v1/health/live` and `GET /api/v1/health/ready`
+                  in the draft-inadarei-api-health-check-06 format
+                  (default: False; see `fastapi_blog.health`). `live` and
+                  `ready` stay public; the base report only discloses the
+                  service version and uptime.
       validators: External validators run on every write through the REST
                   API (TODO 6.2/6.3); blocking outcomes roll the write back
                   with HTTP 422.
@@ -207,6 +214,16 @@ def add_blog_to_fastapi(
       strict=strict_frontmatter,
       default_locale=default_locale,
     )
+
+  # Health probes answer outside the blog prefix: orchestrators and load
+  # balancers call a fixed path regardless of where the blog is mounted.
+  if health_routes:
+    from .health import get_health_router
+
+    directories = [str(posts_dirname), str(pages_dirname)]
+    if collection_spec is not None:
+      directories.append(str(collection_spec.dir))
+    app.include_router(get_health_router(directories), prefix='/api/v1')
 
   # Create main router for default locale (no locale in URL)
   main_router = get_blog_router(

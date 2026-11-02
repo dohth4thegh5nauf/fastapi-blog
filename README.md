@@ -253,6 +253,20 @@ Pass it as `api_auth_dependency=check_token`. If authentication is required but 
 
 The API supports Markdown post CRUD, raw-document retrieval, and optional conditional writes. Set `require_if_match=True` on `get_api_router()` to require an `If-Match` header for update and delete requests; the ETag is obtained from the raw-document response.
 
+## Health probes
+
+`add_blog_to_fastapi(..., health_routes=True)` (also on `setup_fastapi_blog`) adds three probes in the [draft-inadarei-api-health-check](https://datatracker.ietf.org/doc/html/draft-inadarei-api-health-check-06) format, fixed at `/api/v1`:
+
+- `GET /api/v1/health` — the base report: service version and per-component checks (the only critical dependency is the readability of the content directories);
+- `GET /api/v1/health/live` — liveness; touches nothing and answers `{"status": "pass"}` whenever the process responds;
+- `GET /api/v1/health/ready` — readiness; `503` with `{"status": "fail"}` when a critical check fails.
+
+All answers use `Content-Type: application/health+json` with a `Cache-Control` lifetime; `pass` answers 2xx, `fail` answers 4xx/5xx. The probes stay public — orchestrators and load balancers cannot authenticate. The project specification lives in `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`. The container image and the Compose stack (`compose.yaml`) expose the same probes through their health checks.
+
+## Development with containers
+
+`docker compose up` builds the demo image and starts the blog on <http://localhost:8000>; the stack stays up only while the health check passes. Posts created through the admin panel or the REST API persist in the `./posts` directory of the checkout.
+
 ## Frontmatter schemas
 
 The built-in schema supports the conventional fields `title`, `date`, `published`, `tags` and `description`. For a project with different frontmatter keys, define a `FrontmatterSchema` and assign semantic roles to the fields:

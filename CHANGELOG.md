@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Health probes (draft-inadarei-api-health-check-06)
+
+- Added `fastapi_blog.health` and the opt-in `health_routes=True` parameter
+  of `add_blog_to_fastapi()`/`setup_fastapi_blog()`: `GET /api/v1/health`
+  (base report with version and per-component checks), `/api/v1/health/live`
+  (liveness, no dependencies touched) and `/api/v1/health/ready`
+  (readiness, `503` on a failed critical check). Responses use
+  `Content-Type: application/health+json` and a `Cache-Control` lifetime;
+  the probes stay public. The only critical dependency is the readability
+  of the content directories — the package has no mandatory external
+  services by design (TODO П1). Project specification:
+  `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`.
+
+### Compose stack and container health checks
+
+- Added `compose.yaml` (Compose Specification, no obsolete top-level
+  `version`): a single `blog` service built from the `Containerfile` with a
+  spec-conformant `healthcheck` against `/api/v1/health/ready` and a bind
+  mount keeping posts on the host. The image now serves the
+  `compose_demo` example application and declares the same readiness probe
+  via `HEALTHCHECK`.
+
+### CI: tiered workflows, pinned actions, defense in depth
+
+- Restructured `.github/workflows/` into the `<trigger>-<action>-<target>`
+  scheme: `push-validate` (Tier 1 on every push: ruff, format, mypy,
+  gitleaks), `pr-test` (Tier 2 matrix 3.12/3.13 × core/all with coverage),
+  `pr-scan-security` (bandit + pip-audit on the locked runtime set + CodeQL
+  + package build), `pr-test-integration` (Compose smoke against the
+  running container), `push-build-docker` and `push-update-contributors`.
+- All workflows: `permissions: {}` at the top level with per-job elevation,
+  `timeout-minutes` on every job, concurrency with
+  `cancel-in-progress`, and every third-party action pinned to a commit
+  SHA (commented with the tag). Actions are the Node.js 24-native majors
+  (`checkout` v7, `setup-python` v7, `setup-uv` v9) — GitHub retired
+  Node.js 20 runners in 2026.
+- Installs are reproducible now: `uv sync --frozen` against `uv.lock`
+  instead of floating `uv pip install -e ...`; SCA switched from `safety`
+  to `pip-audit` over the exported lock. Added `.github/dependabot.yaml`
+  for `github-actions` and `pip`.
+- Removed the duplicate legacy workflows (`ci.yml`/`test.yml`) and
+  `latest-changes.yml` (its `pull_request_target` + PAT pattern is against
+  least-privilege, and auto-inserting PR titles would break the curated
+  Keep a Changelog format).
+
 ### Refactoring: one write transaction, one uniqueness check
 
 - `DocumentService.commit()` is now the single write transaction shared by

@@ -1,0 +1,61 @@
+# Tier 2 — full test matrix before merge: unit/integration/API tests with
+# coverage on every supported Python version, with and without extras.
+
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # `core`: no extras, admin tests are skipped; `all`: every extra
+        python-version: ['3.12', '3.13']
+        extras: [core, all]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies (core)
+        if: matrix.extras == 'core'
+        run: uv sync --frozen --extra dev
+
+      - name: Install dependencies (all extras)
+        if: matrix.extras == 'all'
+        run: uv sync --frozen --extra dev --extra admin --extra jsonld
+
+      - name: Test with coverage
+        run: |
+          uv run coverage run -m pytest
+          uv run coverage report -m
+          uv run coverage xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.extras == 'all' && matrix.python-version == '3.12'
+        uses: codecov/codecov-action@2320916714171c258d01dbd81040d64d798c6f8e # v7.1.1
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false

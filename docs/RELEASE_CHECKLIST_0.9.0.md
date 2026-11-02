@@ -31,11 +31,14 @@ uv sync --extra dev --extra admin --extra jsonld
 make all
 ```
 
-The CI matrix must also pass:
+The CI matrix (see `.github/workflows/`) must also pass:
 
-- Python 3.12 and 3.13, `core` installation/test job;
-- Python 3.12 and 3.13, `all` extras/test job;
-- security checks (`safety` and `bandit`) as configured by the workflow.
+- Tier 1 `push-validate` — ruff, format, mypy, gitleaks on every push;
+- Tier 2 `pr-test` — Python 3.12 and 3.13, `core` and `all` extras;
+- Tier 2 `pr-scan-security` — bandit (SAST), pip-audit (SCA) on the locked
+  runtime set, CodeQL, and the package build;
+- Tier 2 `pr-test-integration` — Compose smoke against the running
+  container and its health probes.
 
 Before publishing, verify the source distribution and wheel contain the
 expected package templates and translations, install the wheel in a clean
@@ -65,7 +68,12 @@ Release verification performed locally on top of the test gate:
   pass, since `bandit` exits non-zero on any finding.
 - `safety check --ignore 70612` on the locked dependency set — no
   vulnerabilities in project dependencies (only the venv's own `pip`
-  reported CVEs, which the CI image does not install from this lock).
+  reported CVEs, which the CI image does not install from this lock). The
+  CI gate uses `pip-audit` over the exported lock instead (same class of
+  check, no API key needed).
+- Health probes: six new tests cover the draft-06 format, the HTTP status
+  semantics (`pass` → 2xx, `fail` → 503) and the opt-in flag; the Compose
+  stack validates end to end in CI (`pr-test-integration`).
 - `python -m build` — `fastapi_blog-0.9.0` sdist and wheel build cleanly;
   both contain the admin/public templates.
 - Clean-environment smoke (wheel installed into a fresh venv with the locked
