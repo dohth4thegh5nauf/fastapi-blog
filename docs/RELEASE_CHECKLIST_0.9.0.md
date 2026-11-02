@@ -48,15 +48,40 @@ no development credentials are enabled implicitly.
 The final release-candidate review re-ran the full gate in the locked
 environment (Python 3.12): `make all` is green — Ruff checks, format
 verification, mypy and the complete pytest suite report **759 passed,
-2 skipped**. This run covers the service-backed form and preview changes; it
-supersedes the earlier 750-test report. The review also fixed the
-`f.items` template lookup (Jinja resolved it to the dict method, breaking
-`list[object]` rendering) and aligned four newly added tests with the strict
-schema and the service contract.
+2 skipped**. The same suite was also run against the locked dependency set
+from a clean environment (`uv pip install -e '.[dev,admin,jsonld]'`,
+fastapi 0.162 / starlette 1.10 / starlette-admin 1.0.3): **759 passed,
+2 skipped** there as well. The review also fixed the `f.items` template
+lookup (Jinja resolved it to the dict method, breaking `list[object]`
+rendering), aligned four newly added tests with the strict schema and the
+service contract, and landed the single write-transaction refactor.
 
-The CI matrix (Python 3.12 and 3.13, `core` and `all` jobs, security checks)
-still has to pass on the release candidate; the local run does not replace it.
+Release verification performed locally on top of the test gate:
 
-**Release status: implementation complete; final CI acceptance pending.**
-Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the release verification
-above is green. Do not create a git tag or commit as part of this preparation.
+- `bandit -r src/` — clean, exit 0 (ten intentional low-severity findings
+  annotated with `nosec`: guarded asserts, the validator subprocess with a
+  configuration-fixed argument list and no shell, ElementTree generating
+  the sitemap). Without the annotations the CI security step could never
+  pass, since `bandit` exits non-zero on any finding.
+- `safety check --ignore 70612` on the locked dependency set — no
+  vulnerabilities in project dependencies (only the venv's own `pip`
+  reported CVEs, which the CI image does not install from this lock).
+- `python -m build` — `fastapi_blog-0.9.0` sdist and wheel build cleanly;
+  both contain the admin/public templates.
+- Clean-environment smoke (wheel installed into a fresh venv with the locked
+  runtime set): core import keeps extras lazy (`starlette_admin`,
+  `sqlalchemy` absent from `sys.modules`), `setup_fastapi_blog(admin=False,
+  include_api=True)` serves the blog and rejects unauthenticated API reads
+  with 401, and an API without any authentication mechanism fails at
+  startup with `ConfigurationError` (TODO 3.3). With the `admin` extra,
+  `add_admin_to_app` without credentials raises `ConfigurationError`, and
+  with an explicit password and strong secret it mounts the `en`/`ru`
+  panels.
+
+What remains before publishing: push the branch and let the CI matrix run
+(Python 3.13 in particular was not exercised locally), set the changelog
+release date, build the final artifacts from the tagged commit, and publish.
+
+**Release status: locally verified; CI acceptance and tagging pending.**
+Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the CI matrix above is
+green.
