@@ -71,8 +71,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Shared the pinned Python/uv bootstrap in `.github/actions/setup-python-env`
   and the full Tier 1 job in `reusable-validate-python.yaml`; Tier 1 runs on
-  push and PR. It installs only the core + dev set and verifies `uv.lock` before
-  lint/type checks, rather than installing optional admin/JSON-LD extras.
+  push and PR. It verifies `uv.lock` first, then installs the dev, admin and
+  JSON-LD extras: mypy needs the optional imports resolvable, and Ruff shares
+  the same environment. Every `uv run` restates its extras explicitly.
 - Fixed the security scan so Bandit and pip-audit are invoked at pinned tool
   versions; SCA now exports every runtime extra. Added the missing checkout
   before CodeQL initialization and stable aggregate required-check jobs.

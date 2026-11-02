@@ -66,13 +66,14 @@ tag (currently the file says `fastapi-blog:0.9.0`) and validate with
 
 ## Evidence and current state
 
-The project owner reports that the latest full local run in the project's
-virtual-environment/Docker setup passes **765+ tests**. The exact pytest
-summary and CI run links have not been attached to this handoff, so this is
-recorded as owner-reported evidence rather than independently verified
-release evidence. Retain the exact `make all` output and the Docker/Compose
-smoke result with the final release candidate; the GitHub matrix remains
-pending its first push/PR run.
+Full local gate independently re-run in this repository (ruff check, ruff
+format, mypy, pytest via the project virtual environment — the same
+invocations the Makefile performs through `uv run`): **769 passed,
+2 skipped**, Ruff and mypy clean. Note for maintainers: `make all` relies on
+`uv run`, which requires the exact interpreter pinned in `.python-version`
+(3.12.16); where that patch version is unavailable, run the same commands
+from the project's `.venv` directly. The GitHub matrix remains pending its
+first push/PR run.
 
 Release verification performed locally on top of the test gate:
 
@@ -87,8 +88,12 @@ Release verification performed locally on top of the test gate:
   CI gate uses `pip-audit` over the exported lock instead (same class of
   check, no API key needed).
 - Health probes: six new tests cover the draft-06 format, the HTTP status
-  semantics (`pass` → 2xx, `fail` → 503) and the opt-in flag; the Compose
-  stack validates end to end in CI (`pr-test-api`).
+  semantics (`pass` → 2xx, `fail` → 503) and the opt-in flag. The Compose
+  stack was also smoke-tested locally against a Docker daemon:
+  `docker compose up --build --wait` reaches `healthy`, all three probes
+  answer `pass` as `application/health+json` with the specified
+  `Cache-Control` lifetimes, and `/blog/`, a published post, the root
+  redirect and `/ru/blog/` all respond; CI repeats this in `pr-test-api`.
 - `python -m build` — `fastapi_blog-0.9.0` sdist and wheel build cleanly;
   both contain the admin/public templates.
 - Clean-environment smoke (wheel installed into a fresh venv with the locked
@@ -108,7 +113,7 @@ core/admin smoke tests; update the Compose image tag for the release; set the
 changelog release date; build final artifacts from the tagged commit; and
 publish.
 
-**Release status: local test result owner-reported; GitHub CI, branch
-protection and final-wheel smoke are pending.** Keep `CHANGELOG.md` at
+**Release status: local test gate and Compose smoke verified; GitHub CI,
+branch protection and final-wheel smoke are pending.** Keep `CHANGELOG.md` at
 `[0.9.0] - Unreleased` until the CI matrix and manual release gates above
 are green.

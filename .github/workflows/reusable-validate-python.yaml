@@ -37,17 +37,19 @@ jobs:
       - name: Check lockfile consistency
         run: uv lock --check
 
-      - name: Install core and development dependencies
-        run: uv sync --frozen --extra dev
+      - name: Install dependencies
+        run: |
+          uv sync --locked --extra dev --extra admin --extra jsonld
+          echo 'UV_EXTRAS=--extra dev --extra admin --extra jsonld' >> "$GITHUB_ENV"
 
       - name: Ruff lint
-        run: uv run ruff check .
+        run: uv run --locked $UV_EXTRAS ruff check .
 
       - name: Ruff format
-        run: uv run ruff format --check .
+        run: uv run --locked $UV_EXTRAS ruff format --check .
 
       - name: Mypy
-        run: uv run mypy .
+        run: uv run --locked $UV_EXTRAS mypy .
 
       - name: Secret scanning
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0

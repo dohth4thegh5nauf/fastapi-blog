@@ -26,7 +26,11 @@ therefore does not build a second copy of the same image on PRs.
   are not reused as complete jobs.
 - All workflows start with `permissions: {}`. Permissions are granted per job.
 - Third-party actions are pinned to full commit SHAs with release comments.
-- The Python project is installed from `uv.lock` using `uv sync --frozen`.
+- The Python project is installed from `uv.lock` using `uv sync --locked`.
+  Tier 1 syncs the dev, admin and JSON-LD extras because mypy needs the
+  optional imports resolvable; the test matrix keeps a core leg (dev only)
+  to prove the package works without its optional extras. Every `uv run`
+  restates its extras explicitly (`$UV_EXTRAS`), matching the Makefile.
   Security scanner tools are invoked with exact direct versions.
 - Contributor-list regeneration is intentionally outside CI: the existing
   third-party action still declares the retired Node 20 runtime, and creating

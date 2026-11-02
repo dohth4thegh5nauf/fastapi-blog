@@ -37,17 +37,21 @@ jobs:
 
       - name: Install dependencies (core)
         if: matrix.extras == 'core'
-        run: uv sync --frozen --extra dev
+        run: |
+          uv sync --locked --extra dev
+          echo 'UV_EXTRAS=--extra dev' >> "$GITHUB_ENV"
 
       - name: Install dependencies (all extras)
         if: matrix.extras == 'all'
-        run: uv sync --frozen --extra dev --extra admin --extra jsonld
+        run: |
+          uv sync --locked --extra dev --extra admin --extra jsonld
+          echo 'UV_EXTRAS=--extra dev --extra admin --extra jsonld' >> "$GITHUB_ENV"
 
       - name: Test with coverage
         run: |
-          uv run coverage run -m pytest
-          uv run coverage report -m
-          uv run coverage xml
+          uv run --locked $UV_EXTRAS coverage run -m pytest
+          uv run --locked $UV_EXTRAS coverage report -m
+          uv run --locked $UV_EXTRAS coverage xml
 
       - name: Upload coverage to Codecov
         if: matrix.extras == 'all' && matrix['python-version'] == '3.12.16'
