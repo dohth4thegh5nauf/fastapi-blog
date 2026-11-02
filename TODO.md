@@ -399,3 +399,17 @@ validators:
 5. Заменять ли `passlib` в фазе E или отдельным небольшим патчем раньше: закрепление `bcrypt<4.1` — временная мера. — Решено: заменён патчем раньше фазы E (`admin/passwords.py`, `bcrypt>=5.0.0`).
 6. SEO: оставлять ли `sitemap.xml` и `robots.txt` в пакете под `seo_routes` (в ТЗ — да, по умолчанию выключено) или отдать хосту.
 7. SEO: какое значение `structured_data` по умолчанию при наличии секции `seo` — `blogposting` (в ТЗ) или `none`.
+
+## CI/CD (сопровождение проекта)
+
+- Tier 1: `push-validate` на каждый push и `pr-validate` на PR — `uv.lock`,
+  Ruff, mypy, Gitleaks (общая логика в `reusable-validate-python.yaml`).
+- Tier 2: PR в `main` — полная матрица pytest, API/Contract Compose smoke + Trivy OS scan, Bandit,
+  pip-audit по всем runtime extras, CodeQL и сборка пакета.
+- Публикация GHCR запускается только на push в `main` и version tags.
+- Branch protection требует `Validate PR / validate-required` и агрегирующие статусы
+  `Test fastapi-blog / tests-passed`, `API Contract / api-smoke`,
+  `Security / security-passed`;
+  сами required checks настраиваются в GitHub Settings.
+- Tier 3 отложен до появления реального staging, E2E suite или performance
+  baseline. Подробности: `.github/workflows/README.md`.

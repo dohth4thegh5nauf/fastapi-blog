@@ -1,0 +1,55 @@
+# Shared Tier 1 Python validation job for push and pull-request triggers.
+
+name: Reusable Validate Python
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version to validate.
+        type: string
+        required: false
+        default: '3.12.16'
+    secrets:
+      gitleaks_token:
+        description: Read-only token used by Gitleaks to inspect the repository/PR.
+        required: true
+
+permissions: {}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-python-env
+        with:
+          python-version: ${{ inputs['python-version'] }}
+
+      - name: Check lockfile consistency
+        run: uv lock --check
+
+      - name: Install core and development dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy .
+
+      - name: Secret scanning
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.gitleaks_token }}

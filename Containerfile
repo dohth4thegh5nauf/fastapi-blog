@@ -1,41 +1,32 @@
-# Dockerfile for building a FastAPI Blog image
-# This is a multi-stage build
-# The first stage is to build the application
-# The second stage is to run the application
+# Build a minimal runtime environment from the committed uv lockfile.
+FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
+FROM python:3.12.16-slim-bookworm AS builder
 
-# Use the official image as a parent image
-FROM python:3.12-alpine AS builder
-
-# Set the working directory in the container
+COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+COPY pyproject.toml uv.lock README.md LICENSE.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --no-editable
 
-# Install make
-RUN apk add --no-cache make
+# Keep the runtime image free of compilers, uv and development dependencies.
+FROM python:3.12.16-slim-bookworm AS runtime
 
-# Install fastapi-blog for local development
-# This installs any needed packages specified in pyproject.toml
-# as local development dependencies
-RUN make install
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000
 
-# Run tests
-RUN make test
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY --chown=10001:10001 tests/examples/compose_demo.py ./compose_demo.py
+COPY --chown=10001:10001 posts ./posts
+COPY --chown=10001:10001 tests/examples/pages ./pages
 
-# Configure the container to run the application
-ENV PORT=8000
-
-# Expose the port the app runs on
 EXPOSE 8000
 
-# Health probe in the draft-inadarei-api-health-check-06 format
-# (python one-liner: the alpine image ships no curl/wget)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready',timeout=4).status==200 else 1)"
 
-# Change to the examples directory for running the app
-WORKDIR /app/tests/examples
-
-# Run the application (core demo with the health probes)
+USER 10001:10001
 CMD ["uvicorn", "compose_demo:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -31,25 +31,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### CI: tiered workflows, pinned actions, defense in depth
 
 - Restructured `.github/workflows/` into the `<trigger>-<action>-<target>`
-  scheme: `push-validate` (Tier 1 on every push: ruff, format, mypy,
-  gitleaks), `pr-test` (Tier 2 matrix 3.12/3.13 × core/all with coverage),
-  `pr-scan-security` (bandit + pip-audit on the locked runtime set + CodeQL
-  + package build), `pr-test-integration` (Compose smoke against the
-  running container), `push-build-docker` and `push-update-contributors`.
+  scheme: `push-validate` + `pr-validate` (Tier 1 on push/PR, shared through
+  `reusable-validate-python` plus a stable PR gate: lock check, ruff, format,
+  mypy, gitleaks), `pr-test-fastapi-blog` (Tier 2 matrix 3.12/3.13 × core/all with coverage),
+  `pr-scan-security` (pinned Bandit + pip-audit on all runtime extras +
+  CodeQL + package build), `pr-test-api` (Trivy OS scan + Compose
+  smoke against the running container), `push-publish-docker`.
 - All workflows: `permissions: {}` at the top level with per-job elevation,
-  `timeout-minutes` on every job, concurrency with
-  `cancel-in-progress`, and every third-party action pinned to a commit
+  `.python-version` and Docker runtime are pinned to Python 3.12.16; the
+  compatibility matrix pins 3.12.16 and 3.13.18. `timeout-minutes` on every
+  job and concurrency controls (obsolete Tier 1/2
+  runs are cancelled; publishing is allowed to finish), and every third-party
+  action pinned to a commit
   SHA (commented with the tag). Actions are the Node.js 24-native majors
   (`checkout` v7, `setup-python` v7, `setup-uv` v9) — GitHub retired
   Node.js 20 runners in 2026.
 - Installs are reproducible now: `uv sync --frozen` against `uv.lock`
-  instead of floating `uv pip install -e ...`; SCA switched from `safety`
-  to `pip-audit` over the exported lock. Added `.github/dependabot.yaml`
-  for `github-actions` and `pip`.
+  instead of floating `uv pip install -e ...`; SCA uses `pip-audit` over
+  the exported lock including all runtime extras. Added `.github/dependabot.yaml`
+  for `github-actions`, `uv` and Docker base images.
 - Removed the duplicate legacy workflows (`ci.yml`/`test.yml`) and
   `latest-changes.yml` (its `pull_request_target` + PAT pattern is against
   least-privilege, and auto-inserting PR titles would break the curated
   Keep a Changelog format).
+
+### CI hardening and Compose integration
+
+- Shared the pinned Python/uv bootstrap in `.github/actions/setup-python-env`
+  and the full Tier 1 job in `reusable-validate-python.yaml`; Tier 1 runs on
+  push and PR. It installs only the core + dev set and verifies `uv.lock` before
+  lint/type checks, rather than installing optional admin/JSON-LD extras.
+- Fixed the security scan so Bandit and pip-audit are invoked at pinned tool
+  versions; SCA now exports every runtime extra. Added the missing checkout
+  before CodeQL initialization and stable aggregate required-check jobs.
+- PR container builds are owned by the Compose integration workflow; registry
+  publishing runs only on main/tag pushes and alone receives `packages: write`;
+  QEMU is configured before Buildx for arm64, with pinned binfmt and BuildKit
+  images. The legacy Node 20 contributor updater was removed rather than
+  introducing a PAT-based workaround that would bypass required PR checks.
+- The Containerfile now builds a runtime-only image from `uv.lock`; tests run
+  in Tier 2 instead of inside image construction. Compose smoke checks the
+  actual `/blog/` route, validates the Compose model and scans OS packages
+  with Trivy before the API smoke probes.
+- Removed the old contributor-list action because it declares Node 20,
+  which GitHub Actions no longer provides; no PAT-based replacement was added.
+- `.github/workflows/README.md` records the tier mapping, required status
+  checks and why Tier 3 is deferred until a staging/E2E/performance target exists.
 
 ### Refactoring: one write transaction, one uniqueness check
 

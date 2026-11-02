@@ -1,6 +1,5 @@
-# Tier 2 — security and build gates before merge.
-# SAST (bandit, CodeQL) and SCA (pip-audit) are separate layers and do not
-# replace each other; the package build proves the sdist/wheel stay healthy.
+# Tier 2 — SAST, SCA, CodeQL and package build before merge.
+# Bandit and CodeQL inspect source code; pip-audit checks every runtime extra.
 
 name: Security
 
@@ -17,30 +16,29 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: '3.12'
+          persist-credentials: false
 
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: ./.github/actions/setup-python-env
         with:
-          enable-cache: true
+          python-version: '3.12.16'
 
       - name: Install locked dependencies
         run: uv sync --frozen --all-extras
 
       - name: Bandit (SAST)
-        run: uv run bandit -r src/
+        run: uvx --from bandit==1.9.4 bandit -r src/ -ll
 
-      - name: pip-audit (SCA) on the locked runtime dependencies
+      - name: pip-audit (SCA) on all locked runtime dependencies
         run: |
-          uv export --frozen --no-dev -o /tmp/requirements.txt
-          uvx pip-audit --requirement /tmp/requirements.txt
+          uv export --frozen --all-extras --no-extra dev --no-dev --no-emit-project \
+            --output-file /tmp/requirements.txt
+          uvx --from pip-audit==2.10.1 pip-audit --requirement /tmp/requirements.txt
 
       - name: Build the package artifacts
         run: uv build
@@ -53,6 +51,8 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
@@ -61,3 +61,18 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d # v4.39.1
+
+  security-passed:
+    name: security-passed
+    if: always()
+    needs: [scan, codeql]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require SAST, SCA, build and CodeQL to pass
+        env:
+          SCAN_RESULT: ${{ needs.scan.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+        run: |
+          test "$SCAN_RESULT" = success
+          test "$CODEQL_RESULT" = success

@@ -1,10 +1,5 @@
-# Compose stack for the fastapi-blog demo image.
-#
-# The specification deliberately omits the obsolete top-level `version`
-# key. The single service needs no database (the file system is the only
-# mandatory backend); the bind mount keeps posts created through the admin
-# or REST API on the host. `docker compose up` builds the image from the
-# Containerfile when it is missing.
+# Compose stack for the FastAPI Blog demo image.
+# The filesystem is the only mandatory backend; posts remain on the host.
 
 name: fastapi-blog
 
@@ -19,7 +14,11 @@ services:
     environment:
       PORT: 8000
     volumes:
-      - ./posts:/app/tests/examples/posts
+      - type: bind
+        source: ./posts
+        target: /app/posts
+        bind:
+          create_host_path: true
     healthcheck:
       test:
         - CMD
