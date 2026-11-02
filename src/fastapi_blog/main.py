@@ -4,7 +4,11 @@ from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 from urllib.parse import quote, unquote
-from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.etree.ElementTree import (  # nosec B405
+  Element,
+  SubElement,
+  tostring,
+)
 
 import jinja2
 from fastapi import FastAPI, HTTPException

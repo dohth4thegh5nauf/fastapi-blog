@@ -583,7 +583,8 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
     # Get translations for current locale (default to English)
     t = translations.get(locale, translations['en'])
 
-    assert self.templates is not None
+    # starlette-admin assigns templates at mount time.
+    assert self.templates is not None  # nosec B101
     return self.templates.TemplateResponse(
       request=request,
       name='markdown_list.html',
@@ -648,7 +649,8 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
   async def index(self, request: Request) -> Response:
     """Render edit form."""
     await self._require(request, 'update')
-    assert self.templates is not None
+    # starlette-admin assigns templates at mount time.
+    assert self.templates is not None  # nosec B101
     slug = request.path_params.get('slug')
     if not slug:
       return self.templates.TemplateResponse(
@@ -750,7 +752,8 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
   async def index(self, request: Request) -> Response:
     """Render create form."""
     await self._require(request, 'create')
-    assert self.templates is not None
+    # starlette-admin assigns templates at mount time.
+    assert self.templates is not None  # nosec B101
     # Get translations for this view's locale
     from ..i18n import load_translations
 

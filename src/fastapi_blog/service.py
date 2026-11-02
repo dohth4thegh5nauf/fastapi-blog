@@ -227,7 +227,8 @@ class DocumentService:
       )
 
       if is_generated:
-        assert self.collection_spec is not None
+        # The is_generated branch above guarantees a spec.
+        assert self.collection_spec is not None  # nosec B101
         self._check_unique(None, validated)
         slug, etag = self.collection_spec.create_document(
           self.documents,

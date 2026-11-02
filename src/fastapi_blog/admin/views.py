@@ -308,7 +308,8 @@ class HomeView(CustomView):
     translations = load_translations(self.locale)
     t = translations['home']
 
-    assert self.templates is not None
+    # starlette-admin assigns templates at mount time.
+    assert self.templates is not None  # nosec B101
     return self.templates.TemplateResponse(
       request=request,
       name='home.html',

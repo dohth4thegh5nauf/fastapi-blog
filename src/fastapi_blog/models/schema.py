@@ -1347,7 +1347,8 @@ def _choice_values(choices: tuple[Any, ...]) -> list[Any]:
 
 
 def _choices_validator(spec: FieldSpec) -> Callable[[Any], Any]:
-  assert spec.choices is not None
+  # The caller checks `choices` before building this validator.
+  assert spec.choices is not None  # nosec B101
   allowed = _choice_values(spec.choices)
   allowed_set = set(allowed)
 

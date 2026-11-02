@@ -84,7 +84,8 @@ def resolve_admin_credentials(
       + '; '.join(problems)
       + '. For local development only, pass insecure_dev=True.'
     )
-  assert password is not None and secret_key is not None
+  # The checks above guarantee both values exist here.
+  assert password is not None and secret_key is not None  # nosec B101
   return username, password, secret_key
 
 

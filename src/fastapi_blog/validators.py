@@ -21,7 +21,7 @@ import dataclasses
 import os
 import pathlib
 import re
-import subprocess
+import subprocess  # nosec B404
 from collections.abc import Mapping
 from typing import Any
 
@@ -196,7 +196,8 @@ def run_validator(
   except ValueError as exc:
     return [Issue('error', f'{code}.unsafe_value', str(exc), slug)]
   try:
-    done = subprocess.run(  # noqa: S603 - argument list, no shell
+    # Argument list comes from configuration, never a shell.
+    done = subprocess.run(  # noqa: S603 # nosec B603
       argv,
       capture_output=True,
       timeout=validator.timeout,
