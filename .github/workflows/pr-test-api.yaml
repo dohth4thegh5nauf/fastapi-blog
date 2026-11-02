@@ -29,10 +29,14 @@ jobs:
       - name: Build and start the API container
         run: docker compose up -d --build --wait --wait-timeout 90
 
+      - name: Resolve the image reference from the Compose model
+        id: image
+        run: echo "ref=$(docker compose config --images | head -n 1)" >> "$GITHUB_OUTPUT"
+
       - name: Scan container OS packages with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: fastapi-blog:0.9.0
+          image-ref: ${{ steps.image.outputs.ref }}
           version: v0.70.0
           vuln-type: os
           severity: CRITICAL,HIGH
@@ -50,10 +54,11 @@ jobs:
           probe /api/v1/health/live
           probe /api/v1/health/ready
 
-      - name: Blog index and a published post respond
+      - name: Blog index, root redirect and a published post respond
         run: |
           curl -fsS http://localhost:8000/blog/ > /dev/null
           curl -fsS http://localhost:8000/blog/welcome > /dev/null
+          curl -fsS http://localhost:8000/ > /dev/null
 
       - name: Tear down the stack
         if: always()

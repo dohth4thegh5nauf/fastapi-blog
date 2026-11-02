@@ -34,11 +34,11 @@ make all
 The CI matrix (see `.github/workflows/`) must also pass:
 
 - Tier 1 `push-validate` — ruff, format, mypy, gitleaks on every push;
-- Tier 2 `pr-test` — Python 3.12 and 3.13, `core` and `all` extras;
+- Tier 2 `pr-test-fastapi-blog` — Python 3.12.16 and 3.13.18, `core` and `all` extras;
 - Tier 2 `pr-scan-security` — bandit (SAST), pip-audit (SCA) on the locked
   runtime set, CodeQL, and the package build;
-- Tier 2 `pr-test-integration` — Compose smoke against the running
-  container and its health probes.
+- Tier 2 `pr-test-api` — Compose model validation, Trivy OS scan and an
+  API/contract smoke against the running container and its health probes.
 
 Before publishing, verify the source distribution and wheel contain the
 expected package templates and translations, install the wheel in a clean
@@ -73,7 +73,7 @@ Release verification performed locally on top of the test gate:
   check, no API key needed).
 - Health probes: six new tests cover the draft-06 format, the HTTP status
   semantics (`pass` → 2xx, `fail` → 503) and the opt-in flag; the Compose
-  stack validates end to end in CI (`pr-test-integration`).
+  stack validates end to end in CI (`pr-test-api`).
 - `python -m build` — `fastapi_blog-0.9.0` sdist and wheel build cleanly;
   both contain the admin/public templates.
 - Clean-environment smoke (wheel installed into a fresh venv with the locked
