@@ -2,7 +2,7 @@
 
 ## 📋 Prerequisites
 
-- **Python 3.12+** (tested with Python 3.13.7)
+- **Python 3.12+** (CI tests Python 3.12–3.15)
 - **[uv](https://docs.astral.sh/uv/)** (recommended) or pip + venv
 - **Git**
 
@@ -25,7 +25,7 @@ Then open:
 - **Blog**: http://localhost:8000/blog
 - **API Docs**: http://localhost:8000/docs
 
-**Default Login**: `admin` / `Admin123!`
+**Demo-only login**: `admin` / `Admin123!` (enabled explicitly with `insecure_dev=True`).
 
 ---
 
@@ -145,7 +145,7 @@ cd fastapi-blog
 
 # Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install in development mode
 pip install -e ".[dev,admin]"
@@ -183,12 +183,16 @@ DATABASE_URL=sqlite+aiosqlite:///./data/app.db
 ### Installation
 
 ```bash
-pip install fastapi-blog
+pip install "fastapi-blog[admin]"
 ```
+
+Set `FASTAPI_BLOG_ADMIN_PASSWORD` and `SECRET_KEY` in the environment before running the examples. The secret must be strong and at least 32 characters long.
 
 ### Minimal Example
 
 ```python
+import os
+
 from fastapi import FastAPI
 import fastapi_blog
 
@@ -201,8 +205,8 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='change-me',
-  secret_key='your-secret-key',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
@@ -216,6 +220,8 @@ That's it! Now you have:
 If you need programmatic access to manage posts:
 
 ```python
+import os
+
 from fastapi import FastAPI
 import fastapi_blog
 
@@ -233,8 +239,8 @@ fastapi_blog.add_blog_to_fastapi(
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='change-me',
-  secret_key='your-secret-key',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
@@ -316,7 +322,7 @@ Restart the server and visit:
 
 ### Default Credentials
 
-The quickstart examples use default credentials:
+The quickstart demo explicitly enables development credentials:
 - **Username**: `admin`
 - **Password**: `Admin123!`
 
@@ -325,17 +331,19 @@ The quickstart examples use default credentials:
 ### Custom Authentication
 
 ```python
+import os
+
 from fastapi import FastAPI
 import fastapi_blog
 
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
-    app,
-    admin_username="your_username",
-    admin_password="your_secure_password",
-    secret_key="your-random-secret-key",
-    database_url="sqlite:///./blog.db",  # or PostgreSQL
+  app,
+  admin_username='admin',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
+  database_url='sqlite+aiosqlite:///./blog.db',
 )
 ```
 
@@ -349,8 +357,8 @@ Enable role-based access control (RBAC):
 fastapi_blog.add_admin_to_app(
   app,
   admin_username='admin',
-  admin_password='secure_password',
-  secret_key='your-secret-key',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
   enable_role_management=True,  # ← Enable RBAC
 )
 ```
@@ -370,9 +378,11 @@ Enable multi-language support:
 ```python
 fastapi_blog.add_admin_to_app(
   app,
-  i18n_enabled=True,
-  i18n_default_locale='ru',  # Default language
-  i18n_locales=['en', 'ru'],  # Available languages
+  admin_username='admin',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
+  default_locale='ru',
+  locales=['en', 'ru'],
 )
 ```
 
@@ -415,9 +425,9 @@ Supported out-of-the-box:
 For more detailed documentation, see:
 
 - **Database Guide**: [docs/DATABASE.md](docs/DATABASE.md) - Complete database architecture
-- **Russian Guide**: [docs/QUICKSTART.md](docs/QUICKSTART.md)
-- **Architecture**: [ARCHITECTURE_CONSOLIDATION_PLAN.md](ARCHITECTURE_CONSOLIDATION_PLAN.md)
-- **Progress**: [docs/ARCHITECTURE_CONSOLIDATION_PROGRESS.md](docs/ARCHITECTURE_CONSOLIDATION_PROGRESS.md)
+- **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Frontmatter schema**: [docs/FRONTMATTER_SCHEMA.md](docs/FRONTMATTER_SCHEMA.md)
+- **Release checklist**: [docs/RELEASE_CHECKLIST_0.9.0.md](docs/RELEASE_CHECKLIST_0.9.0.md)
 - **Examples**: [tests/examples/](tests/examples/)
 
 ---

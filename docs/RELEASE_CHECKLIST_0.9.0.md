@@ -24,19 +24,19 @@ verification below has passed on the release candidate.
 ## Required release verification
 
 Run from the repository root using the locked dependency set and supported
-Python versions (3.12 and 3.13):
+Python versions (3.12 through 3.15):
 
 ```bash
 uv sync --locked --extra dev --extra admin --extra jsonld
 make all
 ```
 
-The GitHub workflows have not yet had a run on this branch. A push starts the Tier 1 validation workflow; a pull request targeting `main` starts the Tier 2 test, API/Compose and security workflows. The CI matrix (see `.github/workflows/`) must pass before release:
+GitHub workflows have run successfully on the latest merged PR. A push starts the Tier 1 validation workflow; a pull request targeting `main` starts the Tier 2 test, API/Compose and security workflows. The CI matrix (see `.github/workflows/`) must pass before release:
 
 - Tier 1 `push-validate` — ruff, format, mypy, gitleaks on every push;
-- Tier 2 `pr-test-fastapi-blog` — Python 3.12.16 and 3.13.18, `core` and `all` extras;
+- Tier 2 `pr-test-fastapi-blog` — Python 3.12–3.15, `core` and `all` extras;
 - Tier 2 `pr-scan-security` — bandit (SAST), pip-audit (SCA) on the locked
-  runtime set, CodeQL, and the package build;
+  runtime set, conditional CodeQL, and the package build;
 - Tier 2 `pr-test-api` — Compose model validation, Trivy OS scan and an
   API/contract smoke against the running container and its health probes.
 
@@ -44,10 +44,11 @@ Trivy is configured with `severity: CRITICAL,HIGH`, `ignore-unfixed: true`
 and `exit-code: 1`. The first run may therefore fail deliberately when the
 base image contains a HIGH/CRITICAL OS vulnerability with an available fix.
 Treat that as a security finding to investigate and resolve or document; do
-not change the exit code or severity threshold merely to make CI green. Trivy
-has not been run locally in this handoff environment.
+not change the exit code or severity threshold merely to make CI green. The
+latest pull request passed the Trivy gate in GitHub Actions.
 
-Configure branch protection for `main` manually in GitHub Settings. Require
+If branch protection is available for the repository plan, configure it for
+`main` in GitHub Settings. Require
 the four stable aggregate checks listed in
 [`.github/workflows/README.md`](../.github/workflows/README.md):
 `Validate PR / validate-required`, `Test fastapi-blog / tests-passed`,
@@ -72,8 +73,8 @@ invocations the Makefile performs through `uv run`): **769 passed,
 2 skipped**, Ruff and mypy clean. Note for maintainers: `make all` relies on
 `uv run`, which requires the exact interpreter pinned in `.python-version`
 (3.12.16); where that patch version is unavailable, run the same commands
-from the project's `.venv` directly. The GitHub matrix remains pending its
-first push/PR run.
+from the project's `.venv` directly. The GitHub matrix subsequently passed
+on the Python 3.12–3.15 PR.
 
 Release verification performed locally on top of the test gate:
 
@@ -106,14 +107,14 @@ Release verification performed locally on top of the test gate:
   with an explicit password and strong secret it mounts the `en`/`ru`
   panels.
 
-What remains before publishing: push the branch and open/update a PR to `main`
-so every workflow gets its first run; resolve any Trivy findings; configure
-branch protection; install the final wheel in a clean environment and run
-core/admin smoke tests; update the Compose image tag for the release; set the
-changelog release date; build final artifacts from the tagged commit; and
-publish.
+What remains before publishing: verify branch protection availability, install
+the wheel built from the final tagged commit in a clean environment and run
+core/admin smoke tests, confirm the Compose image tag, set the changelog
+release date, build final artifacts from the tagged commit, and publish. The
+latest container CI and image publication passed; CodeQL is skipped by default
+for private repositories unless explicitly enabled.
 
-**Release status: local test gate and Compose smoke verified; GitHub CI,
-branch protection and final-wheel smoke are pending.** Keep `CHANGELOG.md` at
+**Release status: GitHub CI and container publication passed. Branch protection
+availability and final tagged-wheel smoke remain to be resolved.** Keep `CHANGELOG.md` at
 `[0.9.0] - Unreleased` until the CI matrix and manual release gates above
 are green.
