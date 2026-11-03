@@ -1,6 +1,6 @@
 # Build a minimal runtime environment from the committed uv lockfile.
 FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
-FROM python:3.12.16-slim-bookworm AS builder
+FROM python:3.15.0-slim-bookworm AS builder
 
 COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
@@ -10,7 +10,7 @@ COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
 # Keep the runtime image free of compilers, uv and development dependencies.
-FROM python:3.12.16-slim-bookworm AS runtime
+FROM python:3.15.0-slim-bookworm AS runtime
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
