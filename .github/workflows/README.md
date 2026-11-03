@@ -9,7 +9,7 @@ there is one Python validation/test scope rather than a service matrix.
 |---|---|---|---|
 | 1 | `push-validate.yaml` | Every push | Lock consistency, Ruff format/lint, mypy and Gitleaks |
 | 1 | `pr-validate.yaml` | PR to `main` | Same fast validation on the PR merge ref |
-| 2 | `pr-test-fastapi-blog.yaml` | PR to `main` | Full package pytest suite, coverage, Python 3.12/3.13 × core/all extras |
+| 2 | `pr-test-fastapi-blog.yaml` | PR to `main` | Full package pytest suite, coverage, Python 3.12–3.15 × core/all extras |
 | 2 | `pr-test-api.yaml` | PR to `main` | Compose model validation, container build, Trivy OS scan, API/Contract smoke |
 | 2 | `pr-scan-security.yaml` | PR to `main` | Bandit SAST, pip-audit SCA, conditional CodeQL and package build |
 | Publish | `push-publish-docker.yaml` | Push to `main` or `v*.*.*` tag | Build, attest and publish the image to GHCR |
