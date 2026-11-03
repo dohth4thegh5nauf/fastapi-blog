@@ -11,7 +11,7 @@ there is one Python validation/test scope rather than a service matrix.
 | 1 | `pr-validate.yaml` | PR to `main` | Same fast validation on the PR merge ref |
 | 2 | `pr-test-fastapi-blog.yaml` | PR to `main` | Full package pytest suite, coverage, Python 3.12/3.13 × core/all extras |
 | 2 | `pr-test-api.yaml` | PR to `main` | Compose model validation, container build, Trivy OS scan, API/Contract smoke |
-| 2 | `pr-scan-security.yaml` | PR to `main` | Bandit SAST, pip-audit SCA, CodeQL and package build |
+| 2 | `pr-scan-security.yaml` | PR to `main` | Bandit SAST, pip-audit SCA, conditional CodeQL and package build |
 | Publish | `push-publish-docker.yaml` | Push to `main` or `v*.*.*` tag | Build, attest and publish the image to GHCR |
 
 The Compose workflow owns pull-request container builds. The publish workflow
@@ -52,9 +52,13 @@ stable job checks:
 - `API Contract / api-smoke`
 - `Security / security-passed`
 
-The aggregate jobs fail if any reusable-workflow, matrix or security leg
-fails, while avoiding nested/matrix-generated required-check names that change
-when implementation details change.
+The aggregate jobs fail if any required reusable-workflow, matrix or security
+leg fails. CodeQL runs for public repositories; private repositories skip it
+by default. After enabling GitHub code scanning, set the repository Actions
+variable `CODEQL_ENABLED` to `true` to require CodeQL in a private repository.
+The Security job summary reports whether CodeQL ran or was skipped. An
+unexpected skip or failure still fails the aggregate check. Bandit, pip-audit
+and the package build remain required in both cases.
 `Validate / validate` is the Tier 1 push signal; `Validate PR / validate-required`
 is the fast required PR check and complements the full Tier 2 checks.
 
