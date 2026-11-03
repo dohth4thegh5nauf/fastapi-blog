@@ -60,25 +60,26 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
+      - name: Build and push candidate image
+        id: candidate
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Containerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: true
           sbom: true
 
-      - name: Smoke test the published image
+      - name: Smoke test the candidate image
         env:
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.candidate.outputs.digest }}
         run: |
-          image="$(printf '%s\n' "$IMAGE_TAGS" | head -n 1)"
+          image="$REGISTRY/$IMAGE_NAME@$IMAGE_DIGEST"
           docker run --rm -d -p 8000:8000 --name fastapi-blog-test "$image"
           cleanup() {
             docker rm -f fastapi-blog-test >/dev/null 2>&1 || true
@@ -97,3 +98,17 @@ jobs:
           curl -fsS http://localhost:8000/api/v1/health/live
           curl -fsS http://localhost:8000/api/v1/health
           curl -fsS http://localhost:8000/blog/ >/dev/null
+
+      - name: Promote the verified image
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.candidate.outputs.digest }}
+        run: |
+          tags=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              tags+=(--tag "$tag")
+            fi
+          done <<< "$IMAGE_TAGS"
+          test "${#tags[@]}" -gt 0
+          docker buildx imagetools create "${tags[@]}" "$REGISTRY/$IMAGE_NAME@$IMAGE_DIGEST"

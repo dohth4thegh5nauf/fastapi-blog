@@ -9,13 +9,15 @@ there is one Python validation/test scope rather than a service matrix.
 |---|---|---|---|
 | 1 | `push-validate.yaml` | Every push | Lock consistency, Ruff format/lint, mypy and Gitleaks |
 | 1 | `pr-validate.yaml` | PR to `main` | Same fast validation on the PR merge ref |
-| 2 | `pr-test-fastapi-blog.yaml` | PR to `main` | Full package pytest suite, coverage, Python 3.12–3.15 × core/all extras |
-| 2 | `pr-test-api.yaml` | PR to `main` | Compose model validation, container build, Trivy OS scan, API/Contract smoke |
-| 2 | `pr-scan-security.yaml` | PR to `main` | Bandit SAST, pip-audit SCA, conditional CodeQL and package build |
+| 2 | `pr-test-fastapi-blog.yaml` | Push to `main`/`develop`, PR to `main` | Full package pytest suite, coverage, Python 3.12–3.15 × core/all extras |
+| 2 | `pr-test-api.yaml` | PR to `main` | Multi-architecture build, Compose validation, Trivy OS scan and API smoke |
+| 2 | `pr-scan-security.yaml` | Push to `main`/`develop`, PR to `main` | Bandit SAST, pip-audit SCA, conditional CodeQL and package build |
 | Publish | `push-publish-docker.yaml` | Push to `main` or `v*.*.*` tag | Build, attest and publish the image to GHCR |
 
-The Compose workflow owns pull-request container builds. The publish workflow
-therefore does not build a second copy of the same image on PRs.
+The API workflow builds both supported architectures for pull requests and
+uses Compose for the native-architecture scan and smoke test. A push to a
+branch with an open PR runs both the branch and PR checks; this ensures both
+the branch commit and the PR merge result are tested.
 
 ## Reuse and security
 
@@ -38,7 +40,12 @@ therefore does not build a second copy of the same image on PRs.
   workaround would violate the least-privilege direction of this design.
 - Docker publishing alone receives `packages: write`; pull-request workflows
   do not receive registry write permissions. Multi-architecture builds use
-  QEMU and pinned `binfmt`/BuildKit images.
+  QEMU and pinned `binfmt`/BuildKit images. Publishing first pushes a unique
+  candidate tag, smoke-tests its digest, then promotes that digest to the
+  public-facing tags. Candidate tags remain in the registry for cleanup.
+- Bandit fails for findings of any severity unless an explicit `nosec`
+  annotation applies. Coverage is uploaded per Python version for the
+  all-extras matrix; an upload failure does not fail the test job.
 - Concurrency cancels obsolete Tier 1/2 runs. Publishing is not cancelled
   mid-flight.
 
