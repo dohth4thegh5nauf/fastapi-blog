@@ -40,11 +40,7 @@ def test_bom_is_skipped_before_the_opening_marker():
 
 def test_unquoted_iso_dates_and_timestamps_keep_yaml_native_types():
   fm, _ = store.parse_document(
-    '---\n'
-    'date_only: 2024-02-01\n'
-    'date_time: 2024-02-01T09:15:00\n'
-    '---\n'
-    'Body\n'
+    '---\ndate_only: 2024-02-01\ndate_time: 2024-02-01T09:15:00\n---\nBody\n'
   )
   assert fm == {
     'date_only': datetime.date(2024, 2, 1),

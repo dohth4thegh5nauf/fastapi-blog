@@ -67,9 +67,7 @@ def test_home_and_markdown_pages_dont_double_wrap_the_container():
   `{% block content %}` already sits inside the layout's `.container-xl`
   (see `@starlette-admin/templates/layout.html`'s `.page-body`), so doing
   it again double-nests the gutter padding and ends up a different width
-  than the built-in Role/User pages, which don't add one. `markdown_edit.
-  html` still nests a `container-fluid` *inside* its card header for
-  internal spacing — that one is fine, it isn't a second top-level wrapper.
+  than the built-in Role/User pages, which don't add one.
   """
   for name in ('home.html', 'markdown_list.html'):
     content = _read(name)
@@ -77,8 +75,8 @@ def test_home_and_markdown_pages_dont_double_wrap_the_container():
     assert 'container-xl' not in content, name
 
   edit_content = _read('markdown_edit.html')
-  # Exactly one container-fluid: the card-header's internal one.
-  assert edit_content.count('container-fluid') == 1
+  assert 'container-fluid' not in edit_content
+  assert 'container-xl' not in edit_content
 
 
 def test_home_page_header_matches_the_plain_h1_pattern():
