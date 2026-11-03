@@ -9,6 +9,7 @@ from fastapi_blog.jsonld import (
   JsonLdError,
   collection_to_jsonld,
   document_to_jsonld,
+  pyld_available,
   resolve_context,
 )
 from fastapi_blog.jsonld import (
@@ -373,6 +374,7 @@ def test_resolve_context_refuses_a_url_not_in_the_allowlist(tmp_path):
     resolve_context(schema, project_root=tmp_path)
 
 
+@pytest.mark.skipif(not pyld_available(), reason='Requires the jsonld extra')
 def test_resolve_context_fetches_an_allowed_url(monkeypatch, tmp_path):
   """An allow-listed URL is fetched through a size-limited opener."""
 
@@ -414,6 +416,7 @@ def test_resolve_context_fetches_an_allowed_url(monkeypatch, tmp_path):
   }
 
 
+@pytest.mark.skipif(not pyld_available(), reason='Requires the jsonld extra')
 def test_resolve_context_reports_a_url_over_the_size_limit(
   monkeypatch, tmp_path
 ):
