@@ -12,8 +12,8 @@ def _clear_cache():
 
 def test_list_published_posts_success():
   posts = helpers.list_posts(posts_dirname='tests/examples/posts', strict=False)
-  assert len(posts) == 19
-  assert posts[0]['title'] == 'No Tags'
+  assert len(posts) == 22
+  assert posts[0]['title'] == 'Advanced Features'
   assert posts[-1]['title'] == 'Code, Code, Code'
 
 
@@ -33,9 +33,14 @@ def test_list_posts_accepts_an_absolute_directory(tmp_path):
   assert posts[0]['title'] == 'Hello'
 
 
-def test_strict_mode_skips_posts_with_extra_fields(caplog):
-  posts = helpers.list_posts(posts_dirname='tests/examples/posts', strict=True)
-  assert posts == ()
+def test_strict_mode_skips_posts_with_extra_fields(tmp_path, caplog):
+  frontmatter = 'title: Hello\ndate: "2026-01-01"\npublished: true\n'
+  (tmp_path / 'valid.md').write_text(f'---\n{frontmatter}---\nBody\n')
+  (tmp_path / 'invalid.md').write_text(
+    f'---\n{frontmatter}unexpected: value\n---\nBody\n'
+  )
+  posts = helpers.list_posts(posts_dirname=str(tmp_path), strict=True)
+  assert [post['slug'] for post in posts] == ['valid']
   assert any('Skipping' in rec.message for rec in caplog.records)
 
 

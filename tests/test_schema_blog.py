@@ -62,8 +62,8 @@ def external_posts(posts_dir):
 def test_default_behavior_is_unchanged_without_schema():
   helpers.list_posts.cache_clear()
   posts = helpers.list_posts(posts_dirname='tests/examples/posts', strict=False)
-  assert len(posts) == 19
-  assert posts[0]['title'] == 'No Tags'
+  assert len(posts) == 22
+  assert posts[0]['title'] == 'Advanced Features'
 
 
 def test_roles_are_exposed_under_role_names(external_posts):

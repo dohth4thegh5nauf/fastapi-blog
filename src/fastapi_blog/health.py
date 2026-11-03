@@ -72,13 +72,13 @@ _BASE_HEALTH_SCHEMA: dict[str, Any] = {
 
 def _documented_responses(
   schema: dict[str, Any], *, include_failure: bool
-) -> dict[int, dict[str, Any]]:
+) -> dict[int | str, dict[str, Any]]:
   """Describe the custom health media type without advertising JSON instead."""
   success = {
     'description': 'Health report',
     'content': {'application/health+json': {'schema': schema}},
   }
-  responses = {200: success}
+  responses: dict[int | str, dict[str, Any]] = {200: success}
   if include_failure:
     responses[503] = {
       'description': 'A critical health check failed',
