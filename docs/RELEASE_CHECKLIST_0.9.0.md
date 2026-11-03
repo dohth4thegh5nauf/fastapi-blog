@@ -122,5 +122,5 @@ Release verification performed locally on top of the test gate:
   through the release repository's approved channels.
 
 The development repository's GitHub CI and container publication passed.
-Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the destination's final
+Keep the 0.9.0 changes under `[Unreleased]` until the destination's final
 release candidate is verified and ready for publication.

@@ -2,9 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.9.0] - Unreleased
+## [Unreleased]
+
+Changes planned for version 0.9.0.
 
 ### Added
 
@@ -62,9 +64,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   personal branding from the default public templates.
 - Preserve Markdown bodies containing `---`, prevent slug path escapes and
   retain unknown frontmatter keys when rewriting schemas that allow them.
-- Require configured admin credentials and a strong session secret by default;
-  development credentials require explicit `insecure_dev=True`. Cookie-based
-  API writes validate the request origin, and admin forms use CSRF protection.
 - Corrected tests and health response type annotations after the date and
   OpenAPI changes. Temporary project files are excluded from mypy collection.
 
@@ -76,7 +75,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Removed unused Redis and PyJWT dependencies and superseded CI workflows.
 
-### Detailed 0.9.0 development history
+### Security
+
+- Require configured admin credentials and a strong session secret by default;
+  development credentials require explicit `insecure_dev=True`. Cookie-based
+  API writes validate the request origin, and admin forms use CSRF protection.
+
+<details>
+<summary>Detailed 0.9.0 development history</summary>
 
 The following entries preserve the project’s development notes. Their
 order is approximate and does not replace the Git history. Intermediate
@@ -142,7 +148,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   all three endpoints are documented in OpenAPI with the custom media type,
   and the probes stay public. The only critical dependency is the readability
   of the content directories — the package has no mandatory external
-  services by design (TODO П1). Project specification:
+  services by design. Project specification:
   `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`.
 
 #### Compose stack and container health checks
@@ -232,7 +238,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   (frontmatter requires `date`) and with the service contract (blocking
   validators must be configured for `run_blocking` to run).
 
-#### Admin document service, schema-driven forms and safe preview (TODO phase E, 7.6–7.7)
+#### Admin document service, schema-driven forms and safe preview
 
 - Markdown admin writes now call `DocumentService` directly instead of making
   a loopback request to `/api/posts/save`; the REST API is optional. The service
@@ -254,8 +260,8 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 #### Review fixes for the security/SEO/object-types batch
 
 - `OriginCheckMiddleware` is no longer installed for the admin panel paths:
-  starlette-admin 1.0 already protects its own forms with CSRF tokens (TODO
-  7.4 says not to duplicate them), and the guard rejected legitimate
+  starlette-admin 1.0 already protects its own forms with CSRF tokens, and
+  the guard rejected legitimate
   cookie-carrying requests without an `Origin` header (e.g. its own login).
   The middleware now protects the REST API only.
 - `_AuthorizedModelView.is_action_allowed` and the role views' override are
@@ -269,7 +275,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   against their role, and a custom `authorize=` replaces the policy
   wholesale.
 - SEO findings of `check` are produced only for schemas with an `seo`
-  section; schemas without one stay clean (TODO 5.9.0, П6).
+  section; schemas without one stay clean.
 - `object`/`list[object]` fields reject nesting deeper than three levels
   (the depth check was off by one and allowed four).
 - Added the missing `Mock` import and aligned the admin/editor/role tests
@@ -277,7 +283,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   permission-aware view rendering, real `Request` objects instead of
   `Mock(spec=Request)`, which cannot emulate sessions).
 
-#### Security and authorization (TODO phase E, 7.1–7.4)
+#### Security and authorization
 
 - Added a shared `authorize(request, resource, action)` policy for REST API
   routes, Markdown admin views and Starlette Admin model views. The default
@@ -293,7 +299,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   `Host`, including REST endpoints; requests with missing or invalid origins
   fail closed. Starlette Admin's built-in CSRF protection remains enabled.
 
-#### SEO integrity checks and admin form grouping (TODO 5.9.7–5.9.8)
+#### SEO integrity checks and admin form grouping
 
 - Added configurable `seo.check` levels and thresholds for title/description
   lengths, missing descriptions/images, duplicate titles/descriptions and
@@ -305,7 +311,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   live character counters using `seo.check.title_max` and
   `seo.check.description_max`.
 
-#### Nested frontmatter types (TODO 5.1.2)
+#### Nested frontmatter types
 
 - Added recursive `object` and `list[object]` schema fields with aliases,
   validation, serialization and nested read-only protection (maximum depth 3).
@@ -314,22 +320,22 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   roles and alias collisions.
 
 
-#### Review fixes: collection flags, rollback and docs (TODO 4.6/6.3/6.4)
+#### Review fixes: collection flags, rollback and docs
 
 - The project file accepts `create: false` and `delete: false` per
-  collection (TODO 4.6); they reach `store.Collection` through
+  collection; they reach `store.Collection` through
   `CollectionSpec`, so the storage layer, the REST API and the admin panel
   enforce them together. The REST API maps the refusal to HTTP 403 instead
   of an unhandled 500.
 - Rolling back a just-created document no longer goes through the
   user-facing delete: a collection with `delete: false` combined with a
   blocking validator now returns HTTP 422 with the file removed, instead of
-  crashing on the delete refusal (TODO 6.3).
+  crashing on the delete refusal.
 - `docs/PROJECT_FILE.md` documented the landed `slug`/`slug_template`/
   `unique`/`summary`/`check` options and the `create`/`delete` flags; the
   stale note promising them "when they land" is removed.
 
-#### Collection change notifications (TODO 6.5)
+#### Collection change notifications
 
 - Added immutable `store.ChangeEvent` records with `kind`, `collection`,
   `slug`, `etag` and optional `user` fields.
@@ -344,7 +350,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 - Added tests for event ordering, etags, actor propagation and hook failures.
 
 
-#### Template language, slug generation and uniqueness (TODO 6.4, complete)
+#### Template language, slug generation and uniqueness
 
 - Added a shared, non-evaluating template language for `slug_template`,
   `jsonld.id_template`, `summary`, and validator arguments: fields,
@@ -383,7 +389,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   even when a collection has no separate schema file.
 
 
-#### Link and media integrity checks (TODO 6.1)
+#### Link and media integrity checks
 
 - Added per-collection `check.links` and `check.files` levels (`off`, `warn`,
   `error`; default `off`) to `fastapi_blog.yaml`.
@@ -401,7 +407,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 - Added tests for local/cross-collection links, custom values, filters,
   external IRIs, media path mapping, missing files and traversal attempts.
 
-#### External validators and checked writes (TODO 6.2, 6.3)
+#### External validators and checked writes
 
 - New `validators.py`: a validator runs a command without a shell (argument
   list, whitelisted environment, capped output, timeout) and maps its exit
@@ -418,9 +424,9 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   findings. New `validators=` parameter of `get_api_router()` and
   `add_blog_to_fastapi()` (the admin panel saves through the API, so it is
   covered too); `add_blog_to_fastapi()` now also forwards
-  `require_if_match` (TODO 4.7)
+  `require_if_match`
 
-#### Project file and the `check` command (TODO 6.1, first slice of phase D)
+#### Project file and the `check` command
 
 - New project file `fastapi_blog.yaml` names the collections for the CLI:
   `collections.<name>.dir/schema/slug_pattern/extension`, with the
@@ -431,15 +437,15 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   as overrides)
 - New `python -m fastapi_blog check [--collection NAME] [--json]
   [--fail-on error|warning]`: every document is parsed, validated against
-  the schema and checked for JSON-LD context coverage (TODO 5.6); exit
+  the schema and checked for JSON-LD context coverage; exit
   codes `0` clean, `1` findings, `2` nothing found but something couldn't
   be checked, `64` usage/configuration. A finding always wins over
-  `undefined`, and `undefined` is never reported as clean (П4)
+  `undefined`, and `undefined` is never reported as clean
 - New `issues.py` (`Issue`, levels `error`/`warning`/`undefined`) and
   `checks.py` (`Report`, `check_collection`, `exit_code`): deterministically
   sorted reports, modeled on the reference branch's three-level findings
 
-#### Security: `passlib` replaced by direct `bcrypt` (TODO 7.5, early patch)
+#### Security: `passlib` replaced by direct `bcrypt`
 
 - The unmaintained `passlib` dependency is gone: `admin/passwords.py`
   hashes and verifies with `bcrypt` directly (`PasswordHasher`), and the
@@ -448,7 +454,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   hashes; `verify()` answers `False` for malformed hashes and passwords
   over 72 bytes instead of raising
 
-#### SEO metadata resolution and page head (TODO 5.9.3–5.9.4, partial)
+#### SEO metadata resolution and page head
 
 - Added `seo.build_head()` for role-based title, description, canonical URL,
   social image, modified date, author, robots and language fallbacks.
@@ -466,13 +472,13 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 - `seo.noindex_tags` now adds `noindex` to the robots directives of tag
   pages (the setting was only read by the sitemap before).
 - A document whose `canonical` points to another address no longer gets
-  `hreflang` alternates (TODO 5.9.4).
+  `hreflang` alternates.
 - `index_description` is used for the index and listing pages only, not for
   static pages.
-- Every row of the TODO 5.9.3 substitution table now has a test
+- Every metadata substitution case now has a test
   (`tests/test_seo_resolution.py`).
 
-#### Sitemap, robots.txt and permanent redirects (TODO 5.9.5)
+#### Sitemap, robots.txt and permanent redirects
 
 - Added opt-in `seo_routes=True` (`add_blog_to_fastapi`, `setup_fastapi_blog`):
   deterministic `GET /sitemap.xml` and `GET /robots.txt`, `seo.disallow`
@@ -500,13 +506,12 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   `/ru/blog/posts/current`). A document canonical elsewhere keeps that
   foreign target for every locale. The live-address and reserved-path
   protection covers the localized addresses too, so an alias still can't
-  loop or hide a localized page. Conflict diagnostics live in `check`
-  (TODO 5.9.7).
+  loop or hide a localized page. Conflict diagnostics live in `check`.
 
 
-#### Site-wide SEO settings: `SeoConfig` and the `seo:` section (TODO 5.9.2)
+#### Site-wide SEO settings: `SeoConfig` and the `seo:` section
 
-- `SeoConfig` (`fastapi_blog.models`) holds the settings from TODO 5.9.2:
+- `SeoConfig` (`fastapi_blog.models`) holds these settings:
   `site_url`, `site_name`, `title_template`, `default_image`,
   `default_author`, `default_robots`, `index_description`, `og`,
   `twitter_card`, `structured_data`, `description_fallback`,
@@ -517,8 +522,8 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 - The argument is stronger than the section and replaces it as a whole (no
   key-by-key merge); `seo.resolve_seo_config(seo, schema)` is the one place
   that decides. `seo: {}` is a section with all defaults, so the SEO output
-  of TODO 5.9.4 will switch on for it; without a section and an argument
-  nothing changes (П6)
+  for that section will switch on; without a section and an argument
+  nothing changes
 - Every value is checked when the schema is loaded, and the error names the
   key (`` `seo.twitter_card` must be … ``): `site_url` must be an `http(s)`
   URL without a query or fragment (a trailing `/` is dropped, so absolute
@@ -527,7 +532,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   paths are refused); `default_robots` must be a list of the four known
   directives; `title_template` may only use `{title}` and `{site_name}`
   (no positional, attribute, index, conversion or format-spec forms, which
-  `str.format` would otherwise let through until TODO 6.4's language
+  `str.format` would otherwise let through until the shared template language
   exists). Unknown keys and a non-mapping section are errors too
 - Fixed: the routers of the non-default locales were built without `seo=`,
   so `/ru/blog/...` lost the `site_name` that `/blog/...` had
@@ -535,8 +540,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   `published_values` (a schema with a `status` role couldn't even be
   copied; `LOOSE_DEFAULT_SCHEMA` was unaffected only because it has none)
 - Still no visible effect beyond `site_name` in the page header: the
-  substitution order (5.9.3) and the `<head>` output (5.9.4) consume these
-  settings next
+  substitution order and `<head>` output were added in subsequent work.
 
 #### Housekeeping: test invocation, stale references, invariance wiring
 
@@ -567,7 +571,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   (`ValueError`, `FileNotFoundError`, `PermissionError`), so every existing
   `except` clause keeps working unchanged
 
-#### JSON-LD contexts: local files, allow-listed URLs, limits (TODO 5.5)
+#### JSON-LD contexts: local files, allow-listed URLs, limits
 
 - `jsonld.context` accepts a path to a file inside the project root (YAML
   or JSON; a whole document's `@context` is extracted) or an allow-listed
@@ -586,7 +590,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   it as `context=`; `uncovered_keys(schema, project_root=...)` resolves a
   local context before checking for lost terms
 
-#### Frontmatter field types and lost-term control (TODO 5.1, 5.6)
+#### Frontmatter field types and lost-term control
 
 - New field types: `link` and `list[link]` (a string pointing at another
   resource — a slug, a compact IRI or an absolute IRI) with the target
@@ -597,8 +601,8 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
 - `fastapi_blog.jsonld.uncovered_keys(schema)` reports the schema keys an
   inline `@context` doesn't cover (a same-name term, a `prefix:` term or
   `@vocab`), `content_term` included. URL context items are skipped, not
-  loaded — loading files and remote contexts is TODO 5.5
-- `check` runs the lost-term control per collection (TODO 5.6 complete):
+  loaded — file and remote context loading was added separately
+- `check` runs the lost-term control per collection:
   the level comes from the new `jsonld.strict_context` option (`error` by
   default, `warn`, or `off` to skip the check entirely). With the `jsonld`
   extra installed the dynamic probe `jsonld.probe_lost_keys` is the ground
@@ -610,7 +614,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   that can't be loaded yields `undefined` (`context.unavailable`), an
   invalid one an `error` (`context.invalid`).
 
-#### Document storage: merge-on-rewrite, nested collections, page schema (TODO 4.5, 4.6)
+#### Document storage: merge-on-rewrite, nested collections, page schema
 
 - Rewriting a post through the REST API merges the dump over the file's
   current frontmatter instead of replacing it: known keys keep their
@@ -618,7 +622,7 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   known field emptied to `None` is dropped, and schema fields the file
   didn't have yet are appended in schema order
   (`FrontmatterSchema._merge_for_rewrite`). Admin-panel writes use the
-  schema-aware `DocumentService` (TODO phase E, 7.6).
+  schema-aware `DocumentService`.
 - `Collection(depth=N)` implements nested collections: the slug is the
   relative path without the extension (`a/b/0001-x`), each segment is
   checked against `slug_pattern`, and at most `N` segments are directories;
@@ -635,9 +639,9 @@ configuration supersede them. See `docs/RELEASE_CHECKLIST_0.9.0.md` for current 
   `extra: 'allow'`); a page that doesn't match is still served with its
   raw frontmatter
 - The public page route resolves the page slug through `safe_document_path`
-  like every other slug-to-path conversion (TODO 4.1)
+  like every other slug-to-path conversion
 
-#### SEO roles and `fastapi_blog.seo.seo_fields()` (TODO 5.9.1)
+#### SEO roles and `fastapi_blog.seo.seo_fields()`
 
 Nine new semantic roles, the same mechanism as `title`/`date`/`published`:
 `seo_title`, `canonical`, `robots`, `image`, `image_alt`, `updated`,
@@ -646,17 +650,17 @@ Nine new semantic roles, the same mechanism as `title`/`date`/`published`:
 `list[str]`). `seo.seo_fields(roles=None)` returns a ready `FieldSpec` per
 role (`label`, `hint`, `robots`'s `choices` restricted to the four
 directives search engines actually act on —
-`noindex`/`nofollow`/`noarchive`/`nosnippet`, per TODO 5.9.0's "only what
-search engines use" principle) — a schema author adds the whole set, a
+`noindex`/`nofollow`/`noarchive`/`nosnippet`) — a schema author adds the
+whole set, a
 subset (`seo_fields(('canonical', 'robots'))`), and can still rename or
 re-alias any of them.
 
 Binding these roles has no visible effect yet — nothing reads them. Not
-built: `SeoConfig`/the `seo:` schema section (5.9.2), the fallback/
-substitution order (5.9.3), and the actual `<head>`/Open Graph/Twitter/
-structured-data output (5.9.4) that would make them do something.
+built: `SeoConfig`/the `seo:` schema section, the fallback/substitution
+order, and the `<head>`/Open Graph/Twitter/structured-data output. These
+were added later.
 
-#### Fixed existing behavior: real page titles, `lang`, `description`, no fork-author branding (TODO 5.9.6, MUST)
+#### Fixed existing behavior: real page titles, `lang`, `description`, no fork-author branding
 
 `layouts/base.html`'s `<title>` fallback chain checked a top-level
 `metadata` context variable that no route ever actually set (every
@@ -673,23 +677,22 @@ own template context, and `layouts/base.html` just prints it — no more
 dead `metadata` branch.
 
 Also fixed while in the same file, as the same class of bug (hardcoded
-content that isn't universal, П3): `<html>` had no `lang` attribute at
-all (now `{{ lang|default(locale, true) }}` — ready for the `lang` role,
-TODO 5.9.1, once it exists); the role `description`'s value was parsed but
+content that is not universal): `<html>` had no `lang` attribute at
+all (now `{{ lang|default(locale, true) }}`, ready for the `lang` role);
+the role `description`'s value was parsed but
 never rendered as `<meta name="description">`; the header/footer shipped
 the original fork author's own photo (via a malformed `<image>` tag — not
 even valid HTML — pointing at a file that was never part of this
 package), name, and Mastodon/LinkedIn/Twitter links, none of which belong
 in a universal package. Replaced with `{{ site_name|default('', true) }}`
-(empty for now; wired up for TODO 5.9.2's `SeoConfig.site_name` once that
-exists) and removed the social links outright.
+(later wired up to `SeoConfig.site_name`) and removed the social links outright.
 
-Not done from TODO 5.9: the rest is SHOULD/MAY (`seo_title`/`canonical`/
+Not done at that stage: the rest is SHOULD/MAY (`seo_title`/`canonical`/
 `robots`/etc. roles, `SeoConfig`, Open Graph/Twitter/structured-data
-output, sitemap/robots.txt/redirects, `check` findings) — 5.9.6 itself,
-the one MUST item that was pure bug-fixing, is what's done here.
+output, sitemap/robots.txt/redirects and `check` findings); those were
+implemented in subsequent work.
 
-#### `schema --json-schema` and the `status` role (TODO 5.7)
+#### `schema --json-schema` and the `status` role
 
 - `python -m fastapi_blog schema --json-schema` prints the frontmatter's
   JSON Schema (`FrontmatterSchema.model().model_json_schema()`), same
@@ -711,17 +714,17 @@ the one MUST item that was pure bug-fixing, is what's done here.
   the JSON-LD routes' "published only" rule all pick it up automatically
   — no changes needed in router.py/jsonld.py themselves
 
-#### JSON-LD emission: `document_to_jsonld`/`collection_to_jsonld` (TODO 5.2-5.4, partial)
+#### JSON-LD emission: `document_to_jsonld`/`collection_to_jsonld`
 
 New `fastapi_blog.jsonld` module, built on the existing `alias` mechanism
 (a field aliased `'@id'`/`'@type'` supplies that key directly) rather than
 anything new in the schema layer itself:
 
 - `FrontmatterSchema` gained a `jsonld: JsonLdConfig | None` field (and
-  `from_dict`/`to_dict` support for a schema file's `jsonld:` section, TODO
-  5.3): `context`, `base`, `id_template` (a plain `str.format()` template
-  with `{base}`/`{collection}`/`{slug}` — not the full slug/template
-  language from TODO 6.4, not built yet), `type`, `content_term`
+  `from_dict`/`to_dict` support for a schema file's `jsonld:` section):
+  `context`, `base`, `id_template` (initially a plain `str.format()` template
+  with `{base}`/`{collection}`/`{slug}`), `type` and `content_term`. The
+  shared template language was added later.
 - `document_to_jsonld(frontmatter, *, schema, slug, collection='', content=None)`:
   projects one document — `@context` (when configured), `@id`/`@type`
   (from a field if present, else the config's template/default), then the
@@ -731,10 +734,10 @@ anything new in the schema layer itself:
 - `collection_to_jsonld(documents, *, schema, collection='', context=None)`:
   `{'@context', '@graph'}` for a whole collection, `@graph` sorted by
   `@id` then slug so two runs produce identical bytes regardless of
-  filesystem iteration order (TODO 5.4 criterion 3)
+  filesystem iteration order
 
 `add_blog_to_fastapi(jsonld_routes=True, ...)` (default `False`) now also adds
-the HTTP side of 5.4: `GET {prefix}/{slug}.jsonld` and `GET {prefix}/index.jsonld`,
+the HTTP routes: `GET {prefix}/{slug}.jsonld` and `GET {prefix}/index.jsonld`,
 `Content-Type: application/ld+json`. Both only ever serve published posts —
 `{slug}.jsonld` 404s for a draft or missing slug, `index.jsonld`'s `@graph`
 simply excludes drafts. (`{prefix}/index.jsonld` is registered before
@@ -749,19 +752,20 @@ built-in fields), `--collection` (used by the schema's `id_template`),
 `expanded`/`nquads` need the `jsonld` extra (`pyld`) and exit `64` with a
 clear message when it isn't installed; `nquads` lines are sorted (RDF
 statements have no inherent order), so two runs produce byte-identical
-output (TODO 5.4 criterion 3, same as `collection_to_jsonld` itself).
-Takes `--posts-dir`/`--schema`/`--collection` directly rather than TODO's
-literal `--collection NAME`, which presupposes a project-level registry of
+output (matching `collection_to_jsonld` determinism).
+It takes `--posts-dir`/`--schema`/`--collection` directly rather than the
+originally planned literal `--collection NAME`, which presupposes a project-level registry of
 named collections (each with its own directory and schema) that doesn't
 exist anywhere in this codebase yet — `Collection`s are built ad hoc per
 call everywhere else too.
 
-Not done: loading `context` from a local file (TODO 5.5, needs the `jsonld`
-extra), and the "lost term" check (TODO 5.6) — 5.4 itself is now done.
+At that stage, local context loading and the lost-term check were not yet
+implemented; both were added later.
 
-#### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden` (TODO 5.1, partial)
+#### Configurable frontmatter: `choices`, `pattern`, `min`/`max`, `min_items`/`max_items`, `label`/`hint`/`hidden`
 
-`FieldSpec` gained the simpler options from TODO 5.1's table (the ones that
+`FieldSpec` gained the simpler options from the original field specification
+(the ones that
 are pure validation/metadata, not a feature of their own):
 
 - `choices`: allowed values — a scalar, or `{value, label}` where `label` is
@@ -792,11 +796,11 @@ wrong type for the option, an empty `choices`, an unparsable regex, or
 `min_items`+`min_length` both set on one field all raise immediately when
 the schema is built, not when a document is later validated against it.
 
-Not done from 5.1: `type: link`/`object`/`file`/`image` (each a
+Not done at that stage: `type: link`/`object`/`file`/`image` (each a
 cross-document or nested-schema feature, substantially bigger than a
-validation option) and the `jsonld` schema section (5.2–5.7) itself.
+validation option) and the `jsonld` schema section itself. These were added later.
 
-#### Document storage: path safety wired in everywhere (TODO 4.4)
+#### Document storage: path safety wired in everywhere
 
 `store.safe_document_path` (slug pattern + resolved-path containment check)
 existed but wasn't called from any of the five places that turn a slug into
@@ -816,7 +820,7 @@ re-deriving its own slug check:
 Added `tests/test_markdown_crud.py` and traversal-slug tests in
 `test_markdown_model.py`/`test_router.py` covering all five.
 
-#### Document storage: `Collection` and `DocumentStore` (TODO 4.1, 4.6, 4.7)
+#### Document storage: `Collection` and `DocumentStore`
 
 `store.py` gained the one abstraction every caller that turns a slug into a
 file should go through:
@@ -837,7 +841,7 @@ file should go through:
   doesn't exist) on mismatch. `create=False`/`delete=False` block those
   operations (an existing document can still be rewritten). Writes are
   serialized by an in-process lock per store instance; no cross-process
-  locking, as the TODO explicitly rules out.
+  locking, as intended by the design.
 
 Migrated onto it: `admin/markdown_crud.py`'s `MarkdownFileManager`, and
 `editor.py`'s REST API (`create_post`/`update_post`/`delete_post`/
@@ -867,13 +871,13 @@ looking at two different directories. `add_admin_to_app()` and
 still falls back to `POSTS_DIR`/a cwd guess when no `posts_dirname` is
 given, but using the environment variable now raises `DeprecationWarning`.
 
-Not done: 4.6's nested collections (`depth > 0`, `{dirname}`/`{filename}`
-slug template tags — the latter also needs 6.4, not started) and the
+Not done at that stage: nested collections (`depth > 0`, `{dirname}`/`{filename}`
+slug template tags) and the
 `posts_dirname`/`pages_dirname` → two-`Collection` sugar layer. The public
 blog/REST API/admin surface still takes `posts_dirname: str` rather than a
 `Collection`.
 
-#### Document storage: `on_create` and `read_only` fields (TODO 4.5)
+#### Document storage: `on_create` and `read_only` fields
 
 `FieldSpec` gained `on_create` (`'today' | 'now' | 'uuid'`, with an optional
 `on_create_prefix` for `'uuid'`) and `read_only`. A field with `on_create`
@@ -891,13 +895,10 @@ differs from `existing`'s. The REST API (`editor.py`'s `create_post`,
 `schema.dump`, turning that `ValueError` into an HTTP 400.
 
 Not done: the admin panel's own save path (`markdown_crud.py`) doesn't go
-through `FrontmatterSchema` validation at all yet (see 4.1/4.6 — unifying
-the two `MarkdownPost` implementations on one `DocumentStore`), so these two
+through `FrontmatterSchema` validation at that stage, so these two
 options only take effect through the REST API for now. Key-order and
-unknown-key preservation on rewrite (the rest of 4.5) needs a merge-into-
-existing-dict write path rather than a full Pydantic round-trip, which is
-really 4.1's `DocumentStore` territory — deferred there rather than bolted
-on here.
+unknown-key preservation on rewrite required a merge into the existing
+frontmatter. Both were implemented in subsequent work.
 
 #### Admin UI: one theme/language switcher everywhere
 
@@ -1128,12 +1129,12 @@ Every dependency floor bumped to its current latest release: `fastapi`
   post with no date; a missing date stays `None` (the admin list/sort already
   handled `None` dates for mixed-timezone posts)
 
-##### Still open for this phase
-- No `Collection`/`DocumentStore` abstraction yet (4.1, 4.6): the four read/write
+##### Work outstanding at that stage (subsequently completed)
+- No `Collection`/`DocumentStore` abstraction yet: the four read/write
   call sites above now share parsing/writing primitives but aren't a single
   service, and `posts`/`pages` aren't yet modeled as two collections
-- No `etag`/`If-Match` concurrency on the REST API or the admin save path yet
-  (4.7); `store.compute_etag` exists but nothing calls it yet
+- No `etag`/`If-Match` concurrency on the REST API or the admin save path yet;
+  `store.compute_etag` existed but had not yet been wired in
 - `markdown_crud.MarkdownPost` already defaulted an absent date to `''` (not
   `datetime.now()`); only `admin.markdown_model.MarkdownPost` invented a date,
   and that's what this pass fixed
@@ -1187,6 +1188,8 @@ Every dependency floor bumped to its current latest release: `fastapi`
 - Blog templates updated to use translation keys via `{{ t.blog.* }}`
 
 ---
+
+</details>
 
 ## [0.8.1] - 2026-05-15
 
