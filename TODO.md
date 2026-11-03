@@ -2,9 +2,9 @@
 
 Для агента-разработчика · 2026-10-29 · база: форк pydanny/fastapi-blog, версия 0.8.0
 
-## 0. Статус выполнения и стек (обновлено 2026-11-02)
+## 0. Статус выполнения и стек (обновлено 2026-11-03)
 
-Основные реализации фаз A–E завершены. Сознательные остатки ТЗ не являются блокерами реализации и перечислены в таблице и release checklist: 7.9 (diff/history — MAY, вне объёма релиза) и Tier 3 CI (отложен до появления staging, E2E-набора или performance baseline). Для релиза 0.9.0 остаются внешние приёмочные шаги: первый запуск GitHub Actions после push/PR, ручная настройка branch protection и проверка wheel в чистом окружении со smoke core/admin extras. Локальный полный прогон на `venv` воспроизведён независимо: **769 passed, 2 skipped**, чистые Ruff/format/mypy; Docker/Compose smoke выполнен локально (подробности — в `docs/RELEASE_CHECKLIST_0.9.0.md`). Мелкий техдолг из handoff закрыт: Makefile использует `uv run --locked` для инструментов, `.containerignore` исключает `env/` и резервные venv, устаревшие числа тестов удалены, а обновление Compose image tag добавлено в release checklist. Версия остаётся `0.9.0`/Unreleased до подтверждённого CI и завершения release checklist. Разделы 1–8 — нормативное ТЗ; фактический статус указан в таблицах и пометках ниже.
+Основные реализации фаз A–E завершены. GitHub CI прошёл для Python 3.12–3.15 (core и все extras), контейнерный smoke и публикация образа также прошли. CodeQL для приватного репозитория по умолчанию пропускается; Bandit и проверка зависимостей выполняются. До выпуска остаются проверка финального wheel из релизного коммита и остальные действия из `docs/RELEASE_CHECKLIST_0.9.0.md`. Защита ветки зависит от возможностей тарифа GitHub. Diff/history и Tier 3 CI остаются вне объёма релиза.
 
 | Раздел | Статус | Сделано и осталось |
 | --- | --- | --- |
@@ -28,7 +28,7 @@
 | 6 (фаза D) | Выполнено | Проектный файл `fastapi_blog.yaml`; CLI `check` (разбор, схема, покрытие контекста, внешние проверки, ссылки и файлы; `--collection`/`--json`/`--fail-on`; коды 0/1/2/64); `export`/`schema` на том же резолве; `issues.py` + `checks.py` + `validators.py`; запись с проверкой и откатом через REST API; язык шаблонов, нумерация, проверки ссылок/файлов и `on_change` подключены к REST/admin. |
 | 7 (фаза E) | Реализация 7.1–7.8 выполнена; приёмка готова к повторному CI-прогону | Единый `authorize`, роли `admin`/`editor`/`viewer`, совместимость с role-less custom principal и асинхронными callback, безопасная конфигурация credentials/session, REST-only Origin guard плюс встроенный CSRF Starlette Admin, bcrypt, `DocumentService`, схема-форма (choices/pattern/link autocomplete/object groups), diagnostics/ETag, безопасное превью. 7.8 (общая тема и переключатель языка) уже выполнен. 7.9 diff/history — вне объёма (MAY) |
 
-**Стек (фактический).** Python не ниже 3.12 (CI: 3.12 и 3.13), зависимости зафиксированы в `pyproject.toml` и `uv.lock`, `setuptools>=84.2.1`. Ядро: `fastapi>=0.162`, `jinja2`, `jinja2-time`, `markdown>=3.11`, `nh3>=0.3`, `pydantic>=2.14`, `pyyaml`, `pymdown-extensions>=12`, `uvicorn>=0.54`. Extras: `admin` (`starlette-admin[i18n]>=1.0.3`, `sqlalchemy[asyncio]>=2.1`, `aiosqlite`, `itsdangerous`, `bcrypt>=5.0.0`, `python-multipart`), `jsonld` (`pyld>=3.3`), `dev` (`httpx`, `ruff>=0.17`, `pytest>=9`, `coverage`, `mypy>=2.4`, пакеты типов). Минимальные версии не понижать, новые зависимости в ядро не добавлять.
+**Стек (фактический).** Python не ниже 3.12 (CI: 3.12–3.15), зависимости зафиксированы в `pyproject.toml` и `uv.lock`, `setuptools>=84.2.1`. Ядро: `fastapi>=0.162`, `jinja2`, `jinja2-time`, `markdown>=3.11`, `nh3>=0.3`, `pydantic>=2.14`, `pyyaml`, `pymdown-extensions>=12`, `uvicorn>=0.54`. Extras: `admin` (`starlette-admin[i18n]>=1.0.3`, `sqlalchemy[asyncio]>=2.1`, `aiosqlite`, `itsdangerous`, `bcrypt>=5.0.0`, `python-multipart`), `jsonld` (`pyld>=3.3`), `dev` (`httpx`, `ruff>=0.17`, `pytest>=9`, `coverage`, `mypy>=2.4`, пакеты типов). Минимальные версии не понижать, новые зависимости в ядро не добавлять.
 
 ## 1. Цель и нормативные принципы
 
