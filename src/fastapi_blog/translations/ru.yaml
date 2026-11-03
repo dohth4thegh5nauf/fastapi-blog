@@ -124,3 +124,13 @@ home:
   new_post: Новый пост
   all_posts: Все посты
   users: Пользователи
+
+# Список Markdown-записей
+post_list:
+  actions: Действия
+  status: Статус
+  draft: Черновик
+  no_posts_found: Записи не найдены
+  failed_to_delete: Не удалось удалить запись
+  delete_confirm: Удалить эту запись?
+  delete_translations_confirm: Также удалить все переводы этой записи?

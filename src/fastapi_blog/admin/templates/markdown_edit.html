@@ -68,7 +68,30 @@
             <h3 class="card-title">{{ title }}</h3>
           </div>
           <div class="card-body border-bottom py-3">
-            {% if not is_new %}<input type="hidden" id="post-etag" name="etag" value="{{ post.etag }}">{% endif %}
+            {% if locale_tabs %}
+            <nav class="nav nav-tabs mb-3" aria-label="Content language">
+              {% for tab in locale_tabs %}
+              <a class="nav-link{% if tab.active %} active{% endif %}" href="{{ tab.url }}"{% if tab.active %} aria-current="page"{% endif %}>
+                {{ tab.locale }}
+                {% if tab.present %}<span class="badge bg-success-lt text-success">✓</span>{% else %}<span class="badge bg-secondary-lt text-secondary">—</span>{% endif %}
+              </a>
+              {% endfor %}
+            </nav>
+            {% if fallback_used %}
+            <div class="alert alert-info" role="status">
+              No {{ content_locale }} translation exists yet. The canonical content is shown; saving creates this translation.
+            </div>
+            {% endif %}
+            {% endif %}
+            {% if content_locale %}
+            <input type="hidden" name="content_locale" value="{{ content_locale }}">
+            {% endif %}
+            {% if not is_new %}
+            <input type="hidden" id="post-etag" name="etag" value="{{ post.etag }}">
+            {% if content_locale %}
+            <input type="hidden" name="entry_etag" value="{{ post.entry_etag }}">
+            {% endif %}
+            {% endif %}
             <div class="mb-3">
               <label class="form-label required" for="slug">{{ t.slug }}</label>
               <input type="text" class="form-control" id="slug" name="slug" value="{{ post.slug }}" {% if not (is_new and auto_slug) %}required{% endif %} {% if not is_new %}readonly{% endif %}>
@@ -146,7 +169,8 @@
             
             <div class="mb-3">
               <label class="form-label required" for="content">{{ t.content }}</label>
-              <textarea class="form-control" id="content" name="content" rows="15" required>{{ post.content }}</textarea>
+              <textarea class="form-control" id="content" name="content" rows="15" required{% if body_read_only %} readonly{% endif %}>{{ post.content }}</textarea>
+              {% if body_read_only %}<small class="form-hint">Content is shared with the default locale.</small>{% endif %}
               <small class="form-hint">{{ t.content_hint }}</small>
             </div>
           </div>
@@ -163,6 +187,15 @@
   </div>
 
 <script>
+let formDirty = false;
+document.getElementById('post-form').addEventListener('input', () => { formDirty = true; });
+document.getElementById('post-form').addEventListener('change', () => { formDirty = true; });
+window.addEventListener('beforeunload', (event) => {
+  if (formDirty) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
 const formFields = {{ form_fields_meta | tojson }};
 const saveUrl = {{ url_for(__name__ ~ ':posts:save') | tojson }};
 const previewUrl = `${saveUrl}/preview`;
@@ -251,12 +284,16 @@ document.querySelectorAll('.js-add-object-row').forEach(button => {
     }
     container.appendChild(fragment);
     wireObjectRow(row);
+    formDirty = true;
   });
 });
 
 document.addEventListener('click', event => {
   const button = event.target.closest('.js-remove-object-row');
-  if (button) button.closest('.js-object-row').remove();
+  if (button) {
+    button.closest('.js-object-row').remove();
+    formDirty = true;
+  }
 });
 
 for (const counter of document.querySelectorAll('.js-char-counter')) {
@@ -334,6 +371,8 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     frontmatter: frontmatter,
     content: formData.get('content'),
     etag: formData.get('etag'),
+    content_locale: formData.get('content_locale'),
+    entry_etag: formData.get('entry_etag'),
   };
   
   try {
@@ -349,6 +388,7 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     });
     
     if (response.ok) {
+      formDirty = false;
       window.location.href = '{{ url_for(__name__ ~ ':posts:list') }}';
     } else {
       const error = await response.json();
@@ -408,6 +448,13 @@ const easyMDE = new EasyMDE({
     'preview', 'side-by-side', 'fullscreen', '|',
     'guide'
   ],
+});
+{% if body_read_only %}
+easyMDE.codemirror.setOption('readOnly', true);
+{% endif %}
+easyMDE.codemirror.on('change', () => {
+  easyMDE.codemirror.save();
+  formDirty = true;
 });
 </script>
 {% endblock %}

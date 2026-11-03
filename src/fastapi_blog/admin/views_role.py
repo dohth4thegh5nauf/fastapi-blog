@@ -84,6 +84,7 @@ class RoleModelView(_RoleProtectedView):
     admin_username: str = 'admin',
     authorize=None,
     *args,
+    translations_dir: str | None = None,
     **kwargs,
   ):
     """Initialize with translations and admin username."""
@@ -91,7 +92,7 @@ class RoleModelView(_RoleProtectedView):
     self.locale = locale
     self.admin_username = admin_username  # Store for access checks
     self.authorize = authorize
-    self.translator = Translator(locale)
+    self.translator = Translator(locale, translations_dir)
     self.menu_label = self.translator.role.role_label
 
   # Fields to display (using Any to avoid mypy errors with starlette-admin)
@@ -167,6 +168,7 @@ class UserWithRolesModelView(_RoleProtectedView):
     admin_username: str = 'admin',
     authorize=None,
     *args,
+    translations_dir: str | None = None,
     **kwargs,
   ):
     """Initialize with translations and admin username."""
@@ -174,7 +176,7 @@ class UserWithRolesModelView(_RoleProtectedView):
     self.locale = locale
     self.admin_username = admin_username  # Store for access checks
     self.authorize = authorize
-    self.translator = Translator(locale)
+    self.translator = Translator(locale, translations_dir)
     self.menu_label = self.translator.role.user_roles_label
 
   # Fields to display (using Any to avoid mypy errors with starlette-admin)

@@ -124,3 +124,13 @@ home:
   new_post: New Post
   all_posts: All Posts
   users: Users
+
+# Markdown post list
+post_list:
+  actions: Actions
+  status: Status
+  draft: Draft
+  no_posts_found: No posts found
+  failed_to_delete: Failed to delete post
+  delete_confirm: Delete this post?
+  delete_translations_confirm: Delete all translations of this post too?

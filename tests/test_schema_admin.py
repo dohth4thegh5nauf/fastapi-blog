@@ -22,10 +22,12 @@ from fastapi_blog.admin.markdown_crud import (
   MarkdownFileManager,
   MarkdownListView,
   MarkdownPost,
+  MarkdownSaveView,
   get_posts_directory,
 )
 from fastapi_blog.admin.views import load_posts_for_home
 from fastapi_blog.config import CollectionSpec
+from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.templates import (
   SLUG_TAGS_DEFAULT,
   SUMMARY_TAGS,
@@ -36,6 +38,124 @@ from fastapi_blog.templates import (
 ADMIN_TEMPLATES = (
   pathlib.Path(fastapi_blog.__file__).parent / 'admin' / 'templates'
 )
+
+
+def test_admin_creates_translation_from_fallback_without_stale_locale_etag(
+  tmp_path,
+):
+  schema = FrontmatterSchema(fields=(FieldSpec('title', i18n='translate'),))
+  spec = CollectionSpec(
+    'posts',
+    tmp_path,
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  manager = MarkdownFileManager(str(tmp_path), collection_spec=spec)
+  result = manager.service.save_localized(
+    'entry', {'en': ({'title': 'Hello'}, 'Body')}
+  )
+  fallback = manager.load_post('entry', locale='ru')
+
+  class Request:
+    state = SimpleNamespace(blog_user={'username': 'tester', 'role': 'admin'})
+
+    async def json(self):
+      return {
+        'slug': 'entry',
+        'content_locale': 'ru',
+        'etag': fallback.etag,
+        'entry_etag': result.entry_etag,
+        'frontmatter': {'title': 'Привет'},
+        'content': 'Текст',
+      }
+
+  view = MarkdownSaveView(
+    manager, authorize=lambda request, resource, action: True
+  )
+  response = asyncio.run(view.save(Request()))
+  assert response.status_code == 200
+  assert (
+    manager.service.i18n_documents.read('entry', 'ru').body.strip() == 'Текст'
+  )
+
+
+def test_admin_reads_shared_fields_and_body_from_canonical_locale(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', i18n='translate'),
+      FieldSpec('status', i18n='none'),
+    )
+  )
+  spec = CollectionSpec(
+    'posts', tmp_path, schema=schema, i18n=I18nConfig(('en', 'ru'), 'en')
+  )
+  manager = MarkdownFileManager(str(tmp_path), collection_spec=spec)
+  manager.service.save_localized(
+    'entry',
+    {
+      'en': ({'title': 'Hello', 'status': 'old'}, 'Old'),
+      'ru': ({'title': 'Привет'}, 'Ignored'),
+    },
+  )
+  manager.service.save_localized(
+    'entry', {'en': ({'title': 'Hello', 'status': 'new'}, 'New')}
+  )
+  translated = manager.load_post('entry', locale='ru')
+  assert translated.frontmatter['status'] == 'new'
+  assert translated.content == 'New'
+
+
+@pytest.mark.parametrize('locale', ['en', 'ru'])
+def test_localized_admin_pages_render_content_and_locale_tabs(tmp_path, locale):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', i18n='translate', role='title'),)
+  )
+  spec = CollectionSpec(
+    'posts',
+    tmp_path / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  spec.dir.mkdir()
+  manager = MarkdownFileManager(str(spec.dir), collection_spec=spec)
+  manager.service.save_localized(
+    'entry', {'en': ({'title': 'Original'}, 'Body')}
+  )
+  app = FastAPI()
+  fastapi_blog.add_admin_to_app(
+    app,
+    admin_username='admin',
+    admin_password='Secret123!',
+    secret_key='x' * 64,
+    database_url=f'sqlite+aiosqlite:///{tmp_path / "admin.db"}',
+    locales=['en', 'ru'],
+    default_locale='en',
+    collection_spec=spec,
+  )
+  with TestClient(app) as client:
+    prefix = '/admin' if locale == 'en' else '/ru/admin'
+    login = client.get('/admin/login')
+    token = re.search(r'name="csrftoken" value="([^"]+)"', login.text).group(1)
+    assert (
+      client.post(
+        '/admin/login',
+        data={
+          'username': 'admin',
+          'password': 'Secret123!',
+          'csrftoken': token,
+        },
+      ).status_code
+      == 200
+    )
+    listing = client.get(f'{prefix}/posts')
+    assert listing.status_code == 200
+    assert 'Original' in listing.text
+    edit = client.get(f'{prefix}/posts/edit/entry')
+    assert edit.status_code == 200
+    assert 'content_locale' in edit.text
+    if locale == 'ru':
+      assert 'canonical content is shown' in edit.text
+
 
 EXTERNAL_SCHEMA = FrontmatterSchema(
   fields=(
@@ -752,3 +872,32 @@ def test_link_autocomplete_uses_collection_value_field_and_list_filters(
   assert manager.link_suggestions() == {
     'related': [{'value': 'ref:public', 'label': 'Public Article (public)'}]
   }
+
+
+def test_admin_form_resolves_localized_labels_hints_and_choices():
+  from fastapi_blog.admin.form_fields import build_form_fields
+  from fastapi_blog.models import FrontmatterSchema
+
+  schema = FrontmatterSchema.from_dict(
+    {
+      'fields': {
+        'title': {
+          'type': 'str',
+          'label': {'en': 'Title', 'ru': 'Заголовок'},
+          'hint': {'en': 'Short title', 'ru': 'Краткий заголовок'},
+        },
+        'status': {
+          'type': 'str',
+          'choices': [
+            {'value': 'draft', 'label': {'en': 'Draft', 'ru': 'Черновик'}}
+          ],
+        },
+      }
+    }
+  )
+  fields = build_form_fields(
+    schema, {}, {}, is_new=True, locale='ru', default_locale='en'
+  )
+  assert fields[0]['label'] == 'Заголовок'
+  assert fields[0]['hint'] == 'Краткий заголовок'
+  assert fields[1]['choices'] == [{'value': 'draft', 'label': 'Черновик'}]

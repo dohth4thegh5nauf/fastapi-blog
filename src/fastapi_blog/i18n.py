@@ -1,241 +1,202 @@
-"""Multi-locale document storage primitives.
+"""Translations for the public blog and optional admin interface."""
 
-This module is deliberately optional: collections which do not construct an
-I18nCollection continue to use :mod:`fastapi_blog.store` unchanged.
-"""
 from __future__ import annotations
 
-import hashlib
-import os
-import re
-import tempfile
-import threading
-from dataclasses import dataclass
+import logging
+from collections.abc import Mapping
+from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
-from . import store
 
-_LOCALE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
-
-
-class I18nConfigError(ValueError):
-  """Invalid multi-locale collection configuration."""
+logger = logging.getLogger('fastapi_blog.i18n')
 
 
-@dataclass(frozen=True)
-class I18nConfig:
-  locales: tuple[str, ...]
-  default_locale: str
-  structure: str = 'multiple_files'
-  omit_default_locale_suffix: bool = True
-  fallback: str = 'default'
-  translate_body: bool = False
+class TranslationSection:
+  """Expose nested translation mappings through attribute and item access."""
 
-  def __post_init__(self) -> None:
-    if not self.locales:
-      raise I18nConfigError('i18n.locales must contain at least one locale')
-    if len(set(self.locales)) != len(self.locales):
-      raise I18nConfigError('i18n.locales must be unique')
-    invalid = [locale for locale in self.locales if not _LOCALE_RE.fullmatch(locale)]
-    if invalid:
-      raise I18nConfigError(f'Invalid BCP 47-like locale(s): {invalid!r}')
-    if self.default_locale not in self.locales:
-      raise I18nConfigError('i18n.default_locale must be included in locales')
-    if self.structure not in ('multiple_files', 'multiple_folders'):
-      if self.structure == 'single_file':
-        raise I18nConfigError('i18n.structure=single_file is not supported')
-      raise I18nConfigError(f'Unknown i18n.structure: {self.structure!r}')
-    if self.fallback not in ('default', 'none'):
-      raise I18nConfigError("i18n.fallback must be 'default' or 'none'")
-    if self.structure == 'multiple_folders' and self.omit_default_locale_suffix:
-      object.__setattr__(self, 'omit_default_locale_suffix', False)
+  def __init__(self, values: Mapping[str, Any]):
+    """Store a translation mapping."""
+    self._values = dict(values)
+
+  def __getattr__(self, name: str) -> Any:
+    try:
+      value = self._values[name]
+    except KeyError as exc:
+      raise AttributeError(name) from exc
+    return TranslationSection(value) if isinstance(value, Mapping) else value
+
+  def __getitem__(self, name: str) -> Any:
+    value = self._values[name]
+    return TranslationSection(value) if isinstance(value, Mapping) else value
+
+  def get(self, name: str, default: Any = None) -> Any:
+    value = self._values.get(name, default)
+    return TranslationSection(value) if isinstance(value, Mapping) else value
+
+  def __contains__(self, name: str) -> bool:
+    return name in self._values
 
 
-@dataclass(frozen=True)
-class LocalizedDocument:
-  slug: str
-  locale: str
-  frontmatter: dict[str, Any]
-  body: str
-  etag: str
-  path: Path
+def resolve_localized(
+  value: Any, locale: str | None, default_locale: str | None = None
+) -> str | None:
+  """Resolve localized UI text using locale, default locale, then first value."""
+  if value is None:
+    return None
+  if isinstance(value, str):
+    return value
+  if not isinstance(value, Mapping) or not value:
+    return None
+  if locale and isinstance(value.get(locale), str):
+    return value[locale]
+  if default_locale and isinstance(value.get(default_locale), str):
+    return value[default_locale]
+  first = next(iter(value.values()), None)
+  return first if isinstance(first, str) else None
 
 
-@dataclass(frozen=True)
-class LocalizedEntry:
-  slug: str
-  canonical: LocalizedDocument
-  locales_present: tuple[str, ...]
-  entry_etag: str
+def _read_yaml(path: Any) -> dict[str, Any]:
+  """Read a YAML translation file, returning an empty mapping for no file."""
+  if not path.is_file():
+    return {}
+  try:
+    value = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+  except (OSError, yaml.YAMLError) as exc:
+    logger.warning('Unable to load translation file %s: %s', path, exc)
+    return {}
+  if not isinstance(value, dict):
+    logger.warning('Translation file %s must contain a mapping', path)
+    return {}
+  return value
 
 
-class I18nCollection:
-  """Filesystem store for translations sharing one canonical slug.
-
-  Multi-file layout: ``<slug>.<locale>.<ext>`` (optionally unsuffixed
-  default locale). Multi-folder layout: ``<locale>/<slug>.<ext>``.
-  All mutations are guarded by a per-instance reentrant lock.
-  """
-
-  def __init__(self, collection: store.Collection, config: I18nConfig):
-    if collection.depth:
-      raise I18nConfigError('i18n is not supported with nested collections')
-    self.collection = collection
-    self.config = config
-    self._lock = threading.RLock()
-
-  def path_for(self, slug: str, locale: str) -> Path:
-    if locale not in self.config.locales:
-      raise I18nConfigError(f'Unknown locale {locale!r}')
-    if not self.collection.slug_pattern.fullmatch(slug):
-      raise store.InvalidSlugError(f'Invalid slug: {slug!r}')
-    ext = self.collection.extensions[0]
-    if self.config.structure == 'multiple_folders':
-      path = self.collection.dir / locale / f'{slug}.{ext}'
-      return path
-    suffix = '' if locale == self.config.default_locale and self.config.omit_default_locale_suffix else f'.{locale}'
-    return self.collection.dir / f'{slug}{suffix}.{ext}'
-
-  def _all_paths(self, slug: str) -> dict[str, Path]:
-    result = {}
-    for locale in self.config.locales:
-      path = self.path_for(slug, locale)
-      if path.is_file():
-        result[locale] = path
-    return result
-
-  def list(self) -> list[LocalizedEntry]:
-    slugs: set[str] = set()
-    ext = self.collection.extensions[0]
-    if self.config.structure == 'multiple_folders':
-      for locale in self.config.locales:
-        folder = self.collection.dir / locale
-        if folder.is_dir():
-          slugs.update(p.stem for p in folder.glob(f'*.{ext}') if p.is_file())
+def _deep_merge(
+  base: Mapping[str, Any], overlay: Mapping[str, Any]
+) -> dict[str, Any]:
+  """Merge nested translation mappings without mutating either input."""
+  merged = dict(base)
+  for key, value in overlay.items():
+    previous = merged.get(key)
+    if isinstance(previous, Mapping) and isinstance(value, Mapping):
+      merged[key] = _deep_merge(previous, value)
     else:
-      if self.collection.dir.is_dir():
-        for path in self.collection.dir.glob(f'*.{ext}'):
-          stem = path.stem
-          locale = next((x for x in self.config.locales if stem.endswith('.' + x)), None)
-          slugs.add(stem[:-(len(locale) + 1)] if locale else stem)
-    entries = []
-    for slug in sorted(slugs):
-      paths = self._all_paths(slug)
-      if self.config.default_locale not in paths:
-        continue
-      canonical = self.read(slug, self.config.default_locale)
-      digest = hashlib.sha256(''.join(f'{k}:{self.read(slug,k).etag};' for k in sorted(paths)).encode()).hexdigest()
-      entries.append(LocalizedEntry(slug, canonical, tuple(sorted(paths)), digest))
-    return entries
+      merged[key] = value
+  return merged
 
-  def read(self, slug: str, locale: str, *, fallback: bool | None = None) -> LocalizedDocument:
-    path = self.path_for(slug, locale)
-    used_locale = locale
-    if not path.is_file() and (fallback if fallback is not None else self.config.fallback == 'default'):
-      used_locale = self.config.default_locale
-      path = self.path_for(slug, used_locale)
-    if not path.is_file():
-      raise store.NotFoundError(f'{slug!r} has no {locale!r} translation')
-    frontmatter, body = store.read_document(path)
-    text = path.read_text(encoding='utf-8')
-    return LocalizedDocument(slug, used_locale, frontmatter, body, store.compute_etag(text), path)
 
-  def save_entry(
-    self,
-    slug: str,
-    documents: Mapping[str, tuple[Mapping[str, Any], str]],
-    *,
-    if_match: Mapping[str, str] | str | None = None,
-    expected_entry_etag: str | None = None,
-  ) -> dict[str, str]:
-    """Atomically replace the supplied locales; restore all old bytes on error."""
-    if not documents:
-      raise ValueError('At least one locale document is required')
-    unknown = set(documents) - set(self.config.locales)
-    if unknown:
-      raise I18nConfigError(f'Unknown locale(s): {sorted(unknown)!r}')
-    with self._lock:
-      current = self._all_paths(slug)
-      if expected_entry_etag is not None:
-        current_hash = hashlib.sha256(''.join(f'{k}:{self.read(slug,k).etag};' for k in sorted(current)).encode()).hexdigest() if current else None
-        if current_hash != expected_entry_etag:
-          raise store.ConflictError('entry etag does not match', status_code=412)
-      targets: dict[str, Path] = {}
-      old: dict[Path, bytes | None] = {}
-      staged: dict[Path, Path] = {}
-      for locale, (frontmatter, body) in documents.items():
-        target = self.path_for(slug, locale)
-        targets[locale] = target
-        previous = target.read_bytes() if target.exists() else None
-        old[target] = previous
-        expected = if_match.get(locale) if isinstance(if_match, Mapping) else if_match
-        if expected is not None:
-          actual = store.compute_etag(previous.decode('utf-8')) if previous is not None else None
-          if actual != expected:
-            raise store.ConflictError(f'{locale} etag does not match', status_code=412)
-        if previous is None and not self.collection.create:
-          raise store.OperationNotAllowedError('Creating documents is disabled')
-        text = store.serialize_document(dict(frontmatter), body)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(prefix=f'.{target.name}.', suffix='.tmp', dir=target.parent)
-        tmp = Path(tmp_name)
-        with os.fdopen(fd, 'w', encoding='utf-8', newline='') as stream:
-          stream.write(text)
-          stream.flush()
-          os.fsync(stream.fileno())
-        staged[target] = tmp
-      committed: list[Path] = []
-      try:
-        for target, tmp in staged.items():
-          os.replace(tmp, target)
-          committed.append(target)
-      except OSError:
-        for target in reversed(committed):
-          previous = old[target]
-          if previous is None:
-            target.unlink(missing_ok=True)
-          else:
-            target.write_bytes(previous)
-        raise
-      finally:
-        for tmp in staged.values():
-          tmp.unlink(missing_ok=True)
-      return {locale: store.compute_etag(target.read_text(encoding='utf-8')) for locale, target in targets.items()}
+def _missing_translation_keys(
+  english: Mapping[str, Any], localized: Mapping[str, Any], prefix: str = ''
+) -> list[str]:
+  """Return deterministic English leaf paths absent from a locale file."""
+  missing: list[str] = []
+  for key, value in english.items():
+    path = f'{prefix}.{key}' if prefix else str(key)
+    translated = localized.get(key)
+    if isinstance(value, Mapping):
+      if not isinstance(translated, Mapping):
+        missing.extend(_missing_translation_keys(value, {}, path))
+      else:
+        missing.extend(_missing_translation_keys(value, translated, path))
+    elif key not in localized:
+      missing.append(path)
+  return missing
 
-  def delete_locale(self, slug: str, locale: str) -> None:
-    if locale == self.config.default_locale and any(k != locale for k in self._all_paths(slug)):
-      raise ValueError('Deleting the canonical locale requires cascade=True')
-    with self._lock:
-      path = self.path_for(slug, locale)
-      if path.exists():
-        path.unlink()
 
-  def delete_entry(self, slug: str, *, cascade: bool = False) -> None:
-    with self._lock:
-      paths = self._all_paths(slug)
-      if self.config.default_locale in paths and len(paths) > 1 and not cascade:
-        raise ValueError('Deleting the canonical entry with translations requires cascade=True')
-      for path in paths.values():
-        path.unlink(missing_ok=True)
+@lru_cache(maxsize=64)
+def _load_translations_cached(
+  locale: str, translations_dir: str | None
+) -> dict[str, Any]:
+  """Load bundled and optional project translations for one locale."""
+  base = files('fastapi_blog').joinpath('translations')
+  english = _read_yaml(base.joinpath('en.yaml'))
+  bundled = _read_yaml(base.joinpath(f'{locale}.yaml'))
+  localized = _deep_merge(bundled, {})
 
-  def rename(self, old_slug: str, new_slug: str) -> None:
-    with self._lock:
-      paths = self._all_paths(old_slug)
-      if not paths:
-        raise store.NotFoundError(old_slug)
-      destinations = {locale: self.path_for(new_slug, locale) for locale in paths}
-      if any(path.exists() for path in destinations.values()):
-        raise store.ConflictError(f'{new_slug!r} already exists', status_code=409)
-      moved: list[tuple[Path, Path]] = []
-      try:
-        for locale, source in paths.items():
-          target = destinations[locale]
-          os.replace(source, target)
-          moved.append((source, target))
-      except OSError:
-        for source, target in reversed(moved):
-          os.replace(target, source)
-        raise
+  external_path = (
+    Path(translations_dir) / f'{locale}.yaml'
+    if translations_dir is not None
+    else None
+  )
+  external_exists = external_path is not None and external_path.is_file()
+  if external_exists and external_path is not None:
+    localized = _deep_merge(localized, _read_yaml(external_path))
+
+  if locale != 'en' and external_exists:
+    missing = _missing_translation_keys(english, localized)
+    if missing:
+      logger.warning(
+        'Translation %r is missing %d key(s); using English fallback: %s',
+        locale,
+        len(missing),
+        ', '.join(missing),
+      )
+
+  return _deep_merge(english, localized)
+
+
+@lru_cache(maxsize=64)
+def load_translations(
+  locale: str, translations_dir: str | Path | None = None
+) -> dict[str, Any]:
+  """Load a locale, overlaying project YAML on bundled values and English."""
+  directory = (
+    str(Path(translations_dir).resolve()) if translations_dir else None
+  )
+  return _load_translations_cached(locale, directory)
+
+
+def get_all_locale_names(
+  translations_dir: str | Path | None = None,
+  locales: tuple[str, ...] | list[str] = (),
+) -> dict[str, str]:
+  """Return bundled, project-defined and explicitly configured locale names."""
+  base = files('fastapi_blog').joinpath('translations')
+  locale_codes = {
+    path.name.removesuffix('.yaml')
+    for path in base.iterdir()
+    if path.name.endswith('.yaml')
+  }
+  directory = Path(translations_dir) if translations_dir is not None else None
+  if directory is not None and directory.is_dir():
+    locale_codes.update(
+      path.stem for path in directory.glob('*.yaml') if path.is_file()
+    )
+  locale_codes.update(locales)
+
+  bundled_codes = {
+    path.name.removesuffix('.yaml')
+    for path in base.iterdir()
+    if path.name.endswith('.yaml')
+  }
+  names: dict[str, str] = {}
+  for locale in sorted(locale_codes):
+    has_translation = locale in bundled_codes or (
+      directory is not None and (directory / f'{locale}.yaml').is_file()
+    )
+    if not has_translation:
+      names[locale] = locale
+      continue
+    values = load_translations(locale, directory)
+    metadata = values.get('locale', {})
+    name = metadata.get('name') if isinstance(metadata, Mapping) else None
+    names[locale] = str(name or locale)
+  return names
+
+
+def get_locale_name(
+  locale: str, translations_dir: str | Path | None = None
+) -> str:
+  """Return the display name for a locale, or its code when unknown."""
+  return get_all_locale_names(translations_dir).get(locale, locale)
+
+
+class Translator(TranslationSection):
+  """Attribute-based access to translations for one interface locale."""
+
+  def __init__(self, locale: str, translations_dir: str | Path | None = None):
+    """Load translations for the requested interface locale."""
+    super().__init__(load_translations(locale, translations_dir))

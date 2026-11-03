@@ -14,8 +14,8 @@ evaluated: an unknown tag or filter is a configuration error found when the
 template is parsed (that is, when the project file is loaded).
 
 Service tags are `slug`, `title_slug`, `seq`, `year`, `month`, `day`,
-`dirname`, `filename`, `collection`, `base` and `path`; each use of a
-template allows only the tags that make sense there.
+`dirname`, `filename`, `collection`, `base`, `path` and `locale`; each use
+of a template allows only the tags that make sense there.
 """
 
 import dataclasses
@@ -39,6 +39,7 @@ SERVICE_TAGS: tuple[str, ...] = (
   'collection',
   'base',
   'path',
+  'locale',
 )
 
 # Tags allowed in a `slug_template`.

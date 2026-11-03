@@ -182,6 +182,27 @@ class _Missing:
 MISSING: Any = _Missing()
 
 
+def _validate_localized_text(value: Any, option: str, field_name: str) -> None:
+  """Validate plain or locale-keyed UI text in a field declaration."""
+  if value is None or isinstance(value, str):
+    return
+  if isinstance(value, Mapping) and value:
+    for locale, text in value.items():
+      if not isinstance(locale, str) or not locale.strip():
+        raise ValueError(
+          f'{option} locale keys of field {field_name!r} must be non-empty strings'
+        )
+      if not isinstance(text, str):
+        raise ValueError(
+          f'{option} values of field {field_name!r} must be strings'
+        )
+    return
+  raise ValueError(
+    f'{option} of field {field_name!r} must be a string or a non-empty '
+    'locale-to-string mapping'
+  )
+
+
 @dataclasses.dataclass(frozen=True)
 class FieldSpec:
   """Description of a single frontmatter field.
@@ -207,8 +228,8 @@ class FieldSpec:
       on_create_prefix: Prepended to the generated value when
           `on_create='uuid'` (e.g. `'note-'`). Not valid otherwise.
       label: Display label for the admin form and `check` messages (default:
-          the field name).
-      hint: Short help text shown next to the field in the admin form.
+          the field name); may be localized by locale code.
+      hint: Short help text shown next to the field; may be localized.
       hidden: When set, the field is not shown in the admin form (pairs well
           with `default`/`on_create`).
       choices: Allowed values: each item is a scalar, or `{value, label}`
@@ -238,6 +259,8 @@ class FieldSpec:
           relative to the project root (no absolute paths, no `..`).
       public_path: For `file`/`image` fields: the prefix of the stored path
           (default: `media_dir`). Needs `media_dir`.
+      i18n: Content translation mode: `translate`, `duplicate` or `none`
+          (default). Boolean `True` is an alias for `translate`.
 
   """
 
@@ -253,8 +276,8 @@ class FieldSpec:
   read_only: bool = False
   on_create: str | None = None
   on_create_prefix: str | None = None
-  label: str | None = None
-  hint: str | None = None
+  label: str | Mapping[str, str] | None = None
+  hint: str | Mapping[str, str] | None = None
   hidden: bool = False
   choices: tuple[Any, ...] | None = None
   pattern: str | tuple[str, str] | None = None
@@ -270,6 +293,7 @@ class FieldSpec:
   public_path: str | None = None
   fields: tuple['FieldSpec', ...] | None = None
   group: str | None = None
+  i18n: str | bool = 'none'
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -282,6 +306,13 @@ class FieldSpec:
         f'Field name {self.name!r} is reserved by the blog: use another '
         f'name and set `alias={self.name!r}` to keep the key'
       )
+    if self.i18n is True:
+      object.__setattr__(self, 'i18n', 'translate')
+    if self.i18n not in ('translate', 'duplicate', 'none'):
+      raise ValueError(
+        f'Invalid i18n mode {self.i18n!r} for field {self.name!r}; '
+        "expected 'translate', 'duplicate' or 'none'"
+      )
     if self.type not in _TYPES:
       raise ValueError(
         f'Unknown type {self.type!r} for field {self.name!r}. '
@@ -289,6 +320,8 @@ class FieldSpec:
       )
     if self.alias is not None and not self.alias:
       raise ValueError(f'Empty alias for field {self.name!r}')
+    for option in ('label', 'hint'):
+      _validate_localized_text(getattr(self, option), option, self.name)
     if self.required and self.default is not MISSING:
       raise ValueError(f'Required field {self.name!r} cannot have a default')
     if self.on_create is not None:
@@ -344,6 +377,8 @@ class FieldSpec:
             f'A `choices` item of field {self.name!r} is a mapping but has '
             "no 'value' key"
           )
+        if isinstance(item, Mapping) and 'label' in item:
+          _validate_localized_text(item['label'], 'choices[].label', self.name)
     if self.pattern is not None:
       object.__setattr__(self, 'pattern', _normalize_pattern(self.pattern))
       if self.type not in ('str', 'link', 'file', 'image'):

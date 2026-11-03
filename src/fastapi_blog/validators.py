@@ -35,7 +35,15 @@ DEFAULT_TIMEOUT = 30.0
 MAX_OUTPUT_BYTES = 4000
 
 _SAFE_VALUE = re.compile(r'[A-Za-z0-9._:-]+')
-_KEYS = {'name', 'argv', 'exit_map', 'timeout', 'unavailable', 'blocking'}
+_KEYS = {
+  'name',
+  'argv',
+  'exit_map',
+  'timeout',
+  'unavailable',
+  'blocking',
+  'run',
+}
 
 
 @dataclasses.dataclass(frozen=True, eq=False)
@@ -44,14 +52,15 @@ class Validator:
 
   Attributes:
       name: Short name, used in issue codes (`validator.NAME`).
-      argv: Argument list. May use `{path}`, `{slug}`, `{collection}` and
-          `{fields.NAME}` placeholders.
+      argv: Argument list. May use `{path}`, `{slug}`, `{locale}`,
+          `{collection}` and `{fields.NAME}` placeholders.
       exit_map: Outcome by exit code; codes not listed count as `undefined`.
       timeout: Seconds before the command is stopped (a timeout result).
       unavailable: Outcome when the command can't run at all (not found,
           not executable) or times out.
       blocking: Outcomes that block a write through the REST API (TODO 6.3):
           the file is rolled back and the request fails with 422.
+      run: Whether this validator runs on document writes, `check`, or both.
 
   """
 
@@ -63,6 +72,7 @@ class Validator:
   timeout: float = DEFAULT_TIMEOUT
   unavailable: str = 'undefined'
   blocking: tuple[str, ...] = ()
+  run: str = 'both'
 
   def __post_init__(self) -> None:
     if not re.fullmatch(r'[a-z0-9_-]+', self.name):
@@ -95,6 +105,10 @@ class Validator:
         raise ValueError(
           f'Validator {self.name!r}: unknown blocking outcome {outcome!r}'
         )
+    if self.run not in ('write', 'check', 'both'):
+      raise ValueError(
+        f'Validator {self.name!r}: `run` must be write, check or both'
+      )
 
   @classmethod
   def from_dict(cls, data: Mapping[str, Any]) -> 'Validator':
@@ -127,26 +141,39 @@ def _substitute(
   slug: str,
   path: pathlib.Path,
   frontmatter: Mapping[str, Any],
+  locale: str | None = None,
 ) -> list[str]:
-  values = {'path': str(path), 'slug': slug, 'collection': collection_name}
+  values = {
+    'path': str(path),
+    'slug': slug,
+    'collection': collection_name,
+    'locale': locale or '',
+  }
   result = []
   for argument in validator.argv:
     try:
       template = parse_template(
         argument,
-        (*SERVICE_TAGS, 'path'),
+        (*SERVICE_TAGS, 'path', 'locale'),
         frontmatter.keys(),
       )
       tag_values = {
         'path': values['path'],
         'slug': slug,
         'collection': collection_name,
+        'locale': locale or '',
       }
       for expression in re.findall(r'\{[^{}]*\}', argument):
         fragment = parse_template(
           expression, (*SERVICE_TAGS, 'path'), frontmatter.keys()
         ).render(tag_values, frontmatter)
-        if not _SAFE_VALUE.fullmatch(fragment) or fragment.startswith('-'):
+        is_path = expression == '{path}'
+        if (
+          not fragment
+          or fragment.startswith('-')
+          or '\x00' in fragment
+          or (not is_path and not _SAFE_VALUE.fullmatch(fragment))
+        ):
           raise ValueError(
             f'Value in placeholder {expression!r} is not allowed in a '
             'command (use letters, digits and `._:-`, and do not start '
@@ -183,6 +210,8 @@ def run_validator(
   path: pathlib.Path,
   frontmatter: Mapping[str, Any],
   cwd: pathlib.Path | None = None,
+  locale: str | None = None,
+  phase: str = 'check',
 ) -> list[Issue]:
   """Run one validator on one document.
 
@@ -190,9 +219,15 @@ def run_validator(
       No issues when the outcome is `ok`, otherwise one issue.
 
   """
+  if phase not in ('write', 'check'):
+    raise ValueError("Validator phase must be 'write' or 'check'")
+  if validator.run not in (phase, 'both'):
+    return []
   code = f'validator.{validator.name}'
   try:
-    argv = _substitute(validator, collection_name, slug, path, frontmatter)
+    argv = _substitute(
+      validator, collection_name, slug, path, frontmatter, locale=locale
+    )
   except ValueError as exc:
     return [Issue('error', f'{code}.unsafe_value', str(exc), slug)]
   try:
@@ -251,6 +286,7 @@ def run_blocking(
   path: pathlib.Path,
   frontmatter: Mapping[str, Any],
   cwd: pathlib.Path | None = None,
+  locale: str | None = None,
 ) -> list[Issue]:
   """Run every validator and return the findings that block the write."""
   blocking: list[Issue] = []
@@ -262,6 +298,8 @@ def run_blocking(
       path=path,
       frontmatter=frontmatter,
       cwd=cwd,
+      locale=locale,
+      phase='write',
     ):
       if validator.is_blocking(issue.level):
         blocking.append(issue)

@@ -35,6 +35,15 @@ import yaml
 # stays free of any dependency on the schema/validation layer above it.
 logger = logging.getLogger(__name__)
 
+_locks_guard = threading.Lock()
+_collection_locks: dict[Path, Any] = {}
+
+
+def collection_lock(directory: Path) -> Any:
+  """Return the shared in-process lock for a collection directory."""
+  with _locks_guard:
+    return _collection_locks.setdefault(directory.resolve(), threading.RLock())
+
 
 DEFAULT_SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,99}$')
 
@@ -275,6 +284,10 @@ class ChangeEvent:
   slug: str
   etag: str | None = None
   user: Any = None
+  locale: str | None = None
+  locales: tuple[str, ...] = ()
+  paths: tuple[Path, ...] = ()
+  entry_etag: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -356,16 +369,14 @@ class DocumentStore:
   building paths itself, so slug/path safety, `if_match` concurrency and
   `create`/`delete` permissions are enforced in exactly one place.
 
-  Writes are protected by an in-process lock scoped to this instance (one
-  `DocumentStore` per collection is expected to be shared by all callers in
-  the process); there is no cross-process locking (TODO 4.7 explicitly rules
-  it out).
+  Writes share an in-process lock for the collection directory. There is no
+  cross-process locking.
   """
 
   def __init__(self, collection: Collection) -> None:
     """Initialize a store over `collection`."""
     self.collection = collection
-    self._lock = threading.RLock()
+    self._lock = collection_lock(collection.dir)
 
   def _check_slug(self, slug: str) -> None:
     """Raise InvalidSlugError unless `slug` is valid for this collection."""
@@ -614,13 +625,32 @@ class DocumentStore:
       self.notify_change('deleted', slug, None, user=user)
 
   def notify_change(
-    self, kind: str, slug: str, etag: str | None, *, user: Any = None
+    self,
+    kind: str,
+    slug: str,
+    etag: str | None,
+    *,
+    user: Any = None,
+    locale: str | None = None,
+    locales: tuple[str, ...] = (),
+    paths: tuple[Path, ...] = (),
+    entry_etag: str | None = None,
   ) -> None:
     """Invoke the optional hook without allowing hook failures to affect I/O."""
     callback = self.collection.on_change
     if callback is None:
       return
-    event = ChangeEvent(kind, self.collection.name, slug, etag, user)
+    event = ChangeEvent(
+      kind=kind,
+      collection=self.collection.name,
+      slug=slug,
+      etag=etag,
+      user=user,
+      locale=locale,
+      locales=locales,
+      paths=paths,
+      entry_etag=entry_etag,
+    )
     try:
       callback(event)
     except Exception:

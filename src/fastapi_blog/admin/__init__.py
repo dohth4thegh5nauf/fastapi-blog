@@ -132,6 +132,7 @@ def _create_admin_for_locale(
   authorize: Authorizer | None = None,
   auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
+  translations_dir: str | pathlib.Path | None = None,
 ) -> Admin:
   """Create an Admin instance for a specific locale.
 
@@ -161,6 +162,7 @@ def _create_admin_for_locale(
       collection_specs: All collections of the project, keyed by name; used
           to resolve `link` fields that point at another collection
       sanitize_html: Sanitize the admin Markdown preview like public pages
+      translations_dir: Project YAML files that extend bundled UI translations
 
   Returns:
       Configured Admin instance
@@ -175,7 +177,7 @@ def _create_admin_for_locale(
   )
 
   # Load translations from YAML files
-  translations = load_translations(locale)
+  translations = load_translations(locale, translations_dir)
   home_label = translations['nav']['home']
   user_label = translations['nav']['users']
   user_name_for_button = translations['user']['singular']
@@ -200,11 +202,12 @@ def _create_admin_for_locale(
       schema=frontmatter_schema,
       posts_dirname=posts_dirname,
       authorize=authorize,
+      translations_dir=str(translations_dir) if translations_dir else None,
     ),
   )
 
   # Add locale data to template context
-  locale_names = get_all_locale_names()
+  locale_names = get_all_locale_names(translations_dir, available_locales)
   admin.templates.env.globals['available_locales'] = available_locales
   admin.templates.env.globals['locale_names'] = locale_names
   admin.templates.env.globals['current_locale'] = locale
@@ -236,6 +239,7 @@ def _create_admin_for_locale(
       admin_username=admin_username,
       icon='fa fa-shield',
       authorize=authorize,
+      translations_dir=str(translations_dir) if translations_dir else None,
     )
     user_roles_view = UserWithRolesModelView(
       UserWithRoles,
@@ -243,6 +247,7 @@ def _create_admin_for_locale(
       admin_username=admin_username,
       icon='fa fa-users-cog',
       authorize=authorize,
+      translations_dir=str(translations_dir) if translations_dir else None,
     )
 
     # Add as dropdown menu group
@@ -279,8 +284,12 @@ def _create_admin_for_locale(
     collection_spec=collection_spec,
     authorize=authorize,
     collection_specs=collection_specs,
+    translations_dir=str(translations_dir) if translations_dir else None,
   )
-  posts_list_view.menu_label = posts_label
+  localized_label = (
+    collection_spec.label_for(locale) if collection_spec else None
+  )
+  posts_list_view.menu_label = localized_label or posts_label
   admin.add_view(posts_list_view)
 
   # Add edit and create views (don't show in menu)
@@ -292,6 +301,7 @@ def _create_admin_for_locale(
       collection_spec=collection_spec,
       authorize=authorize,
       collection_specs=collection_specs,
+      translations_dir=str(translations_dir) if translations_dir else None,
     )
   )
   admin.add_view(
@@ -302,6 +312,7 @@ def _create_admin_for_locale(
       collection_spec=collection_spec,
       authorize=authorize,
       collection_specs=collection_specs,
+      translations_dir=str(translations_dir) if translations_dir else None,
     )
   )
   admin.add_view(
@@ -343,6 +354,7 @@ def add_admin_to_app(
   authorize: Authorizer | None = None,
   auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
+  translations_dir: str | pathlib.Path | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -360,6 +372,7 @@ def add_admin_to_app(
     https_only: Set the session cookie Secure flag.
     sanitize_html: Sanitize the admin Markdown preview like public pages.
                   Set False only for trusted content that intentionally uses raw HTML.
+    translations_dir: Optional directory containing UI translation overlays.
     authorize: Shared `(request, resource, action) -> bool` permission callback.
     auth_users: Optional extra login accounts mapped to password and role.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
@@ -436,6 +449,8 @@ def add_admin_to_app(
   """
   if collection_spec is not None:
     posts_dirname = str(collection_spec.dir)
+    if translations_dir is None:
+      translations_dir = collection_spec.translations_dir
     if frontmatter_schema is not None:
       collection_spec = collection_spec.with_schema(frontmatter_schema)
     else:
@@ -544,6 +559,7 @@ def add_admin_to_app(
     redirect_after_login='/admin/user/list',
     locale=default_locale,
     users=auth_users,
+    translations_dir=str(translations_dir) if translations_dir else None,
   )
 
   default_admin = _create_admin_for_locale(
@@ -565,6 +581,7 @@ def add_admin_to_app(
     authorize=authorize,
     auth_users=auth_users,
     sanitize_html=sanitize_html,
+    translations_dir=translations_dir,
   )
 
   default_admin.mount_to(app)
@@ -582,6 +599,7 @@ def add_admin_to_app(
       redirect_after_login=f'/{locale}/admin/user/list',
       locale=locale,
       users=auth_users,
+      translations_dir=str(translations_dir) if translations_dir else None,
     )
 
     admin = _create_admin_for_locale(
@@ -603,6 +621,7 @@ def add_admin_to_app(
       authorize=authorize,
       auth_users=auth_users,
       sanitize_html=sanitize_html,
+      translations_dir=translations_dir,
     )
 
     admin.mount_to(app)

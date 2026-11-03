@@ -349,3 +349,83 @@ def test_validator_uses_shared_template_filters():
     pathlib.Path('posts/some.md'),
     {'status': 'PUBLISHED'},
   ) == ['tool', '--status=published', 'Some-Slu']
+
+
+def test_validator_run_mode_skips_check_for_write_only(monkeypatch):
+  validator = Validator.from_dict(
+    {'name': 'write_only', 'argv': ['true'], 'run': 'write'}
+  )
+
+  def fail_if_called(*args, **kwargs):
+    raise AssertionError('check must not execute a write-only validator')
+
+  monkeypatch.setattr(validators.subprocess, 'run', fail_if_called)
+  assert (
+    validators.run_validator(
+      validator,
+      collection_name='notes',
+      slug='first',
+      path=pathlib.Path('posts/first.md'),
+      frontmatter={},
+      phase='check',
+    )
+    == []
+  )
+
+
+def test_validator_substitutes_locale_placeholder(monkeypatch):
+  validator = Validator.from_dict(
+    {'name': 'locale', 'argv': ['check-tool', '{locale}']}
+  )
+  captured = {}
+
+  class Done:
+    returncode = 0
+    stdout = b''
+    stderr = b''
+
+  def capture(argv, **kwargs):
+    captured['argv'] = argv
+    return Done()
+
+  monkeypatch.setattr(validators.subprocess, 'run', capture)
+  validators.run_validator(
+    validator,
+    collection_name='notes',
+    slug='first',
+    path=pathlib.Path('posts/first.ru.md'),
+    frontmatter={},
+    locale='ru',
+    phase='write',
+  )
+  assert captured['argv'] == ['check-tool', 'ru']
+
+
+def test_validator_passes_nested_path_as_one_argument(monkeypatch, tmp_path):
+  validator = Validator.from_dict(
+    {'name': 'path', 'argv': ['check-tool', '{path}']}
+  )
+  captured = {}
+
+  class Done:
+    returncode = 0
+    stdout = b''
+    stderr = b''
+
+  def capture(argv, **kwargs):
+    captured['argv'] = argv
+    return Done()
+
+  monkeypatch.setattr(validators.subprocess, 'run', capture)
+  path = tmp_path / 'nested directory' / 'entry.ru.md'
+  issues = validators.run_validator(
+    validator,
+    collection_name='notes',
+    slug='entry',
+    path=path,
+    frontmatter={},
+    locale='ru',
+    phase='write',
+  )
+  assert issues == []
+  assert captured['argv'] == ['check-tool', str(path)]

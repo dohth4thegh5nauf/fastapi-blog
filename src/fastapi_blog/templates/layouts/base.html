@@ -93,7 +93,7 @@ h4 {
         <select id="language-select" onchange="switchLanguage(this.value)">
           {% for lang in available_locales %}
           <option value="{{ lang }}" {% if lang == locale %}selected{% endif %}>
-            {% if lang == 'en' %}English{% elif lang == 'ru' %}Русский{% else %}{{ lang }}{% endif %}
+            {{ locale_names.get(lang, lang) }}
           </option>
           {% endfor %}
         </select>

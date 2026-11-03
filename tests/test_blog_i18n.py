@@ -312,3 +312,62 @@ def test_all_blog_routes_have_language_switcher():
     )
     assert 'English' in response.text, f'English option missing on {path}'
     assert 'Русский' in response.text, f'Русский option missing on {path}'
+
+
+def test_project_translation_overlays_apply_to_default_and_extra_routes(
+  tmp_path,
+):
+  translations_dir = tmp_path / 'translations'
+  translations_dir.mkdir()
+  (translations_dir / 'en.yaml').write_text(
+    'blog:\n  articles: Custom Articles\n', encoding='utf-8'
+  )
+  (translations_dir / 'de.yaml').write_text(
+    'locale:\n  name: Deutsch\nblog:\n  articles: Beiträge\n',
+    encoding='utf-8',
+  )
+
+  app = FastAPI()
+  fastapi_blog.add_blog_to_fastapi(
+    app,
+    locales=['en', 'de'],
+    default_locale='en',
+    translations_dir=translations_dir,
+  )
+  client = TestClient(app)
+
+  default_response = client.get('/blog/posts')
+  german_response = client.get('/de/blog/posts')
+  assert 'Custom Articles' in default_response.text
+  assert 'Beiträge' in german_response.text
+  assert 'Deutsch' in default_response.text
+  assert 'Deutsch' in german_response.text
+
+
+def test_setup_facade_uses_translations_dir_from_project_collection(tmp_path):
+  from fastapi_blog.config import load_project
+
+  translations_dir = tmp_path / 'translations'
+  translations_dir.mkdir()
+  (translations_dir / 'en.yaml').write_text(
+    'blog:\n  articles: Project Articles\n', encoding='utf-8'
+  )
+  project_file = tmp_path / 'fastapi_blog.yaml'
+  project_file.write_text(
+    'translations_dir: translations\ncollections:\n  posts:\n    dir: posts\n',
+    encoding='utf-8',
+  )
+  collection_spec = load_project(project_file).collections['posts']
+
+  app = FastAPI()
+  fastapi_blog.setup_fastapi_blog(
+    app,
+    admin=False,
+    collection_spec=collection_spec,
+    locales=['en'],
+    default_locale='en',
+    health_routes=False,
+  )
+  response = TestClient(app).get('/blog/posts')
+  assert response.status_code == 200
+  assert 'Project Articles' in response.text

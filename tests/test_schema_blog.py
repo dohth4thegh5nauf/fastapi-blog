@@ -224,3 +224,26 @@ def test_index_shows_recent_posts(client):
   response = client.get('/blog/')
   assert response.status_code == 200
   assert 'Second' in response.text
+
+
+def test_field_i18n_modes_and_true_alias():
+  schema = FrontmatterSchema.from_dict(
+    {
+      'fields': {
+        'title': {'type': 'str', 'i18n': 'translate'},
+        'canonical_slug': {'type': 'str', 'i18n': True},
+        'status': {'type': 'str', 'i18n': 'none'},
+      }
+    }
+  )
+  assert [field.i18n for field in schema.fields] == [
+    'translate',
+    'translate',
+    'none',
+  ]
+  assert schema.to_dict()['fields']['title']['i18n'] == 'translate'
+
+
+def test_field_i18n_rejects_unknown_mode():
+  with pytest.raises(ValueError, match='Invalid i18n mode'):
+    FieldSpec('title', i18n='localized')

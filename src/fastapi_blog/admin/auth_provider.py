@@ -15,13 +15,17 @@ from ..i18n import load_translations
 from ..permissions import ADMIN
 
 
-def _yaml_translator(locale: str) -> Callable[[str], str]:
+def _yaml_translator(
+  locale: str, translations_dir: str | None = None
+) -> Callable[[str], str]:
   """Build a `_(key)` function that maps gettext keys to our YAML strings.
 
   The built-in login template calls `_("Login to your account")` etc. via
   gettext; this lets it use `fastapi_blog/translations/*.yaml` instead.
   """
-  auth_translations = load_translations(locale).get('auth', {})
+  auth_translations = load_translations(locale, translations_dir).get(
+    'auth', {}
+  )
   key_mapping = {
     'Login to your account': auth_translations.get(
       'login_to_account', 'Login to your account'
@@ -51,6 +55,7 @@ class SimpleAuthProvider(AuthProvider):
     redirect_after_login: str = '/dashboard/user/list',
     locale: str = 'en',
     users: Mapping[str, Mapping[str, str]] | None = None,
+    translations_dir: str | None = None,
   ):
     """Initialize auth provider with credentials and redirect URL."""
     super().__init__()
@@ -59,6 +64,7 @@ class SimpleAuthProvider(AuthProvider):
     self.redirect_after_login = redirect_after_login
     self.locale = locale
     self.users = dict(users or {})
+    self.translations_dir = translations_dir
 
   async def login(
     self,
@@ -137,7 +143,7 @@ class SimpleAuthProvider(AuthProvider):
     if getattr(request.state, 'admin_user', None) is not None:
       return RedirectResponse(next_url, status_code=HTTP_303_SEE_OTHER)
 
-    _ = _yaml_translator(self.locale)
+    _ = _yaml_translator(self.locale, self.translations_dir)
     if request.method == 'GET':
       return templates.TemplateResponse(
         request=request, name='login.html', context={'_': _}

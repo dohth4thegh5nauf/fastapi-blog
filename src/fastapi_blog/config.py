@@ -25,12 +25,15 @@ schema, slug-generation settings and summary with the REST API and admin UI.
 
 import dataclasses
 import pathlib
+import warnings
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import yaml
 
 from . import store
+from .i18n import resolve_localized
+from .i18n_collections import I18nCollection, I18nConfig, I18nConfigError
 from .models import DEFAULT_SCHEMA, FrontmatterSchema
 from .templates import (
   SLUG_TAGS_DEFAULT,
@@ -47,7 +50,9 @@ DEFAULT_CONFIG_NAME = 'fastapi_blog.yaml'
 
 _COLLECTION_KEYS = {
   'dir',
+  'label',
   'schema',
+  'depth',
   'slug_pattern',
   'extension',
   'create',
@@ -58,6 +63,7 @@ _COLLECTION_KEYS = {
   'unique',
   'summary',
   'check',
+  'i18n',
 }
 
 
@@ -92,6 +98,7 @@ class CollectionSpec:
   schema: FrontmatterSchema | None = None
   slug_pattern: str | None = None
   extension: str | tuple[str, ...] | None = None
+  depth: int = 0
   create: bool = True
   delete: bool = True
   validators: tuple[Validator, ...] = ()
@@ -101,11 +108,21 @@ class CollectionSpec:
   summary: Template | None = None
   check_links: str = 'off'
   check_files: str = 'off'
+  check_translations: str = 'off'
   on_change: Callable[[store.ChangeEvent], Any] | None = None
+  i18n: I18nConfig | None = None
+  label: str | Mapping[str, str] | None = None
+  translations_dir: pathlib.Path | None = None
 
   def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
     """Return this collection specification with an application schema."""
     return dataclasses.replace(self, schema=schema)
+
+  def label_for(self, locale: str | None) -> str | None:
+    """Resolve this collection's menu label for an interface locale."""
+    return resolve_localized(
+      self.label, locale, self.i18n.default_locale if self.i18n else None
+    )
 
   def to_collection(self) -> store.Collection:
     """Build the storage-layer `Collection` for this spec."""
@@ -124,8 +141,15 @@ class CollectionSpec:
       on_change=self.on_change,
       create=self.create,
       delete=self.delete,
+      depth=self.depth,
       **kwargs,
     )
+
+  def to_i18n_collection(self) -> I18nCollection:
+    """Build the localized storage adapter when i18n is enabled."""
+    if self.i18n is None:
+      raise ConfigError(f'Collection {self.name!r} does not enable i18n')
+    return I18nCollection(self.to_collection(), self.i18n)
 
   def make_slug(
     self,
@@ -167,7 +191,7 @@ class CollectionSpec:
     user: Any = None,
     notify: bool = True,
   ) -> tuple[str, str]:
-    """Create a document using the configured slug template and sequence lock."""
+    """Create a document with the configured slug template and sequence lock."""
     if self.slug_template is None:
       raise ConfigError(f'Collection {self.name!r} has no `slug_template`')
     schema = self.schema or DEFAULT_SCHEMA
@@ -294,10 +318,86 @@ class Project:
 
   root: pathlib.Path
   collections: dict[str, CollectionSpec]
+  translations_dir: pathlib.Path | None = None
+
+
+def _i18n_config(
+  value: Any, inherited: I18nConfig | None = None
+) -> I18nConfig | None:
+  """Parse an i18n override, inheriting project defaults when supplied."""
+  if value is False:
+    return None
+  if value is True:
+    if inherited is None:
+      raise ConfigError('`i18n: true` needs project-level i18n defaults')
+    return inherited
+  if value is None:
+    return inherited
+  if not isinstance(value, Mapping):
+    raise ConfigError('`i18n` must be true, false or a mapping')
+  allowed = {
+    'structure',
+    'locales',
+    'default_locale',
+    'omit_default_locale_suffix',
+    'fallback',
+    'translate_body',
+    'required_in_translations',
+    'write_duplicates',
+  }
+  unknown = sorted(set(value) - allowed)
+  if unknown:
+    raise ConfigError(f'Unknown i18n option(s): {unknown}')
+  base = inherited
+  try:
+    locales = value.get('locales', base.locales if base else None)
+    default_locale = value.get(
+      'default_locale', base.default_locale if base else None
+    )
+    if not isinstance(locales, (list, tuple)) or not locales:
+      raise I18nConfigError('i18n.locales must be a non-empty list')
+    if not isinstance(default_locale, str) or not default_locale:
+      raise I18nConfigError('i18n.default_locale must be a non-empty string')
+    for key in (
+      'omit_default_locale_suffix',
+      'translate_body',
+      'required_in_translations',
+      'write_duplicates',
+    ):
+      if key in value and not isinstance(value[key], bool):
+        raise I18nConfigError(f'i18n.{key} must be true or false')
+    return I18nConfig(
+      locales=tuple(str(locale) for locale in locales),
+      default_locale=default_locale,
+      structure=str(
+        value.get('structure', base.structure if base else 'multiple_files')
+      ),
+      omit_default_locale_suffix=value.get(
+        'omit_default_locale_suffix',
+        base.omit_default_locale_suffix if base else True,
+      ),
+      fallback=str(value.get('fallback', base.fallback if base else 'default')),
+      translate_body=value.get(
+        'translate_body', base.translate_body if base else False
+      ),
+      required_in_translations=value.get(
+        'required_in_translations',
+        base.required_in_translations if base else False,
+      ),
+      write_duplicates=value.get(
+        'write_duplicates', base.write_duplicates if base else False
+      ),
+    )
+  except (TypeError, ValueError) as exc:
+    raise ConfigError(str(exc)) from exc
 
 
 def _collection_spec(
-  name: str, entry: Any, root: pathlib.Path
+  name: str,
+  entry: Any,
+  root: pathlib.Path,
+  project_i18n: I18nConfig | None = None,
+  translations_dir: pathlib.Path | None = None,
 ) -> CollectionSpec:
   if not isinstance(entry, Mapping):
     raise ConfigError(f'Collection {name!r} must be a mapping')
@@ -306,6 +406,33 @@ def _collection_spec(
     raise ConfigError(f'Collection {name!r} has unknown option(s) {unknown}')
   if not entry.get('dir'):
     raise ConfigError(f'Collection {name!r} needs `dir`')
+  i18n = _i18n_config(entry.get('i18n'), project_i18n)
+  label = entry.get('label')
+  if label is not None and not isinstance(label, str | Mapping):
+    raise ConfigError(
+      f'Collection {name!r}: `label` must be a string or locale mapping'
+    )
+  if isinstance(label, Mapping) and (
+    not label
+    or any(
+      not isinstance(locale, str)
+      or not locale.strip()
+      or not isinstance(text, str)
+      for locale, text in label.items()
+    )
+  ):
+    raise ConfigError(
+      f'Collection {name!r}: `label` must map locale codes to strings'
+    )
+  depth = entry.get('depth', 0)
+  if not isinstance(depth, int) or isinstance(depth, bool) or depth < 0:
+    raise ConfigError(
+      f'Collection {name!r}: `depth` must be a non-negative integer'
+    )
+  if i18n is not None and depth:
+    raise ConfigError(
+      f'Collection {name!r}: i18n is not supported with nested collections'
+    )
   schema = None
   schema_path = entry.get('schema')
   if schema_path:
@@ -367,7 +494,9 @@ def _collection_spec(
     check_options = {}
   if not isinstance(check_options, Mapping):
     raise ConfigError(f'Collection {name!r}: `check` must be a mapping')
-  unknown_checks = sorted(set(check_options) - {'links', 'files'})
+  unknown_checks = sorted(
+    set(check_options) - {'links', 'files', 'translations'}
+  )
   if unknown_checks:
     raise ConfigError(
       f'Collection {name!r}: unknown check option(s) {unknown_checks}'
@@ -379,7 +508,12 @@ def _collection_spec(
 
   check_links = _check_level(check_options.get('links', 'off'))
   check_files = _check_level(check_options.get('files', 'off'))
-  for check_name, level in (('links', check_links), ('files', check_files)):
+  check_translations = _check_level(check_options.get('translations', 'off'))
+  for check_name, level in (
+    ('links', check_links),
+    ('files', check_files),
+    ('translations', check_translations),
+  ):
     if level not in ('off', 'warn', 'error'):
       raise ConfigError(
         f'Collection {name!r}: `check.{check_name}` must be off, warn or error'
@@ -403,15 +537,18 @@ def _collection_spec(
     slug_template is None or 'seq' not in slug_template.tags
   ):
     raise ConfigError(
-      f'Collection {name!r}: `unique: [seq]` needs a slug_template using {{seq}}'
+      f'Collection {name!r}: `unique: [seq]` needs a slug_template '
+      'using {seq}'
     )
-  return CollectionSpec(
+  spec = CollectionSpec(
     name=name,
     dir=root / str(entry['dir']),
+    label=label,
     schema=schema,
     slug_pattern=str(entry['slug_pattern'])
     if entry.get('slug_pattern') is not None
     else None,
+    depth=depth,
     extension=tuple(str(item) for item in extension)
     if isinstance(extension, (list, tuple))
     else extension,
@@ -424,7 +561,49 @@ def _collection_spec(
     summary=summary,
     check_links=check_links,
     check_files=check_files,
+    check_translations=check_translations,
+    i18n=i18n,
+    translations_dir=translations_dir,
   )
+  if i18n is not None:
+    _warn_unknown_localized_locales(spec, i18n.locales)
+  return spec
+
+
+def _warn_unknown_localized_locales(
+  spec: CollectionSpec, locales: tuple[str, ...]
+) -> None:
+  """Warn when localized labels declare locales outside the collection."""
+  configured = set(locales)
+
+  def inspect_value(value: Any, location: str) -> None:
+    if isinstance(value, Mapping):
+      unknown = sorted(set(value) - configured)
+      if unknown:
+        warnings.warn(
+          f'Collection {spec.name!r}: {location} contains unknown locale(s) '
+          f'{unknown}; configured locales are {list(locales)}',
+          UserWarning,
+          stacklevel=3,
+        )
+
+  def inspect_fields(fields, prefix: str = '') -> None:
+    for field in fields:
+      field_path = f'{prefix}{field.name}'
+      inspect_value(field.label, f'field {field_path!r} label')
+      inspect_value(field.hint, f'field {field_path!r} hint')
+      for index, choice in enumerate(field.choices or ()):
+        if isinstance(choice, Mapping):
+          inspect_value(
+            choice.get('label'),
+            f'field {field_path!r} choice {index} label',
+          )
+      if field.fields:
+        inspect_fields(field.fields, f'{field_path}.')
+
+  inspect_value(spec.label, 'collection label')
+  if spec.schema is not None:
+    inspect_fields(spec.schema.fields)
 
 
 def load_project(path: str | pathlib.Path) -> Project:
@@ -447,15 +626,35 @@ def load_project(path: str | pathlib.Path) -> Project:
     raise ConfigError(f'{config_path} is not valid YAML: {exc}') from exc
   if not isinstance(data, Mapping):
     raise ConfigError(f'{config_path} must be a mapping')
-  unknown = sorted(set(data) - {'collections'})
+  unknown = sorted(set(data) - {'collections', 'i18n', 'translations_dir'})
   if unknown:
     raise ConfigError(f'{config_path} has unknown key(s) {unknown}')
   entries = data.get('collections') or {}
   if not isinstance(entries, Mapping) or not entries:
     raise ConfigError(f'{config_path} needs a `collections` mapping')
   root = config_path.resolve().parent
+  project_i18n = _i18n_config(data.get('i18n'))
+  translations_value = data.get('translations_dir')
+  translations_dir = None
+  if translations_value is not None:
+    if (
+      not isinstance(translations_value, str)
+      or not translations_value.strip()
+      or pathlib.Path(translations_value).is_absolute()
+      or '..' in pathlib.Path(translations_value).parts
+    ):
+      raise ConfigError(
+        '`translations_dir` must be a relative directory inside the project'
+      )
+    translations_dir = (root / translations_value).resolve()
+    if translations_dir != root and root not in translations_dir.parents:
+      raise ConfigError('`translations_dir` escapes the project directory')
+    if translations_dir.exists() and not translations_dir.is_dir():
+      raise ConfigError('`translations_dir` must point to a directory')
   collections = {
-    str(name): _collection_spec(str(name), entry, root)
+    str(name): _collection_spec(
+      str(name), entry, root, project_i18n, translations_dir
+    )
     for name, entry in entries.items()
   }
   # Resolve link declarations only after the complete collection registry is
@@ -503,7 +702,9 @@ def load_project(path: str | pathlib.Path) -> Project:
               f'filter field {rule["field"]!r} does not exist in '
               f'collection {target_name!r}'
             )
-  return Project(root=root, collections=collections)
+  return Project(
+    root=root, collections=collections, translations_dir=translations_dir
+  )
 
 
 def find_project(start: str | pathlib.Path | None = None) -> Project | None:

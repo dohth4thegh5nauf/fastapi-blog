@@ -7,17 +7,20 @@ from typing import Any
 import jinja2
 from fastapi import (
   APIRouter,
+  Body,
   Depends,
   FastAPI,
   Header,
   HTTPException,
   Path,
+  Query,
   Request,
   Response,
   status,
 )
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from . import helpers, store
 from .auth import add_startup_check, check_api_auth_config
@@ -382,12 +385,221 @@ def get_api_router(
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
     return _write_document(None, fm_dump, _body(payload), user=user)
 
+  adapter = document_service.i18n_documents
+
+  if adapter is not None:
+
+    @api_router.get('/{slug}')
+    async def get_localized_post(
+      response: Response,
+      slug: str = slug_path,
+      locale: str | None = Query(None),
+      fallback: bool | None = Query(None),
+      user: dict | None = Depends(_guard('read')),
+    ) -> dict[str, Any]:
+      requested_locale = locale or adapter.config.default_locale
+      if requested_locale not in adapter.config.locales:
+        raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST,
+          detail=f'Unknown locale: {requested_locale}',
+        )
+      try:
+        record = adapter.read(slug, requested_locale, fallback=fallback)
+      except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(
+          status_code=status.HTTP_404_NOT_FOUND,
+          detail=f"Post '{slug}' has no '{requested_locale}' translation",
+        ) from exc
+      response.headers['ETag'] = record.etag
+      response.headers['Entry-ETag'] = adapter.entry_etag(slug) or ''
+      response_frontmatter = dict(record.frontmatter)
+      response_body = record.body
+      if record.locale != adapter.config.default_locale:
+        canonical_record = adapter.read(
+          slug, adapter.config.default_locale, fallback=False
+        )
+        canonical = canonical_record.frontmatter
+        if not adapter.config.translate_body:
+          response_body = canonical_record.body
+        for field in document_service.schema.fields:
+          if field.i18n in ('none', 'duplicate'):
+            if field.key in canonical:
+              response_frontmatter[field.key] = canonical[field.key]
+            else:
+              response_frontmatter.pop(field.key, None)
+      return {
+        'slug': slug,
+        'locale': record.locale,
+        'fallback_used': record.locale != requested_locale,
+        'locales_present': list(adapter.locales_present(slug)),
+        'entry_etag': adapter.entry_etag(slug),
+        'frontmatter': response_frontmatter,
+        'content': response_body.lstrip('\n'),
+      }
+
+    @api_router.put('/{slug}')
+    async def put_localized_post(
+      request: Request,
+      response: Response,
+      data: dict[str, Any] = Body(...),
+      slug: str = slug_path,
+      locale: str | None = Query(None),
+      user: dict | None = Depends(auth_func),
+      if_match: str | None = Header(None, alias='If-Match'),
+    ) -> JSONResponse:
+      """Create or update one locale, or several locales as one entry."""
+      if not isinstance(data, dict):
+        raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST,
+          detail='The request body must be an object',
+        )
+
+      is_many = 'locales' in data
+      locales_payload = data.get('locales')
+      if is_many:
+        if locale is not None:
+          raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Do not combine the locale query parameter with locales',
+          )
+        if not isinstance(locales_payload, dict) or not locales_payload:
+          raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='locales must be a non-empty object',
+          )
+        source_documents = locales_payload
+      else:
+        source_documents = {locale or adapter.config.default_locale: data}
+
+      documents: dict[str, tuple[dict[str, Any], str]] = {}
+      for target_locale, item in source_documents.items():
+        if not isinstance(target_locale, str) or not isinstance(item, dict):
+          raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Each locale must map to a document object',
+          )
+        frontmatter = item.get('frontmatter', {})
+        content = item.get('content', '')
+        if not isinstance(frontmatter, dict) or not isinstance(content, str):
+          raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+              f"Locale '{target_locale}' must contain an object frontmatter "
+              'and string content'
+            ),
+          )
+        documents[target_locale] = (frontmatter, content)
+
+      is_new = not adapter.has_entry(slug)
+      await _guard('create' if is_new else 'update')(request, user)
+      if not is_new:
+        _require_if_match(if_match)
+
+      locale_etags: dict[str, str] | None = None
+      expected_entry_etag: str | None = None
+      if if_match is not None:
+        if is_many:
+          expected_entry_etag = if_match
+        else:
+          target_locale = next(iter(documents))
+          target_path = adapter.path_for(slug, target_locale)
+          target_etag = (
+            adapter.read(slug, target_locale, fallback=False).etag
+            if target_path.is_file()
+            else None
+          )
+          current_entry_etag = adapter.entry_etag(slug)
+          if target_etag == if_match:
+            locale_etags = {target_locale: if_match}
+          elif current_entry_etag == if_match:
+            expected_entry_etag = if_match
+          else:
+            # A fallback GET returns the canonical locale's ETag. Accept it
+            # for creating a missing translation, but guard the write with
+            # the aggregate ETag so a concurrent edit to any locale conflicts.
+            canonical = adapter.read(
+              slug, adapter.config.default_locale, fallback=False
+            )
+            if (
+              not target_path.is_file()
+              and canonical.etag == if_match
+              and current_entry_etag is not None
+            ):
+              expected_entry_etag = current_entry_etag
+            else:
+              raise HTTPException(
+                status_code=(
+                  status.HTTP_412_PRECONDITION_FAILED
+                  if current_entry_etag is not None
+                  else status.HTTP_409_CONFLICT
+                ),
+                detail='If-Match does not match the current localized entry',
+              )
+
+      try:
+        result = document_service.save_localized(
+          slug,
+          documents,
+          if_match=locale_etags,
+          expected_entry_etag=expected_entry_etag,
+          user=_event_actor(user),
+        )
+      except BlockingValidationError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+          detail={'issues': [issue.to_dict() for issue in exc.issues]},
+        ) from exc
+      except UniqueViolationError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+      except store.OperationNotAllowedError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
+      except store.ConflictError as exc:
+        raise HTTPException(
+          status_code=exc.status_code, detail=str(exc)
+        ) from exc
+      except ValidationError as exc:
+        raise HTTPException(
+          status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+          detail=exc.errors(),
+        ) from exc
+      except (ValueError, OSError) as exc:
+        raise HTTPException(
+          status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+      response.headers['ETag'] = (
+        result.entry_etag if is_many else result.etags[next(iter(documents))]
+      )
+      content = {
+        'slug': slug,
+        'status': result.status,
+        'locales': list(result.etags),
+        'locales_present': list(result.locales_present),
+        'entry_etag': result.entry_etag,
+        'issues': [issue.to_dict() for issue in result.issues],
+      }
+      return JSONResponse(
+        content=content,
+        status_code=(
+          status.HTTP_201_CREATED
+          if result.status == 'created'
+          else status.HTTP_200_OK
+        ),
+        headers={'ETag': response.headers['ETag']},
+      )
+
   @api_router.post('/create', status_code=status.HTTP_201_CREATED)
   async def create_generated_post(
     payload: Payload,  # type: ignore[valid-type]
     response: Response,
     user: dict | None = Depends(_guard('create')),
   ) -> dict[str, str]:
+    if adapter is not None:
+      raise HTTPException(405, 'Use PUT /{slug} for localized entries')
     slug, etag = _create_generated(payload, user=user)
     response.headers['ETag'] = etag
     return {'slug': slug, 'status': 'created'}
@@ -399,7 +611,11 @@ def get_api_router(
     user: dict | None = Depends(_guard('read')),
   ) -> dict[str, Any]:
     try:
-      record = docs.read(slug)
+      record = (
+        adapter.read(slug, adapter.config.default_locale, fallback=False)
+        if adapter is not None
+        else docs.read(slug)
+      )
     except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -419,6 +635,8 @@ def get_api_router(
     slug: str = slug_path,
     user: dict | None = Depends(_guard('create')),
   ) -> dict[str, str]:
+    if adapter is not None:
+      raise HTTPException(405, 'Use PUT /{slug} for localized entries')
     if docs.exists(slug):
       raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -437,6 +655,8 @@ def get_api_router(
     user: dict | None = Depends(_guard('update')),
     if_match: str | None = Header(None, alias='If-Match'),
   ) -> dict[str, str]:
+    if adapter is not None:
+      raise HTTPException(405, 'Use PUT /{slug} for localized entries')
     _require_if_match(if_match)
     try:
       existing = docs.read(slug).frontmatter
@@ -457,17 +677,35 @@ def get_api_router(
   @api_router.delete('/delete/{slug}', status_code=status.HTTP_204_NO_CONTENT)
   async def delete_post(
     slug: str = slug_path,
+    cascade: bool = False,
     user: dict | None = Depends(_guard('delete')),
     if_match: str | None = Header(None, alias='If-Match'),
   ) -> None:
     _require_if_match(if_match)
     try:
-      document_service.delete(slug, if_match=if_match, user=_event_actor(user))
+      if adapter is not None:
+        document_service.delete_localized_entry(
+          slug,
+          cascade=cascade,
+          expected_entry_etag=if_match,
+          user=_event_actor(user),
+        )
+      else:
+        document_service.delete(
+          slug, if_match=if_match, user=_event_actor(user)
+        )
     except store.OperationNotAllowedError as exc:
       raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
       ) from exc
-    except (ValueError, FileNotFoundError) as exc:
+    except ValueError as exc:
+      if adapter is not None:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+      raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Post '{slug}' not found",
+      ) from exc
+    except FileNotFoundError as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Post '{slug}' not found",
@@ -481,6 +719,8 @@ def get_api_router(
     response: Response,
     user: dict | None = Depends(auth_func),
   ) -> JSONResponse:
+    if adapter is not None:
+      raise HTTPException(405, 'Use PUT /{slug} for localized entries')
     data = await request.json()
     slug = data.get('slug')
 

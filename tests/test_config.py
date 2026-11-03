@@ -213,3 +213,44 @@ def test_load_project_rejects_non_boolean_create_delete(project_dir):
   )
   with pytest.raises(config.ConfigError, match='`create`'):
     config.load_project(project_dir / 'fastapi_blog.yaml')
+
+
+def test_load_project_i18n_defaults_and_collection_override(project_dir):
+  _write(
+    project_dir,
+    'i18n: {locales: [en, ru], default_locale: en, structure: multiple_files}\n'
+    'collections:\n  notes:\n    dir: posts\n    i18n: true\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'notes'
+  ]
+  assert spec.i18n is not None
+  assert spec.i18n.locales == ('en', 'ru')
+  assert spec.i18n.default_locale == 'en'
+  assert spec.to_i18n_collection() is not None
+
+
+def test_load_project_rejects_invalid_i18n_defaults(project_dir):
+  _write(
+    project_dir,
+    'i18n: {locales: [en, en], default_locale: en}\n'
+    'collections:\n  notes:\n    dir: posts\n    i18n: true\n',
+  )
+  with pytest.raises(config.ConfigError, match='unique'):
+    config.load_project(project_dir / 'fastapi_blog.yaml')
+
+
+def test_collection_i18n_can_override_global_values(project_dir):
+  _write(
+    project_dir,
+    'i18n: {locales: [en, ru], default_locale: en}\n'
+    'collections:\n  notes:\n    dir: posts\n'
+    '    i18n: {locales: [de, en], default_locale: de, structure: multiple_folders}\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'notes'
+  ]
+  assert spec.i18n is not None
+  assert spec.i18n.locales == ('de', 'en')
+  assert spec.i18n.default_locale == 'de'
+  assert spec.i18n.structure == 'multiple_folders'

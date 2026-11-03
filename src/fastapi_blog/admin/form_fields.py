@@ -10,6 +10,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from ..i18n import resolve_localized
 from ..models import MISSING, FieldSpec, FrontmatterSchema
 
 
@@ -155,34 +156,45 @@ def _nested(
   return current if isinstance(current, Mapping) else {}
 
 
-def _group(spec: FieldSpec, parents: tuple[FieldSpec, ...]) -> str:
+def _group(
+  spec: FieldSpec,
+  parents: tuple[FieldSpec, ...],
+  *,
+  locale: str | None,
+  default_locale: str | None,
+) -> str:
   if spec.group:
     return spec.group
   for parent in reversed(parents):
     if parent.group:
       return parent.group
   if parents:
-    return ' / '.join(p.label or p.description or p.name for p in parents)
+    return ' / '.join(
+      resolve_localized(p.label, locale, default_locale)
+      or p.description
+      or p.name
+      for p in parents
+    )
   if spec.role in _SEO_ROLES:
     return 'SEO'
   return ''
 
 
-def _choices_for(spec: FieldSpec) -> list[dict[str, str]]:
+def _choices_for(
+  spec: FieldSpec, *, locale: str | None, default_locale: str | None
+) -> list[dict[str, str]]:
   """Return normalized option labels and values for a schema field."""
   if spec.choices is None:
     return []
-  return [
-    {
-      'value': (
-        str(item.get('value')) if isinstance(item, Mapping) else str(item)
-      ),
-      'label': str(item.get('label') or item.get('value'))
-      if isinstance(item, Mapping)
-      else str(item),
-    }
-    for item in spec.choices
-  ]
+  result = []
+  for item in spec.choices:
+    if isinstance(item, Mapping):
+      value = item.get('value')
+      label = resolve_localized(item.get('label'), locale, default_locale)
+      result.append({'value': str(value), 'label': str(label or value)})
+    else:
+      result.append({'value': str(item), 'label': str(item)})
+  return result
 
 
 def _pattern_for(spec: FieldSpec) -> tuple[str | None, str]:
@@ -202,6 +214,8 @@ def _object_child_fields(
   parent_read_only: bool,
   link_choices: Mapping[str, list[dict[str, str]]],
   parent_name: str,
+  locale: str | None,
+  default_locale: str | None,
 ) -> list[dict[str, Any]]:
   """Describe the controls rendered inside one list[object] row."""
   children: list[dict[str, Any]] = []
@@ -225,11 +239,15 @@ def _object_child_fields(
         'key': child.key,
         'kind': kind,
         'type': child.type,
-        'label': child.label or child.description or child.name,
+        'label': resolve_localized(child.label, locale, default_locale)
+        or child.description
+        or child.name,
         'value': format_value(kind, default_value),
         'required': child.required,
         'read_only': not is_new and (parent_read_only or child.read_only),
-        'choices': _choices_for(child),
+        'choices': _choices_for(
+          child, locale=locale, default_locale=default_locale
+        ),
         'selected_values': selected_values,
         'multiple': kind == 'multi_select',
         'pattern': pattern,
@@ -238,7 +256,7 @@ def _object_child_fields(
           f'link-options-{child_name}' if kind in ('link', 'link_list') else ''
         ),
         'link_suggestions': link_choices.get(child_name, []),
-        'hint': child.hint or '',
+        'hint': resolve_localized(child.hint, locale, default_locale) or '',
         'min': child.min,
         'max': child.max,
         'max_length': child.max_length,
@@ -280,6 +298,8 @@ def build_form_fields(
   *,
   is_new: bool = False,
   link_choices: Mapping[str, list[dict[str, str]]] | None = None,
+  locale: str | None = None,
+  default_locale: str | None = None,
 ) -> list[dict[str, Any]]:
   """Describe every form input in schema order, including nested fields."""
   result: list[dict[str, Any]] = []
@@ -294,7 +314,9 @@ def build_form_fields(
     if value is None and spec.default is not MISSING and kind == 'hidden':
       value = spec.default
 
-    label = spec.label or (labels.get(spec.role) if spec.role else None)
+    label = resolve_localized(spec.label, locale, default_locale) or (
+      labels.get(spec.role) if spec.role else None
+    )
     path = [parent.key for parent in parents] + [spec.key]
     name = '__'.join([parent.name for parent in parents] + [spec.name])
     counter_max = None
@@ -303,7 +325,7 @@ def build_form_fields(
         counter_max = seo_check.title_max
       elif spec.role == 'description':
         counter_max = seo_check.description_max
-    choices = _choices_for(spec)
+    choices = _choices_for(spec, locale=locale, default_locale=default_locale)
     pattern_regex, pattern_message = _pattern_for(spec)
     children = (
       _object_child_fields(
@@ -314,6 +336,8 @@ def build_form_fields(
         ),
         link_choices=link_choices,
         parent_name=name,
+        locale=locale,
+        default_locale=default_locale,
       )
       if spec.type == 'list[object]'
       else []
@@ -350,7 +374,12 @@ def build_form_fields(
         ),
         'children': children,
         'items': items,
-        'group': _group(spec, parents),
+        'group': _group(
+          spec,
+          parents,
+          locale=locale,
+          default_locale=default_locale,
+        ),
         'label': label or spec.description or spec.name,
         'value': format_value(kind, value),
         'required': spec.required,
@@ -363,7 +392,7 @@ def build_form_fields(
           not is_new and (spec.read_only or any(p.read_only for p in parents))
         ),
         'col': 'col-md-6' if kind in _HALF_WIDTH_KINDS else 'col-12',
-        'hint': spec.hint
+        'hint': resolve_localized(spec.hint, locale, default_locale)
         or (labels.get('tags_hint', '') if kind == 'list' else ''),
       }
     )

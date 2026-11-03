@@ -414,3 +414,88 @@ def test_seo_check_reports_malformed_urls_without_crashing(tmp_path):
 
   assert 'seo.canonical_invalid' in [issue.code for issue in report.issues]
   assert 'seo.redirect_from_invalid' in [issue.code for issue in report.issues]
+
+
+def test_i18n_check_reports_missing_orphan_unknown_and_duplicate(tmp_path):
+  from fastapi_blog.i18n_collections import I18nConfig
+
+  spec = _spec(
+    tmp_path,
+    FrontmatterSchema(
+      fields=(
+        FieldSpec('title', required=True, i18n='translate'),
+        FieldSpec('status', i18n='duplicate'),
+      )
+    ),
+  )
+  spec = __import__('dataclasses').replace(
+    spec,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+    check_translations='warn',
+  )
+  _write(
+    spec.dir,
+    'hello',
+    '---\ntitle: Hello\nstatus: accepted\n---\nEnglish\n',
+  )
+  (spec.dir / 'hello.ru.md').write_text(
+    '---\ntitle: Привет\nstatus: proposed\n---\nРусский\n',
+    encoding='utf-8',
+  )
+  (spec.dir / 'orphan.ru.md').write_text(
+    '---\ntitle: Orphan\n---\n', encoding='utf-8'
+  )
+  (spec.dir / 'foreign.de.md').write_text(
+    '---\ntitle: Foreign\n---\n', encoding='utf-8'
+  )
+  report = checks.check_collection(spec, root=tmp_path)
+  codes = [issue.code for issue in report.issues]
+  assert report.documents == 1
+  assert 'translation.duplicate_mismatch' in codes
+  assert 'translation.orphan' in codes
+  assert 'translation.unknown_locale' in codes
+  assert 'translation.missing' not in codes
+
+
+def test_i18n_check_reports_missing_translation_by_configured_level(tmp_path):
+  from dataclasses import replace
+
+  from fastapi_blog.i18n_collections import I18nConfig
+
+  spec = _spec(
+    tmp_path,
+    FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  spec = replace(
+    spec,
+    i18n=I18nConfig(('en', 'ru'), 'en'),
+    check_translations='error',
+  )
+  _write(spec.dir, 'hello', '---\ntitle: Hello\n---\nBody\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert [(issue.level, issue.code) for issue in report.issues] == [
+    ('error', 'translation.missing')
+  ]
+
+
+def test_i18n_check_supports_multiple_folders(tmp_path):
+  from dataclasses import replace
+
+  from fastapi_blog.i18n_collections import I18nConfig
+
+  spec = _spec(
+    tmp_path,
+    FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  spec = replace(
+    spec,
+    i18n=I18nConfig(('en', 'ru'), 'en', structure='multiple_folders'),
+    check_translations='warn',
+  )
+  (spec.dir / 'en').mkdir()
+  _write(spec.dir / 'en', 'hello', '---\ntitle: Hello\n---\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert report.documents == 1
+  assert [(issue.level, issue.code) for issue in report.issues] == [
+    ('warning', 'translation.missing')
+  ]

@@ -20,6 +20,7 @@ validators share the same `Issue` model and exit-code rules.
 import dataclasses
 import json
 import pathlib
+import re
 import urllib.parse
 from collections.abc import Mapping
 from typing import Any
@@ -28,6 +29,7 @@ from pydantic import ValidationError
 
 from . import jsonld, store
 from .config import CollectionSpec
+from .i18n_collections import I18nCollection
 from .issues import Issue
 from .models import ROBOTS_DIRECTIVES, SeoCheckConfig, is_http_url_or_root_path
 from .validators import run_validator
@@ -101,6 +103,208 @@ def _schema_code(kind: str) -> str:
   return 'schema.invalid'
 
 
+class _CanonicalI18nStore:
+  """DocumentStore-compatible view of a collection's default locale."""
+
+  def __init__(self, adapter: I18nCollection):
+    self.adapter = adapter
+
+  def list(self) -> list[str]:
+    return [entry.slug for entry in self.adapter.list()]
+
+  def path_for(self, slug: str) -> pathlib.Path:
+    return self.adapter.path_for(slug, self.adapter.config.default_locale)
+
+  def read(self, slug: str) -> store.DocumentRecord:
+    record = self.adapter.read(
+      slug, self.adapter.config.default_locale, fallback=False
+    )
+    return store.DocumentRecord(
+      slug=record.slug,
+      frontmatter=record.frontmatter,
+      body=record.body,
+      etag=record.etag,
+    )
+
+
+def _documents_for_spec(spec: CollectionSpec):
+  if spec.i18n is None:
+    return store.DocumentStore(spec.to_collection())
+  return _CanonicalI18nStore(I18nCollection(spec.to_collection(), spec.i18n))
+
+
+def _locale_suffix(stem: str) -> tuple[str, str] | None:
+  slug, separator, locale = stem.rpartition('.')
+  if not separator or not re.fullmatch(
+    r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', locale
+  ):
+    return None
+  return slug, locale
+
+
+def _check_duplicate_values(
+  fields: tuple[Any, ...],
+  canonical: Mapping[str, Any],
+  translated: Mapping[str, Any],
+  *,
+  slug: str,
+  locale: str,
+  issues: list[Issue],
+  prefix: str = '',
+) -> None:
+  for field in fields:
+    key = field.key
+    label = f'{prefix}.{field.name}' if prefix else field.name
+    canonical_key = key if key in canonical else field.name
+    translated_key = key if key in translated else field.name
+    if field.i18n == 'duplicate':
+      if (
+        canonical_key in canonical
+        and translated_key in translated
+        and canonical[canonical_key] != translated[translated_key]
+      ):
+        issues.append(
+          Issue(
+            'warning',
+            'translation.duplicate_mismatch',
+            f'Duplicate field {label!r} in locale {locale!r} differs '
+            'from the canonical value',
+            slug,
+            label,
+          )
+        )
+    elif field.type == 'object':
+      left = canonical.get(canonical_key)
+      right = translated.get(translated_key)
+      if isinstance(left, Mapping) and isinstance(right, Mapping):
+        _check_duplicate_values(
+          field.fields or (),
+          left,
+          right,
+          slug=slug,
+          locale=locale,
+          issues=issues,
+          prefix=label,
+        )
+    elif field.type == 'list[object]':
+      left = canonical.get(canonical_key)
+      right = translated.get(translated_key)
+      if isinstance(left, list) and isinstance(right, list):
+        for index, (left_item, right_item) in enumerate(zip(left, right)):
+          if isinstance(left_item, Mapping) and isinstance(right_item, Mapping):
+            _check_duplicate_values(
+              field.fields or (),
+              left_item,
+              right_item,
+              slug=slug,
+              locale=locale,
+              issues=issues,
+              prefix=f'{label}[{index}]',
+            )
+
+
+def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
+  """Check locale coverage, orphan files, unknown locales and duplicates."""
+  if spec.i18n is None:
+    return
+  adapter = I18nCollection(spec.to_collection(), spec.i18n)
+  inventory = adapter.inventory()
+  canonical_locale = adapter.config.default_locale
+  missing_level = spec.check_translations
+
+  for slug, paths in sorted(inventory.items()):
+    if canonical_locale not in paths:
+      for locale in sorted(set(paths) - {canonical_locale}):
+        issues.append(
+          Issue(
+            'warning',
+            'translation.orphan',
+            f'Locale {locale!r} has no canonical {canonical_locale!r} entry',
+            slug,
+            locale,
+          )
+        )
+      continue
+
+    if missing_level != 'off':
+      for locale in adapter.config.locales:
+        if locale == canonical_locale or locale in paths:
+          continue
+        issues.append(
+          Issue(
+            'warning' if missing_level == 'warn' else 'error',
+            'translation.missing',
+            f'Translation {locale!r} is missing',
+            slug,
+            locale,
+          )
+        )
+
+    try:
+      canonical = adapter.read(slug, canonical_locale, fallback=False)
+    except (store.ParseError, store.NotFoundError) as exc:
+      issues.append(Issue('error', 'file.malformed', str(exc), slug))
+      continue
+    if spec.schema is None:
+      continue
+    for locale in sorted(set(paths) - {canonical_locale}):
+      try:
+        translated = adapter.read(slug, locale, fallback=False)
+      except (store.ParseError, store.NotFoundError) as exc:
+        issues.append(Issue('error', 'file.malformed', str(exc), slug, locale))
+        continue
+      _check_duplicate_values(
+        spec.schema.fields,
+        canonical.frontmatter,
+        translated.frontmatter,
+        slug=slug,
+        locale=locale,
+        issues=issues,
+      )
+
+  # Unknown locale directories/files are ignored by the runtime store, but
+  # must be visible to `check` instead of silently disappearing.
+  extension = spec.to_collection().extensions[0]
+  if adapter.config.structure == 'multiple_folders':
+    if spec.dir.is_dir():
+      for directory in sorted(spec.dir.iterdir()):
+        if (
+          not directory.is_dir()
+          or directory.name in adapter.config.locales
+          or not re.fullmatch(
+            r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', directory.name
+          )
+        ):
+          continue
+        for path in sorted(directory.glob(f'*.{extension}')):
+          if path.is_file():
+            issues.append(
+              Issue(
+                'warning',
+                'translation.unknown_locale',
+                f'Locale directory {directory.name!r} is not configured',
+                path.stem,
+                directory.name,
+              )
+            )
+  elif spec.dir.is_dir():
+    for path in sorted(spec.dir.glob(f'*.{extension}')):
+      parsed = _locale_suffix(path.stem)
+      if parsed is None:
+        continue
+      slug, locale = parsed
+      if locale not in adapter.config.locales:
+        issues.append(
+          Issue(
+            'warning',
+            'translation.unknown_locale',
+            f'Locale suffix {locale!r} is not configured',
+            slug,
+            locale,
+          )
+        )
+
+
 def _check_documents(
   spec: CollectionSpec, documents: store.DocumentStore, issues: list[Issue]
 ) -> None:
@@ -108,14 +312,14 @@ def _check_documents(
   model = schema.model() if schema is not None else None
   for slug in sorted(documents.list()):
     try:
-      record = documents.read(slug)
+      document_record = documents.read(slug)
     except store.ParseError as exc:
       issues.append(Issue('error', 'file.malformed', str(exc), slug))
       continue
     if model is None:
       continue
     try:
-      model.model_validate(record.frontmatter)
+      model.model_validate(document_record.frontmatter)
     except ValidationError as exc:
       for error in exc.errors():
         field = '.'.join(str(part) for part in error['loc']) or None
@@ -185,10 +389,37 @@ def _check_validators(
 ) -> None:
   if not spec.validators:
     return
+  if spec.i18n is not None:
+    adapter = I18nCollection(spec.to_collection(), spec.i18n)
+    for slug, paths in sorted(adapter.inventory().items()):
+      for locale, absolute_path in sorted(paths.items()):
+        try:
+          record = adapter.read(slug, locale, fallback=False)
+        except (store.ParseError, store.NotFoundError):
+          # Unparseable files are already findings; validators need parsed input.
+          continue
+        try:
+          path = absolute_path.resolve().relative_to(root.resolve())
+        except ValueError:
+          path = absolute_path
+        for validator in spec.validators:
+          issues.extend(
+            run_validator(
+              validator,
+              collection_name=spec.name,
+              slug=slug,
+              path=path,
+              frontmatter=record.frontmatter,
+              cwd=root,
+              locale=locale,
+            )
+          )
+    return
+
   documents = store.DocumentStore(spec.to_collection())
   for slug in sorted(documents.list()):
     try:
-      record = documents.read(slug)
+      document_record = documents.read(slug)
     except (store.ParseError, store.NotFoundError):
       # Unparseable files are already findings; validators need parsed input.
       continue
@@ -200,7 +431,7 @@ def _check_validators(
           collection_name=spec.name,
           slug=slug,
           path=path,
-          frontmatter=record.frontmatter,
+          frontmatter=document_record.frontmatter,
           cwd=root,
         )
       )
@@ -356,7 +587,7 @@ def _check_links(
       index_key = field.value_field or '@id'
       cache_key = f'{target_name}:{index_key}'
       if cache_key not in indexes:
-        target_store = store.DocumentStore(target_spec.to_collection())
+        target_store = _documents_for_spec(target_spec)
         indexes[cache_key] = _link_index(
           target_spec, target_store, field.value_field
         )
@@ -831,7 +1062,7 @@ def check_collection(
       )
     )
     return report
-  documents = store.DocumentStore(spec.to_collection())
+  documents = _documents_for_spec(spec)
   report.documents = len(documents.list())
   has_title = bool(spec.schema and spec.schema.field_for_role('title'))
   if spec.summary is not None or has_title:
@@ -842,6 +1073,7 @@ def check_collection(
         continue
       report.summaries[slug] = spec.summarize(slug, record.frontmatter)
   _check_documents(spec, documents, issues)
+  _check_translations(spec, issues)
   _check_unique(spec, documents, issues)
   _check_links(spec, documents, issues, collections or {spec.name: spec})
   _check_files(spec, documents, base, issues)

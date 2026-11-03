@@ -244,6 +244,7 @@ class HomeView(CustomView):
     schema: FrontmatterSchema | None = None,
     posts_dirname: str | None = None,
     authorize=None,
+    translations_dir: str | None = None,
   ):
     """Initialize home view with locale and frontmatter schema."""
     super().__init__(menu_label=label, icon=icon)
@@ -251,6 +252,7 @@ class HomeView(CustomView):
     self.schema = schema
     self.posts_dirname = posts_dirname
     self.authorize = authorize or default_authorize
+    self.translations_dir = translations_dir
 
   def is_accessible(self, request: Request) -> bool:
     if getattr(request.state, 'blog_user', None) is None:
@@ -305,7 +307,7 @@ class HomeView(CustomView):
     # Load translations from YAML files
     from ..i18n import load_translations
 
-    translations = load_translations(self.locale)
+    translations = load_translations(self.locale, self.translations_dir)
     t = translations['home']
 
     # starlette-admin assigns templates at mount time.

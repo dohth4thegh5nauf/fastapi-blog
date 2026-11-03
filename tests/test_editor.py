@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
 from fastapi_blog.config import CollectionSpec
+from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
 from fastapi_blog.validators import Validator
@@ -858,3 +859,255 @@ def test_create_and_delete_respect_collection_flags(app_dir):
   response = client2.delete('/api/posts/delete/keep-me')
   assert response.status_code == 403
   assert (app_dir / 'posts' / 'keep-me.md').exists()
+
+
+def test_localized_rest_get_put_and_fallback(app_dir):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title', i18n='translate'),)
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+
+  created = client.put(
+    '/api/posts/hello',
+    json={'frontmatter': {'title': 'Hello'}, 'content': 'English body'},
+  )
+  assert created.status_code == 201, created.text
+  assert created.json()['locales_present'] == ['en']
+  assert created.json()['entry_etag']
+
+  fallback = client.get('/api/posts/hello?locale=ru')
+  assert fallback.status_code == 200
+  assert fallback.json()['locale'] == 'en'
+  assert fallback.json()['fallback_used'] is True
+  assert fallback.json()['locales_present'] == ['en']
+
+  translated = client.put(
+    '/api/posts/hello?locale=ru',
+    json={'frontmatter': {}, 'content': 'Russian body'},
+  )
+  assert translated.status_code == 200, translated.text
+  assert translated.json()['locales_present'] == ['en', 'ru']
+
+  russian = client.get('/api/posts/hello?locale=ru&fallback=false')
+  assert russian.status_code == 200
+  assert russian.json()['locale'] == 'ru'
+  assert russian.json()['fallback_used'] is False
+  assert russian.json()['content'] == 'Russian body'
+
+
+def test_localized_create_requires_create_permission(app_dir):
+  schema = FrontmatterSchema(fields=(FieldSpec('title', required=True),))
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en'),
+  )
+  app = add_editor_to_app(
+    FastAPI(),
+    ui=False,
+    require_auth=False,
+    collection_spec=spec,
+    authorize=lambda request, resource, action: action == 'update',
+  )
+  response = TestClient(app).put(
+    '/api/posts/new',
+    json={'frontmatter': {'title': 'Title'}, 'content': 'Body'},
+  )
+  assert response.status_code == 403
+  assert not (app_dir / 'posts' / 'new.md').exists()
+
+
+def test_localized_rest_multi_locale_put_uses_entry_etag(app_dir):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title', i18n='translate'),)
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  created = client.put(
+    '/api/posts/hello',
+    json={
+      'locales': {
+        'en': {'frontmatter': {'title': 'Hello'}, 'content': 'English'},
+        'ru': {'frontmatter': {}, 'content': 'Русский'},
+      }
+    },
+  )
+  assert created.status_code == 201, created.text
+  entry_etag = created.json()['entry_etag']
+  changed = client.put(
+    '/api/posts/hello',
+    headers={'If-Match': entry_etag},
+    json={
+      'locales': {
+        'en': {'frontmatter': {'title': 'Hello 2'}, 'content': 'English 2'},
+        'ru': {'frontmatter': {}, 'content': 'Русский 2'},
+      }
+    },
+  )
+  assert changed.status_code == 200, changed.text
+  stale = client.put(
+    '/api/posts/hello',
+    headers={'If-Match': entry_etag},
+    json={
+      'locales': {
+        'en': {'frontmatter': {'title': 'Stale'}, 'content': 'Stale'},
+      }
+    },
+  )
+  assert stale.status_code == 412
+
+
+def test_localized_rest_duplicate_and_nontranslated_fields(app_dir):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, role='title', i18n='translate'),
+      FieldSpec('status', i18n='duplicate'),
+      FieldSpec('visibility', i18n='none'),
+    )
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  saved = client.put(
+    '/api/posts/entry',
+    json={
+      'locales': {
+        'en': {
+          'frontmatter': {
+            'title': 'Original',
+            'status': 'accepted',
+            'visibility': 'public',
+          },
+          'content': 'English',
+        },
+        'ru': {
+          'frontmatter': {
+            'title': 'Перевод',
+            'status': 'proposed',
+            'visibility': 'private',
+          },
+          'content': 'Русский',
+        },
+      }
+    },
+  )
+  assert saved.status_code == 201, saved.text
+  assert [issue['code'] for issue in saved.json()['issues']] == [
+    'translation.duplicate_mismatch'
+  ]
+  stored = (app_dir / 'posts' / 'entry.ru.md').read_text(encoding='utf-8')
+  assert 'status:' not in stored
+  assert 'visibility:' not in stored
+  russian = client.get('/api/posts/entry?locale=ru')
+  assert russian.json()['frontmatter'] == {
+    'title': 'Перевод',
+    'status': 'accepted',
+    'visibility': 'public',
+  }
+
+
+def test_localized_rest_can_write_duplicate_mirrors(app_dir):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, role='title', i18n='translate'),
+      FieldSpec('status', i18n='duplicate'),
+    )
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', write_duplicates=True),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  saved = client.put(
+    '/api/posts/entry',
+    json={
+      'locales': {
+        'en': {
+          'frontmatter': {'title': 'Original', 'status': 'accepted'},
+          'content': 'English',
+        },
+        'ru': {
+          'frontmatter': {'title': 'Перевод', 'status': 'proposed'},
+          'content': 'Russian',
+        },
+      }
+    },
+  )
+  assert saved.status_code == 201, saved.text
+  stored = (app_dir / 'posts' / 'entry.ru.md').read_text(encoding='utf-8')
+  assert 'status: accepted' in stored
+  assert [issue['code'] for issue in saved.json()['issues']] == [
+    'translation.duplicate_mismatch'
+  ]
+
+
+def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title', i18n='translate'),)
+  )
+  spec = CollectionSpec(
+    name='posts',
+    dir=app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+    validators=(
+      Validator.from_dict(
+        {
+          'name': 'reject-ru',
+          'argv': [sys.executable, '-c', 'import sys; sys.exit(1)'],
+          'blocking': ['error'],
+        }
+      ),
+    ),
+  )
+  app = FastAPI()
+  app = add_editor_to_app(
+    app, ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  rejected = client.put(
+    '/api/posts/hello',
+    json={
+      'locales': {
+        'en': {'frontmatter': {'title': 'Hello'}, 'content': 'English'},
+        'ru': {'frontmatter': {}, 'content': 'Russian'},
+      }
+    },
+  )
+  assert rejected.status_code == 422
+  assert not (app_dir / 'posts' / 'hello.md').exists()
+  assert not (app_dir / 'posts' / 'hello.ru.md').exists()

@@ -1,4 +1,5 @@
 import os
+import pathlib
 import re
 from collections.abc import Callable
 from datetime import date, datetime
@@ -71,6 +72,7 @@ def add_blog_to_fastapi(
   validators: tuple[Validator, ...] = (),
   collection_spec: CollectionSpec | None = None,
   authorize: Authorizer | None = None,
+  translations_dir: str | pathlib.Path | None = None,
 ) -> FastAPI:
   """Add blog to FastAPI application.
 
@@ -97,6 +99,7 @@ def add_blog_to_fastapi(
                         `SessionMiddleware`; otherwise the app fails at startup
                         with `ConfigurationError`.
       locales: List of supported locales for blog UI (default: ['en'])
+      translations_dir: Optional project directory containing UI translation YAML overlays.
       default_locale: Default locale when Accept-Language not matched (default: 'en')
       admin_username: Admin username for REST API auth (optional)
       admin_password: Admin password for REST API auth (optional)
@@ -167,6 +170,8 @@ def add_blog_to_fastapi(
   """
   if collection_spec is not None:
     posts_dirname = str(collection_spec.dir)
+    if translations_dir is None:
+      translations_dir = collection_spec.translations_dir
     if frontmatter_schema is not None:
       collection_spec = collection_spec.with_schema(frontmatter_schema)
     else:
@@ -243,6 +248,7 @@ def add_blog_to_fastapi(
     locale=default_locale,
     prefix=prefix,
     jsonld_routes=jsonld_routes,
+    translations_dir=translations_dir,
   )
 
   # Mount main router without locale prefix
@@ -270,6 +276,7 @@ def add_blog_to_fastapi(
       locale=locale,
       prefix=prefix,
       jsonld_routes=jsonld_routes,
+      translations_dir=translations_dir,
     )
 
     # Mount with locale prefix

@@ -1,5 +1,6 @@
 import importlib
 import os
+import pathlib
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
@@ -81,6 +82,7 @@ def setup_fastapi_blog(
   insecure_dev: bool = False,
   https_only: bool = False,
   auth_users: dict[str, dict[str, str]] | None = None,
+  translations_dir: str | pathlib.Path | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
@@ -121,6 +123,8 @@ def setup_fastapi_blog(
       collection_spec: Optional collection from `load_project()`. Its
           directory/schema are shared by the blog, REST API and admin; a
           configured `slug_template` enables generated slugs.
+      translations_dir: Optional project directory containing UI translation
+          YAML overlays; derived from `collection_spec` when omitted.
 
   Returns:
       Admin instances by locale, or an empty dict when `admin=False`.
@@ -131,6 +135,8 @@ def setup_fastapi_blog(
   """
   if collection_spec is not None:
     posts_dirname = str(collection_spec.dir)
+    if translations_dir is None:
+      translations_dir = collection_spec.translations_dir
     if frontmatter_schema is not None:
       collection_spec = collection_spec.with_schema(frontmatter_schema)
     else:
@@ -168,6 +174,7 @@ def setup_fastapi_blog(
     sanitize_html=sanitize_html,
     collection_spec=collection_spec,
     authorize=authorize,
+    translations_dir=translations_dir,
   )
   if add_admin is None:
     return {}
@@ -187,4 +194,5 @@ def setup_fastapi_blog(
     https_only=https_only,
     auth_users=auth_users,
     sanitize_html=sanitize_html,
+    translations_dir=translations_dir,
   )

@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers, jsonld, store
-from .i18n import Translator
+from .i18n import Translator, get_all_locale_names
 from .models import SLUG_RE, FrontmatterSchema, SeoConfig
 from .seo import build_head, resolve_seo_config
 
@@ -26,6 +26,7 @@ def get_blog_router(
   frontmatter_schema: FrontmatterSchema | None = None,
   seo: SeoConfig | None = None,
   jsonld_routes: bool = False,
+  translations_dir: str | pathlib.Path | None = None,
 ) -> APIRouter:
   router = APIRouter()
 
@@ -130,9 +131,10 @@ def get_blog_router(
       context['site_name'] = effective_seo.site_name
 
     current_locale = _get_locale(request)
-    context['t'] = Translator(current_locale)
+    context['t'] = Translator(current_locale, translations_dir)
     context['locale'] = current_locale
     context['available_locales'] = locales
+    context['locale_names'] = get_all_locale_names(translations_dir, locales)
     context['default_locale'] = default_locale
 
     # Add locale-aware url_for function

@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from pydantic import ValidationError
 from starlette.requests import Request
@@ -86,6 +87,11 @@ class MarkdownPost:
     content: str,
     schema: FrontmatterSchema | None = None,
     etag: str | None = None,
+    *,
+    entry_etag: str | None = None,
+    locales_present: tuple[str, ...] = (),
+    locale: str | None = None,
+    fallback_used: bool = False,
   ):
     """Initialize markdown post with slug, frontmatter, content and schema."""
     self.slug = slug
@@ -93,6 +99,10 @@ class MarkdownPost:
     self.content = content
     self.schema = schema or DEFAULT_SCHEMA
     self.etag = etag
+    self.entry_etag = entry_etag
+    self.locales_present = locales_present
+    self.locale = locale
+    self.fallback_used = fallback_used
     self.title = self._role_value('title', slug)
     self.date = self._role_value('date', '')
     self.published = bool(self._role_value('published', False))
@@ -146,49 +156,96 @@ class MarkdownFileManager:
       validators=validators,
     )
 
-  def list_posts(self) -> list[MarkdownPost]:
-    """List all markdown posts."""
+  def list_posts(self, locale: str | None = None) -> list[MarkdownPost]:
+    """List canonical entries, displaying the requested locale if enabled."""
     posts = []
-    for slug in self.store.list():
+    adapter = self.service.i18n_documents
+    if adapter is not None:
+      target_locale = locale or adapter.config.default_locale
+      slugs = [entry.slug for entry in adapter.list()]
+    else:
+      target_locale = None
+      slugs = self.store.list()
+
+    for slug in slugs:
       try:
-        post = self.load_post(slug)
+        post = self.load_post(slug, locale=target_locale)
         if post:
           posts.append(post)
-      except Exception as e:
-        print(f'Error loading {slug}: {e}')
+      except Exception as exc:
+        print(f'Error loading {slug}: {exc}')
 
-    # Sort by date descending (handle both datetime and string)
-    def get_sort_key(p):
-      if not p.date:
+    def get_sort_key(post: MarkdownPost):
+      if not post.date:
         return ''
-      # Convert datetime to string for consistent comparison
-      if isinstance(p.date, datetime):
-        return p.date.isoformat()
-      return str(p.date)
+      if isinstance(post.date, datetime):
+        return post.date.isoformat()
+      return str(post.date)
 
     posts.sort(key=get_sort_key, reverse=True)
     return posts
 
-  def load_post(self, slug: str) -> MarkdownPost | None:
-    """Load a single post by slug."""
+  def load_post(
+    self, slug: str, *, locale: str | None = None
+  ) -> MarkdownPost | None:
+    """Load a canonical document or one localized representation."""
+    adapter = self.service.i18n_documents
+    if adapter is not None:
+      target_locale = locale or adapter.config.default_locale
+      if target_locale not in adapter.config.locales:
+        raise ValueError(f'Unknown content locale: {target_locale!r}')
+      try:
+        record = adapter.read(slug, target_locale, fallback=True)
+      except FileNotFoundError:
+        return None
+      localized_frontmatter = dict(record.frontmatter)
+      body = record.body
+      if record.locale != adapter.config.default_locale:
+        canonical = adapter.read(
+          slug, adapter.config.default_locale, fallback=False
+        )
+        for field in self.schema.fields:
+          if field.i18n in ('none', 'duplicate'):
+            if field.key in canonical.frontmatter:
+              localized_frontmatter[field.key] = canonical.frontmatter[
+                field.key
+              ]
+            else:
+              localized_frontmatter.pop(field.key, None)
+        if not adapter.config.translate_body:
+          body = canonical.body
+      present = adapter.locales_present(slug)
+      return MarkdownPost(
+        slug,
+        localized_frontmatter,
+        body.strip(),
+        self.schema,
+        record.etag,
+        entry_etag=adapter.entry_etag(slug),
+        locales_present=present,
+        locale=target_locale,
+        fallback_used=record.locale != target_locale,
+      )
+
     try:
-      record = self.store.read(slug)
+      ordinary_record = self.store.read(slug)
     except FileNotFoundError:
       return None
-    except ValueError as e:
-      # Invalid slug: no such post. Malformed YAML frontmatter on an
-      # otherwise valid file: degrade gracefully (one broken post shouldn't
-      # break the whole admin listing) by treating the file as plain body.
+    except ValueError as exc:
       path = self.store.path_for(slug) if SLUG_RE.fullmatch(slug) else None
       if path is None:
         return None
-      print(f'Error parsing frontmatter for {slug}: {e}')
+      print(f'Error parsing frontmatter for {slug}: {exc}')
       frontmatter: dict[str, Any] = {}
       body = path.read_text(encoding='utf-8')
       return MarkdownPost(slug, frontmatter, body.strip(), self.schema)
 
     return MarkdownPost(
-      slug, record.frontmatter, record.body.strip(), self.schema, record.etag
+      slug,
+      ordinary_record.frontmatter,
+      ordinary_record.body.strip(),
+      self.schema,
+      ordinary_record.etag,
     )
 
   def save_post(
@@ -393,6 +450,81 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
 
     slug_value = data.get('slug')
     slug = str(slug_value).strip() if slug_value else None
+    adapter = self.manager.service.i18n_documents
+    content_locale = data.get('content_locale')
+    if adapter is not None and not content_locale:
+      await self._require(request, 'update')
+      return JSONResponse({'detail': 'A content locale is required'}, 400)
+    if adapter is not None and content_locale:
+      if not slug:
+        return JSONResponse(
+          {'detail': 'A canonical slug is required for a translation'}, 400
+        )
+      if content_locale not in adapter.config.locales:
+        return JSONResponse({'detail': 'Unknown content locale'}, 400)
+      is_new = not adapter.has_entry(slug)
+      if is_new and content_locale != adapter.config.default_locale:
+        return JSONResponse(
+          {'detail': 'Create the canonical locale before adding translations'},
+          409,
+        )
+      await self._require(request, 'create' if is_new else 'update')
+      frontmatter = data.get('frontmatter', {})
+      content = data.get('content', '')
+      if not isinstance(frontmatter, dict) or not isinstance(content, str):
+        return JSONResponse(
+          {'detail': 'frontmatter must be an object and content must be text'},
+          400,
+        )
+      locale_path = adapter.path_for(slug, content_locale)
+      etag = data.get('etag')
+      entry_etag = data.get('entry_etag')
+      if not is_new and locale_path.is_file() and not etag:
+        return JSONResponse(
+          {'detail': 'The locale edit form is missing its etag; reload'}, 428
+        )
+      if not is_new and not locale_path.is_file() and not entry_etag:
+        return JSONResponse(
+          {'detail': 'The entry changed or the form is stale; reload'}, 428
+        )
+      try:
+        result = self.manager.service.save_localized(
+          slug,
+          {content_locale: (frontmatter, content)},
+          if_match=(
+            {content_locale: str(etag)}
+            if etag and locale_path.is_file()
+            else None
+          ),
+          expected_entry_etag=(str(entry_etag) if entry_etag else None),
+          user=getattr(request.state, 'blog_user', None),
+        )
+      except BlockingValidationError as exc:
+        return JSONResponse(
+          {'detail': {'issues': [issue.to_dict() for issue in exc.issues]}}, 422
+        )
+      except ValidationError as exc:
+        return JSONResponse({'detail': str(exc)}, 422)
+      except store.ConflictError as exc:
+        return JSONResponse({'detail': str(exc)}, exc.status_code)
+      except store.OperationNotAllowedError as exc:
+        return JSONResponse({'detail': str(exc)}, 403)
+      except (ValueError, OSError, store.NotFoundError) as exc:
+        return JSONResponse({'detail': str(exc)}, 400)
+      response = JSONResponse(
+        {
+          'slug': result.slug,
+          'status': result.status,
+          'locale': content_locale,
+          'locales_present': list(result.locales_present),
+          'entry_etag': result.entry_etag,
+          'issues': [issue.to_dict() for issue in result.issues],
+        },
+        status_code=201 if result.status == 'created' else 200,
+      )
+      response.headers['ETag'] = result.etags[content_locale]
+      return response
+
     is_new = not slug or not self.manager.store.exists(slug)
     action = 'create' if is_new else 'update'
     await self._require(request, action)
@@ -451,16 +583,26 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
     if not if_match:
       return JSONResponse({'detail': 'If-Match header is required'}, 428)
     try:
-      self.manager.service.delete(
-        slug,
-        if_match=if_match,
-        user=getattr(request.state, 'blog_user', None),
-      )
+      if self.manager.service.i18n_documents is not None:
+        self.manager.service.delete_localized_entry(
+          slug,
+          cascade=request.query_params.get('cascade') == 'true',
+          expected_entry_etag=if_match,
+          user=getattr(request.state, 'blog_user', None),
+        )
+      else:
+        self.manager.service.delete(
+          slug,
+          if_match=if_match,
+          user=getattr(request.state, 'blog_user', None),
+        )
     except store.ConflictError as exc:
       return JSONResponse({'detail': str(exc)}, exc.status_code)
     except store.OperationNotAllowedError as exc:
       return JSONResponse({'detail': str(exc)}, 403)
-    except (ValueError, FileNotFoundError, store.NotFoundError) as exc:
+    except ValueError as exc:
+      return JSONResponse({'detail': str(exc)}, 409)
+    except (FileNotFoundError, store.NotFoundError) as exc:
       return JSONResponse({'detail': str(exc)}, 404)
     return JSONResponse({'slug': slug, 'status': 'deleted'}, 200)
 
@@ -477,6 +619,7 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
     authorize: Authorizer | None = None,
     collection_specs: Mapping[str, CollectionSpec] | None = None,
     validators: tuple[Validator, ...] = (),
+    translations_dir: str | None = None,
   ):
     """Initialize list view with posts directory, locale and schema."""
     super().__init__(
@@ -504,18 +647,33 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
     )
     self.locale = locale
     self.authorize = authorize or default_authorize
+    self.translations_dir = translations_dir
 
   @route('')
   async def index(self, request: Request) -> Response:
     """Render list of posts."""
     await self._require(request, 'read')
-    posts = self.manager.list_posts()
+    adapter = self.manager.service.i18n_documents
+    content_locale = None
+    locale_options: tuple[str, ...] = ()
+    if adapter is not None:
+      content_locale = request.query_params.get('content_locale') or (
+        self.locale
+        if self.locale in adapter.config.locales
+        else adapter.config.default_locale
+      )
+      if content_locale not in adapter.config.locales:
+        return JSONResponse({'detail': 'Unknown content locale'}, 400)
+      locale_options = adapter.config.locales
+    posts = self.manager.list_posts(locale=content_locale)
 
     # Convert to dict for template
     posts_data = [
       {
         'slug': p.slug,
-        'etag': p.etag or '',
+        'etag': p.entry_etag or p.etag or '',
+        'locales_present': p.locales_present,
+        'fallback_used': p.fallback_used,
         'title': p.title,
         'summary': (
           self.collection_spec.summarize(p.slug, p.frontmatter)
@@ -533,55 +691,43 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       for p in posts
     ]
 
-    # Use locale from instance (set during initialization)
-    locale = self.locale
+    from ..i18n import load_translations
 
-    # Translations dictionary
-    translations = {
-      'ru': {
-        'posts': 'Посты',
-        'admin': 'Админ',
-        'new_post': 'Новый пост',
-        'title': 'Заголовок',
-        'slug': 'URL',
-        'date': 'Дата',
-        'status': 'Статус',
-        'tags': 'Теги',
-        'actions': 'Действия',
-        'published': 'Опубликовано',
-        'draft': 'Черновик',
-        'edit': 'Редактировать',
-        'delete': 'Удалить',
-        'no_posts_found': 'Посты не найдены.',
-        'create_first_post': 'Создайте свой первый пост',
-        'delete_confirm': 'Удалить пост',
-        'error': 'Ошибка',
-        'failed_to_delete': 'Не удалось удалить',
-      },
-      'en': {
-        'posts': 'Posts',
-        'admin': 'Admin',
-        'new_post': 'New Post',
-        'title': 'Title',
-        'slug': 'Slug',
-        'date': 'Date',
-        'status': 'Status',
-        'tags': 'Tags',
-        'actions': 'Actions',
-        'published': 'Published',
-        'draft': 'Draft',
-        'edit': 'Edit',
-        'delete': 'Delete',
-        'no_posts_found': 'No posts found.',
-        'create_first_post': 'Create your first post',
-        'delete_confirm': 'Delete post',
-        'error': 'Error',
-        'failed_to_delete': 'Failed to delete',
-      },
+    translations = load_translations(self.locale, self.translations_dir)
+    post_t = translations.get('post', {})
+    nav_t = translations.get('nav', {})
+    home_t = translations.get('home', {})
+    list_t = translations.get('post_list', {})
+    actions_t = translations.get('action', {})
+    messages_t = translations.get('message', {})
+    t = {
+      'posts': nav_t.get('posts', post_t.get('posts', 'Posts')),
+      'admin': post_t.get('admin', 'Admin'),
+      'new_post': home_t.get('new_post', post_t.get('create_new', 'New Post')),
+      'title': post_t.get('title', 'Title'),
+      'slug': post_t.get('slug', 'Slug'),
+      'date': post_t.get('date', 'Date'),
+      'status': list_t.get('status', 'Status'),
+      'tags': post_t.get('tags', 'Tags'),
+      'actions': list_t.get('actions', 'Actions'),
+      'published': post_t.get('published', 'Published'),
+      'draft': list_t.get('draft', 'Draft'),
+      'edit': actions_t.get('edit', 'Edit'),
+      'delete': actions_t.get('delete', 'Delete'),
+      'no_posts_found': list_t.get('no_posts_found', 'No posts found'),
+      'create_first_post': home_t.get(
+        'create_first_post', 'Create your first post'
+      ),
+      'delete_confirm': list_t.get('delete_confirm', 'Delete this post?'),
+      'delete_translations_confirm': list_t.get(
+        'delete_translations_confirm',
+        'Delete all translations of this post too?',
+      ),
+      'error': messages_t.get('error', 'Error'),
+      'failed_to_delete': list_t.get(
+        'failed_to_delete', 'Failed to delete post'
+      ),
     }
-
-    # Get translations for current locale (default to English)
-    t = translations.get(locale, translations['en'])
 
     # starlette-admin assigns templates at mount time.
     assert self.templates is not None  # nosec B101
@@ -598,6 +744,8 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
         },
         'base_url': request.scope['root_path'],
         't': t,  # Add translations
+        'locale_options': locale_options,
+        'content_locale': content_locale,
       },
     )
 
@@ -622,6 +770,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
     authorize: Authorizer | None = None,
     collection_specs: Mapping[str, CollectionSpec] | None = None,
     validators: tuple[Validator, ...] = (),
+    translations_dir: str | None = None,
   ):
     """Initialize edit view with posts directory, locale and schema."""
     super().__init__(
@@ -644,6 +793,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
     )
     self.locale = locale
     self.authorize = authorize or default_authorize
+    self.translations_dir = translations_dir
 
   @route('')
   async def index(self, request: Request) -> Response:
@@ -659,7 +809,35 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         context={'error': 'Missing slug parameter'},
         status_code=400,
       )
-    post = self.manager.load_post(slug)
+    adapter = self.manager.service.i18n_documents
+    content_locale = None
+    locale_tabs = []
+    locale_exists = True
+    if adapter is not None:
+      requested_locale = request.query_params.get('content_locale')
+      content_locale = requested_locale or (
+        self.locale
+        if self.locale in adapter.config.locales
+        else adapter.config.default_locale
+      )
+      if content_locale not in adapter.config.locales:
+        return self.templates.TemplateResponse(
+          request=request,
+          name='error.html',
+          context={'error': f'Unknown content locale: {content_locale}'},
+          status_code=400,
+        )
+      locale_exists = content_locale in adapter.locales_present(slug)
+      locale_tabs = [
+        {
+          'locale': item,
+          'present': item in adapter.locales_present(slug),
+          'active': item == content_locale,
+          'url': f'{request.url.path}?content_locale={quote(item)}',
+        }
+        for item in adapter.config.locales
+      ]
+    post = self.manager.load_post(slug, locale=content_locale)
 
     if not post:
       return self.templates.TemplateResponse(
@@ -675,14 +853,41 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
     # Get translations for this view's locale
     from ..i18n import load_translations
 
-    translations = load_translations(self.locale)
+    translations = load_translations(self.locale, self.translations_dir)
     t = translations['post']
 
+    display_schema = self.schema
+    if adapter is not None and content_locale != adapter.config.default_locale:
+
+      def relax_required(fields):
+        return tuple(
+          replace(
+            field,
+            required=(
+              field.required
+              if adapter.config.required_in_translations
+              else False
+            ),
+            read_only=field.read_only or field.i18n in ('none', 'duplicate'),
+            fields=(
+              relax_required(field.fields) if field.fields is not None else None
+            ),
+          )
+          for field in fields
+        )
+
+      display_schema = replace(
+        self.schema, fields=relax_required(self.schema.fields)
+      )
     form_fields = build_form_fields(
-      self.schema,
+      display_schema,
       post.frontmatter,
       t,
       link_choices=self.manager.link_suggestions(),
+      locale=self.locale,
+      default_locale=(
+        adapter.config.default_locale if adapter is not None else self.locale
+      ),
     )
 
     return self.templates.TemplateResponse(
@@ -696,7 +901,17 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
           'content': post.content,
           'frontmatter': post.frontmatter,
           'etag': post.etag or '',
+          'entry_etag': post.entry_etag or '',
         },
+        'content_locale': content_locale,
+        'locale_tabs': locale_tabs,
+        'locale_exists': locale_exists,
+        'fallback_used': post.fallback_used,
+        'body_read_only': bool(
+          adapter is not None
+          and content_locale != adapter.config.default_locale
+          and not adapter.config.translate_body
+        ),
         'form_fields': form_fields,
         'form_fields_meta': form_fields_meta(form_fields),
         'diagnostics': self.manager.diagnostics_for_post(slug),
@@ -720,6 +935,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
     authorize: Authorizer | None = None,
     collection_specs: Mapping[str, CollectionSpec] | None = None,
     validators: tuple[Validator, ...] = (),
+    translations_dir: str | None = None,
   ):
     """Initialize create view with posts directory, locale and schema."""
     super().__init__(
@@ -747,6 +963,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
     )
     self.locale = locale
     self.authorize = authorize or default_authorize
+    self.translations_dir = translations_dir
 
   @route('')
   async def index(self, request: Request) -> Response:
@@ -757,15 +974,23 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
     # Get translations for this view's locale
     from ..i18n import load_translations
 
-    translations = load_translations(self.locale)
+    translations = load_translations(self.locale, self.translations_dir)
     t = translations['post']
 
+    adapter = self.manager.service.i18n_documents
+    content_locale = (
+      adapter.config.default_locale if adapter is not None else None
+    )
     form_fields = build_form_fields(
       self.schema,
       {},
       t,
       is_new=True,
       link_choices=self.manager.link_suggestions(),
+      locale=self.locale,
+      default_locale=(
+        adapter.config.default_locale if adapter is not None else self.locale
+      ),
     )
 
     return self.templates.TemplateResponse(
@@ -779,12 +1004,18 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
           'content': '',
           'frontmatter': {},
           'etag': '',
+          'entry_etag': '',
         },
+        'content_locale': content_locale,
+        'locale_tabs': [],
+        'locale_exists': False,
+        'fallback_used': False,
         'form_fields': form_fields,
         'form_fields_meta': form_fields_meta(form_fields),
         'is_new': True,
         'auto_slug': bool(
-          self.collection_spec is not None
+          adapter is None
+          and self.collection_spec is not None
           and self.collection_spec.slug_template is not None
         ),
         'base_url': request.scope['root_path'],
