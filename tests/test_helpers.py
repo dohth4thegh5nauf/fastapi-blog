@@ -22,6 +22,17 @@ def test_list_published_posts_failure():
   assert len(posts) == 0
 
 
+def test_list_posts_accepts_an_absolute_directory(tmp_path):
+  (tmp_path / 'hello.md').write_text(
+    '---\ntitle: Hello\ndate: "2026-01-01"\npublished: true\n'
+    'tags: []\n---\nHello world\n',
+    encoding='utf-8',
+  )
+  posts = helpers.list_posts(posts_dirname=str(tmp_path))
+  assert len(posts) == 1
+  assert posts[0]['title'] == 'Hello'
+
+
 def test_strict_mode_skips_posts_with_extra_fields(caplog):
   posts = helpers.list_posts(posts_dirname='tests/examples/posts', strict=True)
   assert posts == ()

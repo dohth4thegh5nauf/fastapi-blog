@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.9.0] - Unreleased
 
+### Fixed
+
+- Allow public post listings to read an absolute posts directory.
+
 ### Development tooling and release workflow
 
 - Routed Makefile lint, format, type-check and test commands through the

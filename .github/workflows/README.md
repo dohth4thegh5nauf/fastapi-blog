@@ -51,8 +51,9 @@ the branch commit and the PR merge result are tested.
 
 ## Required status checks
 
-Configure branch protection for `main` in GitHub Settings. Require these
-stable job checks:
+This private development repository does not require branch protection. If
+the destination repository uses required checks, configure these stable job
+checks in its branch protection rules:
 
 - `Validate PR / validate-required`
 - `Test fastapi-blog / tests-passed`

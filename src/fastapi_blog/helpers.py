@@ -232,7 +232,7 @@ def _read_posts(
   effective = resolve_schema(strict, schema)
   Model = frontmatter_model(strict, schema)
   posts: list[dict] = []
-  for post in pathlib.Path('.').glob(f'{posts_dirname}/*.md'):
+  for post in pathlib.Path(posts_dirname).glob('*.md'):
     try:
       data, _ = store.read_document(post)
     except ValueError as exc:

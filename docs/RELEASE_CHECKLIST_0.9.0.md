@@ -47,20 +47,17 @@ Treat that as a security finding to investigate and resolve or document; do
 not change the exit code or severity threshold merely to make CI green. The
 latest pull request passed the Trivy gate in GitHub Actions.
 
-If branch protection is available for the repository plan, configure it for
-`main` in GitHub Settings. Require
-the four stable aggregate checks listed in
-[`.github/workflows/README.md`](../.github/workflows/README.md):
-`Validate PR / validate-required`, `Test fastapi-blog / tests-passed`,
-`API Contract / api-smoke` and `Security / security-passed`.
+This repository is a private development source. Branch protection here is
+not a release gate; release preparation and publication happen in the
+destination repository. Decide its access and protection policy there.
 
 Before publishing the final candidate, verify the source distribution and
 wheel contain the expected package templates and translations, install the
 wheel in a clean environment, and run smoke tests for
 `setup_fastapi_blog(admin=False)` and the admin extra. Confirm that missing
 credentials fail at startup and that no development credentials are enabled
-implicitly. This is a manual final-candidate gate and has not been completed
-for the release candidate in this handoff. On the tagged release, also update
+implicitly. Repeat this manual gate against the final release commit in the destination
+repository, since any migration or release metadata changes alter the candidate. On the tagged release, also update
 `compose.yaml`'s `image: fastapi-blog:<version>` to match the published image
 tag (currently the file says `fastapi-blog:0.9.0`) and validate with
 `docker compose config --quiet`.
@@ -107,14 +104,23 @@ Release verification performed locally on top of the test gate:
   with an explicit password and strong secret it mounts the `en`/`ru`
   panels.
 
-What remains before publishing: verify branch protection availability, install
-the wheel built from the final tagged commit in a clean environment and run
-core/admin smoke tests, confirm the Compose image tag, set the changelog
-release date, build final artifacts from the tagged commit, and publish. The
-latest container CI and image publication passed; CodeQL is skipped by default
-for private repositories unless explicitly enabled.
+## Handoff to the release repository
 
-**Release status: GitHub CI and container publication passed. Branch protection
-availability and final tagged-wheel smoke remain to be resolved.** Keep `CHANGELOG.md` at
-`[0.9.0] - Unreleased` until the CI matrix and manual release gates above
-are green.
+- Transfer the intended commit and history to the destination chosen by the
+  maintainer. Preserve the upstream attribution and license.
+- Replace the upstream project URLs in `pyproject.toml` and clone instructions
+  in `README.md`, `CONTRIBUTING.md` and `QUICKSTART.md` with the confirmed
+  destination URLs. Keep references that intentionally identify the upstream
+  fork. Verify ownership and availability of the package name before publishing.
+- Review the destination's GitHub Actions settings, credentials and publishing
+  permissions. `push-publish-docker.yaml` uses `github.repository` for GHCR;
+  pushes to `main` and version tags publish images under the destination owner.
+  Check registry visibility, retention of candidate tags, optional CodeQL and
+  Codecov configuration before enabling the workflows.
+- Update the changelog date and confirm the Compose image tag. Run CI and the
+  clean wheel smoke tests on the final release commit, then tag and publish
+  through the release repository's approved channels.
+
+The development repository's GitHub CI and container publication passed.
+Keep `CHANGELOG.md` at `[0.9.0] - Unreleased` until the destination's final
+release candidate is verified and ready for publication.
