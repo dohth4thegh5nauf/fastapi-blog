@@ -1,3 +1,4 @@
+import datetime
 import re
 from typing import Annotated, Any
 
@@ -26,6 +27,11 @@ class StrictFrontmatter(BaseModel):
   published: bool = False
   tags: list[str] = Field(default_factory=list)
   description: str | None = None
+
+  @field_validator('date', mode='before')
+  @classmethod
+  def _normalize_date_string(cls, value: Any) -> Any:
+    return value.isoformat() if isinstance(value, datetime.date) else value
 
   @field_validator('tags', mode='before')
   @classmethod

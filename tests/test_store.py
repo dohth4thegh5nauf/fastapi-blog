@@ -1,5 +1,6 @@
 """Frontmatter parsing/serialization and atomic writes (phase B, 4.2-4.4)."""
 
+import datetime
 import re
 
 import pytest
@@ -35,6 +36,20 @@ def test_bom_is_skipped_before_the_opening_marker():
   fm, body = store.parse_document('﻿---\ntitle: Hi\n---\nBody\n')
   assert fm == {'title': 'Hi'}
   assert body == 'Body\n'
+
+
+def test_unquoted_iso_dates_and_timestamps_keep_yaml_native_types():
+  fm, _ = store.parse_document(
+    '---\n'
+    'date_only: 2024-02-01\n'
+    'date_time: 2024-02-01T09:15:00\n'
+    '---\n'
+    'Body\n'
+  )
+  assert fm == {
+    'date_only': datetime.date(2024, 2, 1),
+    'date_time': datetime.datetime(2024, 2, 1, 9, 15),
+  }
 
 
 def test_closing_marker_may_be_ellipsis():

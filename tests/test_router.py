@@ -25,6 +25,40 @@ def test_blog_index():
   assert '<title>Recent Writings</title>' in response.content.decode()
 
 
+def test_demo_posts_with_unquoted_timestamps_are_not_skipped():
+  app = fastapi_blog.add_blog_to_fastapi(
+    FastAPI(),
+    posts_dirname='tests/examples/posts',
+    strict_frontmatter=False,
+    jinja2_loader=jinja2.FileSystemLoader('src/fastapi_blog/templates'),
+  )
+  with TestClient(app) as example_client:
+    response = example_client.get('/blog/posts')
+
+  assert response.status_code == 200
+  assert 'Advanced Features' in response.text
+  assert 'Getting Started with FastAPI Blog' in response.text
+  assert 'Welcome to FastAPI Blog' in response.text
+
+
+def test_html_routes_declare_response_class_without_query_parameters():
+  schema = client.get('/openapi.json').json()
+  html_paths = (
+    '/blog/',
+    '/blog/posts',
+    '/blog/posts/{post_id}',
+    '/blog/tags',
+    '/blog/tags/{tag_id}',
+    '/blog/{page_id}',
+  )
+
+  for path in html_paths:
+    operation = schema['paths'][path]['get']
+    parameter_names = {item['name'] for item in operation.get('parameters', [])}
+    assert 'response_class' not in parameter_names
+    assert 'text/html' in operation['responses']['200']['content']
+
+
 def test_html_tag_has_a_lang_attribute():
   """TODO 5.9.6: `<html>` had no `lang` at all."""
   response = client.get('/blog')

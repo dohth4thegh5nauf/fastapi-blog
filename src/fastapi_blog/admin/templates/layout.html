@@ -33,6 +33,88 @@ header.navbar {
 aside.navbar-vertical.navbar-expand-lg {
   overflow-y: auto;
 }
+/* Keep card headings, icons and primary actions aligned across every view. */
+.card-header {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+}
+.card-header .card-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.card-header .card-title > .icon,
+.card-header .card-title > svg {
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+.card-header .card-actions {
+  margin-inline-start: auto;
+}
+.card-header .btn-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+}
+.card-header .btn-list > * {
+  margin: 0;
+}
+.card-header .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  height: 2.25rem;
+  padding: .5rem .875rem;
+  font-size: .875rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.card-header .btn > .icon {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+}
+.table .btn-icon > .icon {
+  width: 1em;
+  height: 1em;
+}
+/* Small status badges need enough space and a theme-aware text contrast. */
+.badge-sm {
+  --tblr-badge-font-size: .71428571em;
+  --tblr-badge-icon-size: 1em;
+  --tblr-badge-padding-y: 4px;
+  --tblr-badge-padding-x: 4px;
+}
+/* Theme changes should not leave navbar controls animating behind the page. */
+header.navbar :is(button, a, .dropdown-toggle) {
+  transition-delay: 0s !important;
+}
+/* EasyMDE's defaults use dark glyphs that disappear on a dark surface. */
+html[data-bs-theme='dark'] .editor-toolbar {
+  border-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark'] .editor-toolbar a,
+html[data-bs-theme='dark'] .editor-toolbar button {
+  color: var(--tblr-body-color) !important;
+}
+html[data-bs-theme='dark'] .editor-toolbar a:hover,
+html[data-bs-theme='dark'] .editor-toolbar a:focus,
+html[data-bs-theme='dark'] .editor-toolbar a.active,
+html[data-bs-theme='dark'] .editor-toolbar button:hover,
+html[data-bs-theme='dark'] .editor-toolbar button:focus {
+  color: var(--tblr-body-color) !important;
+  background-color: var(--tblr-bg-surface-secondary) !important;
+  border-color: var(--tblr-border-color) !important;
+}
+html[data-bs-theme='dark'] .editor-toolbar i.separator {
+  border-left-color: var(--tblr-border-color);
+  border-right-color: transparent;
+}
 @media (min-width: 992px) {
   /* Narrow the sidebar from Tabler's default 15rem to 14rem. The width and
      the sibling margin-left (which makes room for the fixed sidebar) must
@@ -87,6 +169,19 @@ aside.navbar-vertical.navbar-expand-lg {
    (redundant with the one already in the sidebar's row); hiding just those
    two avoids showing the same "Logout" menu twice. */
 @media (max-width: 991.98px) {
+  .card-header {
+    align-items: flex-start;
+  }
+  .card-header .card-title {
+    flex: 1 1 100%;
+  }
+  .card-header .card-actions {
+    width: 100%;
+    margin-inline-start: 0;
+  }
+  .card-header .card-actions .btn-list {
+    justify-content: flex-start;
+  }
   header.navbar.navbar-expand-md {
     display: flex !important;
   }
@@ -100,6 +195,7 @@ aside.navbar-vertical.navbar-expand-lg {
 
 {% block head %}
 {{ super() }}
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='12'%20fill='%2320669d'/%3E%3Cpath%20d='M18%2014h28v6H18zM18%2029h28v6H18zM18%2044h18v6H18z'%20fill='white'/%3E%3C/svg%3E">
 <script>
 // Apply the stored theme before first paint, to avoid a flash of the
 // wrong theme (Tabler reads `data-bs-theme` on <html> at render time).

@@ -3,6 +3,7 @@
 import datetime
 import json
 import re
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -12,11 +13,13 @@ from fastapi_blog.models import (
   LOOSE_DEFAULT_SCHEMA,
   FieldSpec,
   FrontmatterSchema,
+  LooseFrontmatter,
   StrictFrontmatter,
   StrictPostPayload,
   frontmatter_model,
   payload_model,
 )
+from fastapi_blog.store import parse_document
 
 
 # --- FieldSpec validation ---------------------------------------------------
@@ -66,6 +69,60 @@ def test_field_spec_key_prefers_alias():
 def test_schema_rejects_unknown_extra_mode():
   with pytest.raises(ValueError, match='Unknown extra mode'):
     FrontmatterSchema(extra='maybe')
+
+
+def test_default_frontmatter_accepts_unquoted_iso_timestamp():
+  frontmatter, _ = parse_document(
+    '---\ntitle: Example\ndate: 2024-02-01T09:15:00\n---\nBody\n'
+  )
+
+  post = StrictFrontmatter.model_validate(frontmatter)
+  generated_post = DEFAULT_SCHEMA.model().model_validate(frontmatter)
+  assert post.date == '2024-02-01T09:15:00'
+  assert generated_post.date == '2024-02-01T09:15:00'
+
+
+def test_updated_string_role_normalizes_unquoted_yaml_timestamp():
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('updated_at', type='str', role='updated', required=True),)
+  )
+  frontmatter, _ = parse_document(
+    '---\nupdated_at: 2024-02-01T09:15:00\n---\nBody\n'
+  )
+
+  post = schema.model().model_validate(frontmatter)
+  assert post.updated_at == '2024-02-01T09:15:00'
+
+
+def test_typed_date_fields_still_parse_unquoted_yaml_scalars():
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('published_on', type='date', required=True),
+      FieldSpec('published_at', type='datetime', required=True),
+    )
+  )
+  frontmatter, _ = parse_document(
+    '---\n'
+    'published_on: 2024-02-01\n'
+    'published_at: 2024-02-01T09:15:00\n'
+    '---\n'
+    'Body\n'
+  )
+
+  post = schema.model().model_validate(frontmatter)
+  assert post.published_on == datetime.date(2024, 2, 1)
+  assert post.published_at == datetime.datetime(2024, 2, 1, 9, 15)
+
+
+def test_quickstart_markdown_frontmatter_passes_loose_model_validation():
+  examples = Path(__file__).parent / 'examples' / 'posts'
+  demo_slugs = ('advanced-features', 'getting-started', 'welcome', 'draft-post')
+
+  for slug in demo_slugs:
+    frontmatter, _ = parse_document(
+      (examples / f'{slug}.md').read_text(encoding='utf-8')
+    )
+    LooseFrontmatter.model_validate(frontmatter)
 
 
 def test_schema_rejects_duplicate_names():

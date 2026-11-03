@@ -1464,6 +1464,13 @@ def _none_to_default(factory: Callable[[], Any]) -> Callable[[Any], Any]:
   return convert
 
 
+def _date_string(value: Any) -> Any:
+  """Normalize YAML date scalars for string fields with date semantics."""
+  if isinstance(value, datetime.date):
+    return value.isoformat()
+  return value
+
+
 def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
   from pydantic import (
     AfterValidator,
@@ -1533,6 +1540,9 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
       value_validators.append(AfterValidator(_choices_validator(spec)))
     if spec.pattern is not None or spec.item_pattern is not None:
       value_validators.append(AfterValidator(_pattern_validator(spec)))
+
+    if spec.type == 'str' and spec.role in ('date', 'updated'):
+      annotation = Annotated[annotation, BeforeValidator(_date_string)]
 
     if spec.required:
       info = Field(..., **options)

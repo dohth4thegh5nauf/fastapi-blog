@@ -208,8 +208,8 @@ def get_blog_router(
   # Add suffix to route names based on locale to avoid conflicts
   name_suffix = f'_{locale}' if locale else ''
 
-  @router.get('/', name=f'blog_index{name_suffix}')
-  async def blog_index(request: Request, response_class=HTMLResponse):
+  @router.get('/', name=f'blog_index{name_suffix}', response_class=HTMLResponse)
+  async def blog_index(request: Request):
     posts = _list_posts()
     recent_3 = posts[:3]
 
@@ -225,10 +225,12 @@ def get_blog_router(
       request=request, name='index.html', context=context
     )
 
-  @router.get('/posts/{post_id}', name=f'blog_post{name_suffix}')
-  async def blog_post(
-    post_id: str, request: Request, response_class=HTMLResponse
-  ):
+  @router.get(
+    '/posts/{post_id}',
+    name=f'blog_post{name_suffix}',
+    response_class=HTMLResponse,
+  )
+  async def blog_post(post_id: str, request: Request):
     matches = [x for x in _list_posts() if x['slug'] == post_id]
     if not matches:
       raise HTTPException(
@@ -259,8 +261,10 @@ def get_blog_router(
       context=_add_i18n_context(request, context),
     )
 
-  @router.get('/posts', name=f'blog_posts{name_suffix}')
-  async def blog_posts(request: Request, response_class=HTMLResponse):
+  @router.get(
+    '/posts', name=f'blog_posts{name_suffix}', response_class=HTMLResponse
+  )
+  async def blog_posts(request: Request):
     posts = _list_posts()
 
     context = _add_i18n_context(request, {'posts': posts})
@@ -269,8 +273,10 @@ def get_blog_router(
       request=request, name='posts.html', context=context
     )
 
-  @router.get('/tags', name=f'blog_tags{name_suffix}')
-  async def blog_tags(request: Request, response_class=HTMLResponse):
+  @router.get(
+    '/tags', name=f'blog_tags{name_suffix}', response_class=HTMLResponse
+  )
+  async def blog_tags(request: Request):
     posts = _list_posts()
 
     unsorted_tags: dict = {}
@@ -293,10 +299,12 @@ def get_blog_router(
       request=request, name='tags.html', context=context
     )
 
-  @router.get('/tags/{tag_id}', name=f'blog_tag{name_suffix}')
-  async def blog_tag(
-    tag_id: str, request: Request, response_class=HTMLResponse
-  ):
+  @router.get(
+    '/tags/{tag_id}',
+    name=f'blog_tag{name_suffix}',
+    response_class=HTMLResponse,
+  )
+  async def blog_tag(tag_id: str, request: Request):
     posts = [x for x in _list_posts() if tag_id in (x.get('tags') or [])]
 
     context = _add_i18n_context(request, {'tag_id': tag_id, 'posts': posts})
@@ -376,10 +384,12 @@ def get_blog_router(
         )
       return JSONResponse(content=node, media_type='application/ld+json')
 
-  @router.get('/{page_id}', name=f'blog_page{name_suffix}')
-  async def blog_page(
-    page_id: str, request: Request, response_class=HTMLResponse
-  ):
+  @router.get(
+    '/{page_id}',
+    name=f'blog_page{name_suffix}',
+    response_class=HTMLResponse,
+  )
+  async def blog_page(page_id: str, request: Request):
     def _not_found() -> Any:
       context = _add_i18n_context(request, {})
       context['title'] = context['t'].blog.not_found

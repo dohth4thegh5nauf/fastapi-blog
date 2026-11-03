@@ -129,6 +129,56 @@ def test_layout_html_contains_theme_and_language_markers():
   assert 'custom-language-item' in layout
 
 
+def test_layout_has_shared_responsive_card_header_and_button_metrics():
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert '.card-header .btn {' in layout
+  assert '.card-header .card-title {' in layout
+  assert 'align-items: center' in layout
+  assert 'height: 2.25rem' in layout
+  assert 'padding: .5rem .875rem' in layout
+  assert '@media (max-width: 991.98px)' in layout
+  assert '.card-header .card-actions' in layout
+
+
+def test_layout_fixes_dark_editor_toolbar_and_navbar_transition_delay():
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert "html[data-bs-theme='dark'] .editor-toolbar a:hover" in layout
+  assert 'transition-delay: 0s !important' in layout
+
+
+def test_post_list_uses_readable_badges_and_compact_action_icons():
+  listing = _read('markdown_list.html')
+  assert 'bg-success-lt text-success' in listing
+  assert 'bg-warning-lt text-warning' in listing
+  layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  assert '--tblr-badge-padding-y: 4px' in layout
+  assert '--tblr-badge-padding-x: 4px' in layout
+  assert listing.count('width="1em" height="1em"') >= 2
+  assert 'd-none d-sm-inline-block' not in listing
+
+
+def test_admin_and_public_layouts_declare_inline_favicons():
+  admin_layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
+  public_layout = (
+    Path(__file__).parents[1]
+    / 'src'
+    / 'fastapi_blog'
+    / 'templates'
+    / 'layouts'
+    / 'base.html'
+  ).read_text()
+  assert 'rel="icon"' in admin_layout
+  assert 'rel="icon"' in public_layout
+  assert 'data:image/svg+xml,' in admin_layout
+  assert 'data:image/svg+xml,' in public_layout
+
+
+def test_diagnostics_heading_has_a_full_width_block():
+  editor = _read('markdown_edit.html')
+  assert '<div class="w-100">' in editor
+  assert '<h4 class="mb-2">Document diagnostics</h4>' in editor
+
+
 def test_layout_html_pins_the_top_navbar_while_scrolling():
   """The top navbar (theme/language/user menu) must stay on screen.
 

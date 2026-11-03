@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Normalize unquoted YAML date and timestamp scalars for string-valued
+  `date`/`updated` frontmatter roles without changing native YAML parsing for
+  other fields.
+- Declare blog HTML response classes on FastAPI route decorators instead of
+  handler parameters, keeping `response_class` out of request parameters and
+  OpenAPI schemas.
+- Improve admin card-header consistency and responsive wrapping, status-badge
+  contrast and spacing, action-icon sizing, dark-theme Markdown toolbar states,
+  and navbar transition timing.
+- Add an inline SVG favicon to the admin and public layouts to avoid the
+  browser's missing `/favicon.ico` fallback request.
+- Keep the New Post action visible on narrow screens and give document
+  diagnostics a full-width heading/list layout.
+- Vertically align the Latest Posts heading icon with its title.
 - Allow public post listings to read an absolute posts directory.
 
 ### Development tooling and release workflow
