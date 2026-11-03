@@ -482,6 +482,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   inline `@context` doesn't cover (a same-name term, a `prefix:` term or
   `@vocab`), `content_term` included. URL context items are skipped, not
   loaded — loading files and remote contexts is TODO 5.5
+- `check` runs the lost-term control per collection (TODO 5.6 complete):
+  the level comes from the new `jsonld.strict_context` option (`error` by
+  default, `warn`, or `off` to skip the check entirely). With the `jsonld`
+  extra installed the dynamic probe `jsonld.probe_lost_keys` is the ground
+  truth: each schema key is expanded in a probe document through `pyld`,
+  and a key counts as covered only when the context maps it to a different
+  IRI — a key surviving under its own name (an undefined `prefix:term`
+  looks like an absolute IRI to expansion) is still reported, matching the
+  static reading that remains the fallback without the extra. A context
+  that can't be loaded yields `undefined` (`context.unavailable`), an
+  invalid one an `error` (`context.invalid`).
 
 ### Document storage: merge-on-rewrite, nested collections, page schema (TODO 4.5, 4.6)
 

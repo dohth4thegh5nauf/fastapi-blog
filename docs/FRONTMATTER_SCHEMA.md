@@ -340,8 +340,17 @@ export (see `fastapi_blog.jsonld`):
   `{slug}` format string.
 - `content_term`: the term the document body is emitted under.
 - `max_documents`: limit of documents in one exported `@graph`.
+- `strict_context`: what `check` does with a schema key the context doesn't
+  cover (`context.lost_term`): `error` (default), `warn` or `off` (skip the
+  coverage check entirely, including the loading of context files/URLs).
 - `jsonld.uncovered_keys(schema, project_root=...)` lists the schema keys
   the (resolved) context doesn't cover — JSON-LD would silently drop them.
+  With the `jsonld` extra installed, `check` uses the dynamic probe
+  `jsonld.probe_lost_keys(...)` instead: every schema key is expanded in a
+  probe document through `pyld`, and a key counts as covered only when the
+  context maps it to a different IRI (a key surviving under its own name,
+  e.g. an undefined `prefix:term`, is not covered). The static reading
+  remains the fallback when the extra is missing.
 
 ## The `seo:` section
 

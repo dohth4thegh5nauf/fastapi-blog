@@ -328,6 +328,20 @@ def _jsonld_value(value: Any) -> Any:
   return value
 
 
+def pyld_available() -> bool:
+  """Return whether the optional `jsonld` extra (`pyld`) is installed."""
+  return importlib.util.find_spec('pyld') is not None
+
+
+def _schema_keys(schema: FrontmatterSchema) -> list[str]:
+  """Return the checkable schema keys: field keys plus `content_term`."""
+  config = schema.jsonld
+  keys = [spec.key for spec in schema.fields if not spec.key.startswith('@')]
+  if config and config.content_term:
+    keys.append(config.content_term)
+  return keys
+
+
 def uncovered_keys(
   schema: FrontmatterSchema, *, project_root: pathlib.Path | None = None
 ) -> list[str]:
@@ -361,16 +375,69 @@ def uncovered_keys(
   if project_root is not None and raw_context is not None:
     raw_context = resolve_context(schema, project_root=project_root)
   terms, has_vocab = _covered_terms(raw_context)
-  keys = [spec.key for spec in schema.fields if not spec.key.startswith('@')]
-  if config and config.content_term:
-    keys.append(config.content_term)
   missing = []
-  for key in keys:
+  for key in _schema_keys(schema):
     prefix = key.split(':', 1)[0] if ':' in key else None
     if key in terms or has_vocab or (prefix is not None and prefix in terms):
       continue
     missing.append(key)
   return sorted(missing)
+
+
+def probe_lost_keys(
+  schema: FrontmatterSchema, *, project_root: pathlib.Path | None = None
+) -> list[str]:
+  """Expand a probe document per schema key through `pyld` (TODO 5.6).
+
+  The dynamic counterpart of `uncovered_keys`: rather than reading the
+  context statically, every key is expanded on its own in a minimal probe
+  document; a key `pyld` drops from the expansion is lost. This catches
+  what static reading can't judge — for example terms remapped through
+  `@id` definitions or nested contexts.
+
+  Args:
+      schema: The schema whose `jsonld` section holds the context and whose
+          fields supply the keys.
+      project_root: When given, the context is loaded through
+          `resolve_context` against this project root first.
+
+  Returns:
+      The sorted schema keys (by alias, `@`-keys excluded) that expansion
+      drops, including `content_term` when it isn't covered.
+
+  Raises:
+      ContextUnavailableError: The `jsonld` extra isn't installed, or a
+          context file or URL can't be loaded.
+      JsonLdError: The resolved context itself is invalid for expansion.
+
+  """
+  if not pyld_available():
+    raise ContextUnavailableError(
+      'The context probe needs the `jsonld` extra: '
+      'pip install "fastapi-blog[jsonld]"'
+    )
+  from pyld import jsonld as pyld_jsonld  # type: ignore[import-untyped]
+
+  config = schema.jsonld
+  raw_context = config.context if config else None
+  if project_root is not None and raw_context is not None:
+    raw_context = resolve_context(schema, project_root=project_root)
+  lost = []
+  for key in _schema_keys(schema):
+    probe = {'@context': raw_context, key: 'probe'}
+    try:
+      expanded = pyld_jsonld.expand(probe)
+    except pyld_jsonld.JsonLdError as exc:
+      raise JsonLdError(f"Can't expand the probe document: {exc}") from exc
+    # Covered means the context maps the key somewhere: to an absolute IRI
+    # (term, `@vocab`) or through a defined prefix. A key surviving only
+    # under its own name — dropped outright, or kept as a literal "IRI"
+    # because an undefined `prefix:` looks like a scheme — isn't covered,
+    # matching the static reading in `uncovered_keys`.
+    covered = any(any(prop != key for prop in node) for node in expanded)
+    if not covered:
+      lost.append(key)
+  return sorted(lost)
 
 
 def _covered_terms(context: Any) -> tuple[set[str], bool]:

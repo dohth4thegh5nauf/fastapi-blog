@@ -553,6 +553,9 @@ class JsonLdConfig:
           contexts at all.
       max_context_bytes: Size limit of one context, in bytes.
       max_documents: Limit of documents in one exported `@graph`.
+      strict_context: What `check` does with a schema key the context
+          doesn't cover (TODO 5.6): `'error'` (default), `'warn'` or
+          `'off'` (skip the coverage check entirely).
 
   """
 
@@ -564,8 +567,14 @@ class JsonLdConfig:
   allow_remote_contexts: tuple[str, ...] = ()
   max_context_bytes: int = 262144
   max_documents: int = 10000
+  strict_context: str = 'error'
 
   def __post_init__(self) -> None:
+    if self.strict_context not in ('error', 'warn', 'off'):
+      raise ValueError(
+        "`jsonld.strict_context` must be 'error', 'warn' or 'off', "
+        f'got {self.strict_context!r}'
+      )
     object.__setattr__(
       self, 'allow_remote_contexts', tuple(self.allow_remote_contexts)
     )

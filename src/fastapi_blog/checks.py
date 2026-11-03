@@ -6,8 +6,9 @@ wrong as a list of `Issue` objects:
 - `file.malformed` (error): a file can't be parsed;
 - `schema.invalid` / `schema.missing` / `schema.extra` (error): the
   frontmatter doesn't match the schema;
-- `context.lost_term` (warning): a schema key the JSON-LD context doesn't
-  cover, so expansion would silently drop it (TODO 5.6);
+- `context.lost_term` (level from `jsonld.strict_context`, `error` by
+  default): a schema key the JSON-LD context doesn't cover, so expansion
+  would silently drop it (TODO 5.6);
 - `collection.directory_missing` / `context.unavailable` (undefined):
   something could not be checked — never reported as fine (П4).
 
@@ -131,19 +132,29 @@ def _check_documents(
 
 def _check_context(spec: CollectionSpec, root: pathlib.Path, issues: list):
   schema = spec.schema
-  if schema is None or schema.jsonld is None:
+  config = schema.jsonld if schema is not None else None
+  if schema is None or config is None:
+    return
+  strict = config.strict_context
+  if strict == 'off':
     return
   try:
-    missing = jsonld.uncovered_keys(schema, project_root=root)
+    # With `pyld` installed the probe expansion is the ground truth; the
+    # static reading of the context is the fallback without the extra.
+    if jsonld.pyld_available():
+      missing = jsonld.probe_lost_keys(schema, project_root=root)
+    else:
+      missing = jsonld.uncovered_keys(schema, project_root=root)
   except jsonld.ContextUnavailableError as exc:
     issues.append(Issue('undefined', 'context.unavailable', str(exc)))
   except jsonld.JsonLdError as exc:
     issues.append(Issue('error', 'context.invalid', str(exc)))
   else:
+    level = 'error' if strict == 'error' else 'warning'
     for key in missing:
       issues.append(
         Issue(
-          'warning',
+          level,
           'context.lost_term',
           f'Key {key!r} is not defined by the context, '
           'so JSON-LD would drop it',

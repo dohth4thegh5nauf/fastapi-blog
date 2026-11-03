@@ -2,7 +2,7 @@
 
 import pytest
 
-from fastapi_blog import checks
+from fastapi_blog import checks, jsonld
 from fastapi_blog.config import CollectionSpec
 from fastapi_blog.models import FieldSpec, FrontmatterSchema, JsonLdConfig
 
@@ -56,7 +56,7 @@ def test_missing_directory_is_undefined_not_clean(tmp_path):
   assert checks.exit_code([report]) == checks.EXIT_UNDEFINED
 
 
-def test_lost_context_terms_are_warnings(tmp_path):
+def test_lost_context_terms_are_errors_by_default(tmp_path):
   schema = FrontmatterSchema(
     fields=(
       FieldSpec('title', required=True),
@@ -68,12 +68,118 @@ def test_lost_context_terms_are_warnings(tmp_path):
   _write(spec.dir, 'a', '---\ntitle: A\nex:state: active\n---\n')
   report = checks.check_collection(spec, root=tmp_path)
   assert [(issue.level, issue.code) for issue in report.issues] == [
-    ('warning', 'context.lost_term')
+    ('error', 'context.lost_term')
   ]
   assert report.issues[0].field == 'ex:state'
+  assert checks.exit_code([report]) == checks.EXIT_FINDINGS
+
+
+def test_lost_context_terms_follow_strict_context_warn(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('state', alias='ex:state'),
+    ),
+    jsonld=JsonLdConfig(
+      context={'title': 'https://example.org/title'}, strict_context='warn'
+    ),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\nex:state: active\n---\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert [(issue.level, issue.code) for issue in report.issues] == [
+    ('warning', 'context.lost_term')
+  ]
   # A warning doesn't fail `--fail-on error`, but fails `--fail-on warning`.
   assert checks.exit_code([report], 'error') == checks.EXIT_CLEAN
   assert checks.exit_code([report], 'warning') == checks.EXIT_FINDINGS
+
+
+def test_strict_context_off_skips_the_coverage_check(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('state', alias='ex:state'),
+    ),
+    jsonld=JsonLdConfig(
+      context={'title': 'https://example.org/title'}, strict_context='off'
+    ),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\nex:state: active\n---\n')
+  assert checks.check_collection(spec, root=tmp_path).issues == []
+
+
+def test_strict_context_off_skips_even_an_unloadable_context(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context='no-such-context.yaml', strict_context='off'),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\n---\n')
+  assert checks.check_collection(spec, root=tmp_path).issues == []
+
+
+def test_strict_context_rejects_an_unknown_level():
+  with pytest.raises(ValueError, match='strict_context'):
+    JsonLdConfig(strict_context='loud')
+
+
+@pytest.mark.skipif(
+  not jsonld.pyld_available(), reason='needs the jsonld extra'
+)
+def test_probe_expansion_decides_lost_keys_when_pyld_is_available(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('state', alias='ex:state'),
+    ),
+    jsonld=JsonLdConfig(
+      context={'title': 'https://example.org/title'}, content_term='text'
+    ),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\nex:state: active\n---\nBody\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  # `ex:state` and the `content_term` survive neither the static reading
+  # nor the probe; `title` is covered by the context term.
+  assert [issue.field for issue in report.issues] == ['ex:state', 'text']
+  assert {issue.code for issue in report.issues} == {'context.lost_term'}
+
+
+def test_static_check_is_the_fallback_without_pyld(tmp_path, monkeypatch):
+  monkeypatch.setattr(jsonld, 'pyld_available', lambda: False)
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec('state', alias='ex:state'),
+    ),
+    jsonld=JsonLdConfig(context={'title': 'https://example.org/title'}),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\nex:state: active\n---\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert [(issue.level, issue.code) for issue in report.issues] == [
+    ('error', 'context.lost_term')
+  ]
+
+
+def test_an_invalid_context_from_the_probe_is_an_error(tmp_path, monkeypatch):
+  def _raise(schema, **kwargs):
+    raise jsonld.JsonLdError('bad context')
+
+  monkeypatch.setattr(jsonld, 'pyld_available', lambda: True)
+  monkeypatch.setattr(jsonld, 'probe_lost_keys', _raise)
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True),),
+    jsonld=JsonLdConfig(context={'title': 'https://example.org/title'}),
+  )
+  spec = _spec(tmp_path, schema)
+  _write(spec.dir, 'a', '---\ntitle: A\n---\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert [(issue.level, issue.code) for issue in report.issues] == [
+    ('error', 'context.invalid')
+  ]
 
 
 def test_unavailable_context_is_undefined(tmp_path):
