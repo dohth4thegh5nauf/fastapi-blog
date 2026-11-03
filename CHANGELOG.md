@@ -154,10 +154,14 @@ The detailed development history is preserved in
 * Improved development tooling and code quality checks
 * Full compatibility with Python 3.13.7
 
-The 0.7.0 entry is retained from the initial fork snapshot. The entries
-below it are preserved from the [upstream changelog](https://github.com/pydanny/fastapi-blog/blob/main/changelog.md), including
-its undated changes, contributor credits and original dates. Upstream
-lists 0.5.0 and 0.6.0 with 2023 dates despite listing older versions
+The 0.7.0 entry is preserved from the
+[intermediate fork](https://github.com/awestley/fastapi-blog/blob/main/changelog.md).
+The entries below are preserved from the
+[upstream changelog](https://github.com/pydanny/fastapi-blog/blob/main/changelog.md),
+including its undated changes, contributor credits and original dates. The
+intermediate fork assigns the two undated changes to 0.6.0 and repeats that
+version heading; upstream leaves them unversioned, as recorded below. Both
+sources list 0.5.0 and 0.6.0 with 2023 dates despite listing older versions
 in 2024; those dates are retained rather than silently corrected.
 
 ### Undated upstream changes
