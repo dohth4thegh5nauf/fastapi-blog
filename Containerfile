@@ -12,6 +12,10 @@ RUN uv sync --frozen --no-dev --no-editable
 # Keep the runtime image free of compilers, uv and development dependencies.
 FROM python:3.15.0-slim-bookworm AS runtime
 
+RUN apt-get update \
+    && apt-get install -y --only-upgrade --no-install-recommends openssl libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
