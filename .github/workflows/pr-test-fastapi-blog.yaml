@@ -4,6 +4,8 @@
 name: Test fastapi-blog
 
 on:
+  push:
+    branches: [main, develop]
   pull_request:
     branches: [main]
 
@@ -57,12 +59,12 @@ jobs:
           uv run --locked $UV_EXTRAS coverage xml
 
       - name: Upload coverage to Codecov
-        if: matrix.extras == 'all' && matrix['python-version'] == '3.12'
+        if: matrix.extras == 'all'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
+          flags: unittests,python-${{ matrix['python-version'] }}
+          name: python-${{ matrix['python-version'] }}
           fail_ci_if_error: false
 
   tests-passed:
