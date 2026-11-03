@@ -44,6 +44,7 @@ jobs:
         run: uv build
 
   codeql:
+    if: ${{ !github.event.repository.private || vars.CODEQL_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -74,6 +75,14 @@ jobs:
         env:
           SCAN_RESULT: ${{ needs.scan.result }}
           CODEQL_RESULT: ${{ needs.codeql.result }}
+          CODEQL_EXPECTED: ${{ !github.event.repository.private || vars.CODEQL_ENABLED == 'true' }}
         run: |
+          echo "Bandit, dependency audit and build: $SCAN_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          echo "CodeQL: $CODEQL_RESULT" >> "$GITHUB_STEP_SUMMARY"
           test "$SCAN_RESULT" = success
-          test "$CODEQL_RESULT" = success
+          if [ "$CODEQL_EXPECTED" = true ]; then
+            test "$CODEQL_RESULT" = success
+          else
+            echo 'CodeQL is disabled by default for private repositories; set CODEQL_ENABLED=true after enabling code scanning.' >> "$GITHUB_STEP_SUMMARY"
+            test "$CODEQL_RESULT" = skipped
+          fi
