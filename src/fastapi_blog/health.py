@@ -27,7 +27,7 @@ from importlib.metadata import version as package_version
 from typing import Any
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 
 _PROCESS_START = time.monotonic()
@@ -36,6 +36,55 @@ _PROCESS_START = time.monotonic()
 # longer for the detailed base report used by monitoring.
 _LIVE_READY_MAX_AGE = 5
 _BASE_MAX_AGE = 60
+
+_MINIMAL_HEALTH_SCHEMA: dict[str, Any] = {
+  'type': 'object',
+  'required': ['status'],
+  'properties': {
+    'status': {'type': 'string', 'enum': ['pass', 'fail', 'warn']},
+  },
+  'additionalProperties': True,
+}
+_BASE_HEALTH_SCHEMA: dict[str, Any] = {
+  **_MINIMAL_HEALTH_SCHEMA,
+  'properties': {
+    **_MINIMAL_HEALTH_SCHEMA['properties'],
+    'version': {'type': 'string'},
+    'releaseId': {'type': 'string'},
+    'notes': {'type': 'array', 'items': {'type': 'string'}},
+    'output': {'type': 'string'},
+    'serviceId': {'type': 'string'},
+    'description': {'type': 'string'},
+    'checks': {
+      'type': 'object',
+      'additionalProperties': {
+        'type': 'array',
+        'items': {'type': 'object', 'additionalProperties': True},
+      },
+    },
+    'links': {
+      'type': 'object',
+      'additionalProperties': {'type': 'string', 'format': 'uri'},
+    },
+  },
+}
+
+
+def _documented_responses(
+  schema: dict[str, Any], *, include_failure: bool
+) -> dict[int, dict[str, Any]]:
+  """Describe the custom health media type without advertising JSON instead."""
+  success = {
+    'description': 'Health report',
+    'content': {'application/health+json': {'schema': schema}},
+  }
+  responses = {200: success}
+  if include_failure:
+    responses[503] = {
+      'description': 'A critical health check failed',
+      'content': {'application/health+json': {'schema': schema}},
+    }
+  return responses
 
 
 def _service_version() -> str:
@@ -98,8 +147,17 @@ def get_health_router(content_directories: list[str]) -> APIRouter:
   """
   router = APIRouter(tags=['health'])
 
-  @router.get('/health')
-  async def base_probe() -> JSONResponse:
+  @router.get(
+    '/health',
+    response_class=Response,
+    responses=_documented_responses(_BASE_HEALTH_SCHEMA, include_failure=True),
+    summary='Service health report',
+    description=(
+      'Detailed health report, including version and per-component checks. '
+      'A failed critical check returns HTTP 503.'
+    ),
+  )
+  async def base_probe() -> Response:
     """Full report with per-component checks for monitoring."""
     report: dict[str, Any] = {
       'status': 'pass',
@@ -121,13 +179,35 @@ def get_health_router(content_directories: list[str]) -> APIRouter:
       return _response(report, max_age=_BASE_MAX_AGE, status_code=503)
     return _response(report, max_age=_BASE_MAX_AGE)
 
-  @router.get('/health/live')
-  async def live_probe() -> JSONResponse:
+  @router.get(
+    '/health/live',
+    response_class=Response,
+    responses=_documented_responses(
+      _MINIMAL_HEALTH_SCHEMA, include_failure=False
+    ),
+    summary='Liveness probe',
+    description=(
+      'Checks that the process responds. Does not access external '
+      'dependencies and returns HTTP 200 when the process is alive.'
+    ),
+  )
+  async def live_probe() -> Response:
     """Liveness: the process answers; no dependency is touched."""
     return _response({'status': 'pass'}, max_age=_LIVE_READY_MAX_AGE)
 
-  @router.get('/health/ready')
-  async def ready_probe() -> JSONResponse:
+  @router.get(
+    '/health/ready',
+    response_class=Response,
+    responses=_documented_responses(
+      _MINIMAL_HEALTH_SCHEMA, include_failure=True
+    ),
+    summary='Readiness probe',
+    description=(
+      'Checks whether the service can accept traffic. Returns HTTP 503 '
+      'when a critical dependency is unavailable.'
+    ),
+  )
+  async def ready_probe() -> Response:
     """Readiness: critical dependencies only, without the details."""
     problem = _readability_problem(content_directories)
     if problem is not None:

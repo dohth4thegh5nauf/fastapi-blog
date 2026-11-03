@@ -66,7 +66,7 @@ def add_blog_to_fastapi(
   api_auth_dependency: Callable[..., Any] | None = None,
   jsonld_routes: bool = False,
   seo_routes: bool = False,
-  health_routes: bool = False,
+  health_routes: bool = True,
   require_if_match: bool = False,
   validators: tuple[Validator, ...] = (),
   collection_spec: CollectionSpec | None = None,
@@ -114,8 +114,9 @@ def add_blog_to_fastapi(
       health_routes: Add the health probes `GET /api/v1/health`,
                   `GET /api/v1/health/live` and `GET /api/v1/health/ready`
                   in the draft-inadarei-api-health-check-06 format
-                  (default: False; see `fastapi_blog.health`). `live` and
-                  `ready` stay public; the base report only discloses the
+                  (default: True; pass `False` to disable; see
+                  `fastapi_blog.health`). `live` and `ready` stay public;
+                  the base report only discloses the
                   service version and uptime.
       validators: External validators run on every write through the REST
                   API (TODO 6.2/6.3); blocking outcomes roll the write back

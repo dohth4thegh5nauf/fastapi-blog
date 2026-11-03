@@ -85,8 +85,8 @@ Release verification performed locally on top of the test gate:
   reported CVEs, which the CI image does not install from this lock). The
   CI gate uses `pip-audit` over the exported lock instead (same class of
   check, no API key needed).
-- Health probes: six new tests cover the draft-06 format, the HTTP status
-  semantics (`pass` → 2xx, `fail` → 503) and the opt-in flag. The Compose
+- Health probes: eight tests cover the draft-06 format, the HTTP status
+  semantics (`pass` → 2xx, `fail` → 503) and the default-on behavior plus explicit opt-out. The Compose
   stack was also smoke-tested locally against a Docker daemon:
   `docker compose up --build --wait` reaches `healthy`, all three probes
   answer `pass` as `application/health+json` with the specified

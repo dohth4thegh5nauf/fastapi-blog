@@ -37,13 +37,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Health probes (draft-inadarei-api-health-check-06)
 
-- Added `fastapi_blog.health` and the opt-in `health_routes=True` parameter
-  of `add_blog_to_fastapi()`/`setup_fastapi_blog()`: `GET /api/v1/health`
+- Added `fastapi_blog.health` and enabled the `health_routes` parameter by
+  default in `add_blog_to_fastapi()`/`setup_fastapi_blog()` (`False` explicitly
+  disables the routes): `GET /api/v1/health`
   (base report with version and per-component checks), `/api/v1/health/live`
   (liveness, no dependencies touched) and `/api/v1/health/ready`
   (readiness, `503` on a failed critical check). Responses use
   `Content-Type: application/health+json` and a `Cache-Control` lifetime;
-  the probes stay public. The only critical dependency is the readability
+  all three endpoints are documented in OpenAPI with the custom media type,
+  and the probes stay public. The only critical dependency is the readability
   of the content directories — the package has no mandatory external
   services by design (TODO П1). Project specification:
   `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`.

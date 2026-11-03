@@ -255,13 +255,13 @@ The API supports Markdown post CRUD, raw-document retrieval, and optional condit
 
 ## Health probes
 
-`add_blog_to_fastapi(..., health_routes=True)` (also on `setup_fastapi_blog`) adds three probes in the [draft-inadarei-api-health-check](https://datatracker.ietf.org/doc/html/draft-inadarei-api-health-check-06) format, fixed at `/api/v1`:
+`add_blog_to_fastapi()` and `setup_fastapi_blog()` register three health probes by default, in the [draft-inadarei-api-health-check](https://datatracker.ietf.org/doc/html/draft-inadarei-api-health-check-06) format, fixed at `/api/v1`. They are included in the generated OpenAPI schema and visible in `/docs`. Pass `health_routes=False` only when the application deliberately supplies its own health endpoints:
 
 - `GET /api/v1/health` — the base report: service version and per-component checks (the only critical dependency is the readability of the content directories);
 - `GET /api/v1/health/live` — liveness; touches nothing and answers `{"status": "pass"}` whenever the process responds;
 - `GET /api/v1/health/ready` — readiness; `503` with `{"status": "fail"}` when a critical check fails.
 
-All answers use `Content-Type: application/health+json` with a `Cache-Control` lifetime; `pass` answers 2xx, `fail` answers 4xx/5xx. The probes stay public — orchestrators and load balancers cannot authenticate. The project specification lives in `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`. The container image and the Compose stack (`compose.yaml`) expose the same probes through their health checks.
+All answers use `Content-Type: application/health+json` with a `Cache-Control` lifetime; `pass` answers 2xx, `fail` answers 4xx/5xx. OpenAPI documents the custom media type and the 503 responses. The probes stay public — orchestrators and load balancers cannot authenticate. The project specification lives in `docs/api/Health_Check_Response_Format_for_HTTP_APIs/`. The container image and the Compose stack (`compose.yaml`) expose the same probes through their health checks. You can also check them manually with `curl -i http://localhost:8000/api/v1/health`, `curl -i http://localhost:8000/api/v1/health/live` and `curl -i http://localhost:8000/api/v1/health/ready`.
 
 ## Development with containers
 

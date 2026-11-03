@@ -13,7 +13,6 @@ def _client(tmp_path, monkeypatch) -> TestClient:
     app,
     posts_dirname=str(tmp_path / 'posts'),
     pages_dirname=str(tmp_path / 'pages'),
-    health_routes=True,
   )
   return TestClient(app)
 
@@ -91,10 +90,58 @@ def test_unreadable_content_directory_fails_ready_and_base(
   assert client.get('/api/v1/health/live').status_code == 200
 
 
-def test_health_routes_are_opt_in(tmp_path, monkeypatch):
+def test_health_routes_are_enabled_by_default_and_documented(
+  tmp_path, monkeypatch
+):
+  client = _client(tmp_path, monkeypatch)
+  app = client.app
+  schema = app.openapi()
+
+  expected_paths = (
+    '/api/v1/health',
+    '/api/v1/health/live',
+    '/api/v1/health/ready',
+  )
+  for path in expected_paths:
+    assert path in schema['paths']
+    operation = schema['paths'][path]['get']
+    assert 'health' in operation['tags']
+    success = operation['responses']['200']
+    assert 'application/health+json' in success['content']
+    assert 'application/json' not in success['content']
+
+  assert '503' in schema['paths']['/api/v1/health']['get']['responses']
+  assert '503' not in schema['paths']['/api/v1/health/live']['get']['responses']
+  assert '503' in schema['paths']['/api/v1/health/ready']['get']['responses']
+
+  docs = client.get('/docs')
+  assert docs.status_code == 200
+  assert '/openapi.json' in docs.text
+
+
+def test_health_routes_can_be_disabled_explicitly(tmp_path, monkeypatch):
   monkeypatch.chdir(tmp_path)
   app = FastAPI()
-  fastapi_blog.add_blog_to_fastapi(app)
+  fastapi_blog.add_blog_to_fastapi(app, health_routes=False)
 
   client = TestClient(app)
   assert client.get('/api/v1/health').status_code == 404
+  assert not any(
+    path.startswith('/api/v1/health') for path in app.openapi()['paths']
+  )
+
+
+def test_setup_fastapi_blog_enables_health_routes_by_default(
+  tmp_path, monkeypatch
+):
+  monkeypatch.chdir(tmp_path)
+  app = FastAPI()
+  fastapi_blog.setup_fastapi_blog(
+    app,
+    posts_dirname=str(tmp_path / 'posts'),
+    admin=False,
+  )
+
+  response = TestClient(app).get('/api/v1/health/live')
+  assert response.status_code == 200
+  assert response.json() == {'status': 'pass'}

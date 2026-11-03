@@ -73,7 +73,7 @@ def setup_fastapi_blog(
   frontmatter_schema: FrontmatterSchema | None = None,
   seo: SeoConfig | None = None,
   seo_routes: bool = False,
-  health_routes: bool = False,
+  health_routes: bool = True,
   sanitize_html: bool = True,
   admin: bool = True,
   collection_spec: CollectionSpec | None = None,
@@ -113,7 +113,8 @@ def setup_fastapi_blog(
           redirects (TODO 5.9.5); bare-slug aliases redirect under every
           mounted locale. Requires `seo.site_url`. Default: `False`.
       health_routes: Add the `/api/v1/health{,/live,/ready}` probes in the
-          draft-inadarei-api-health-check-06 format. Default: `False`.
+          draft-inadarei-api-health-check-06 format. Default: `True`; pass
+          `False` to disable.
       sanitize_html: Sanitize Markdown HTML in public pages and admin preview.
           Disable only when all Markdown authors are trusted. Default: `True`.
       admin: Add the admin panel (needs the `admin` extra). Default: `True`.
