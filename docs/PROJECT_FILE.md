@@ -67,7 +67,10 @@ The supported layouts are `multiple_files`
 `multiple_folders` (`<locale>/<slug>.md`). `single_file` is rejected. For a
 collection that keeps its canonical documents directly in the collection
 directory and stores translations below locale directories, set
-`default_locale_in_root: true` with `multiple_folders`. Locale
+`default_locale_in_root: true` with `multiple_folders`. Default-locale files
+left under the default locale directory are rejected with a configuration
+error so they cannot disappear silently; move them to the collection root.
+Locale
 suffixes and directories are recognized only when the locale is listed in
 `locales`. i18n is rejected for collections with `depth` greater than zero.
 The slug is canonical across locales and is derived from the default-locale

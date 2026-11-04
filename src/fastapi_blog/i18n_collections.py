@@ -130,6 +130,11 @@ class I18nCollection:
       pattern = re.compile(pattern)
     if not pattern.fullmatch(slug):
       raise store.InvalidSlugError(f'Invalid slug: {slug!r}')
+    if (
+      self.config.default_locale_in_root
+      and locale == self.config.default_locale
+    ):
+      self._validate_default_locale_root(slug)
     base = self.collection.dir.resolve()
     extensions = (extension,) if extension else self.collection.extensions
     if any(ext not in self.collection.extensions for ext in extensions):
@@ -165,6 +170,35 @@ class I18nCollection:
       )
     return existing[0] if existing else paths[0]
 
+  def _validate_default_locale_root(self, slug: str | None = None) -> None:
+    """Reject canonical files left in the locale directory after a layout change."""
+    locale_dir = self.collection.dir / self.config.default_locale
+    collection_dir = self.collection.dir.resolve()
+    if not locale_dir.is_dir() or not locale_dir.resolve().is_relative_to(
+      collection_dir
+    ):
+      return
+    if slug is None:
+      misplaced = [
+        candidate
+        for ext in self.collection.extensions
+        for candidate in locale_dir.glob(f'*.{ext}')
+        if candidate.is_file()
+      ]
+    else:
+      misplaced = [
+        locale_dir / f'{slug}.{ext}'
+        for ext in self.collection.extensions
+        if (locale_dir / f'{slug}.{ext}').is_file()
+      ]
+    if misplaced:
+      names = ', '.join(sorted(path.name for path in misplaced))
+      raise I18nConfigError(
+        'i18n.default_locale_in_root is enabled, but canonical files were '
+        f'found under {self.config.default_locale!r}: {names}. Move them to '
+        'the collection root.'
+      )
+
   def _all_paths(self, slug: str) -> dict[str, Path]:
     result = {}
     for locale in self.config.locales:
@@ -197,13 +231,15 @@ class I18nCollection:
     """Return all recognized locale files, including orphan translations."""
     slugs: set[str] = set()
     if self.config.structure == 'multiple_folders':
-      if self.config.default_locale_in_root and self.collection.dir.is_dir():
-        for ext in self.collection.extensions:
-          slugs.update(
-            candidate.stem
-            for candidate in self.collection.dir.glob(f'*.{ext}')
-            if candidate.is_file()
-          )
+      if self.config.default_locale_in_root:
+        self._validate_default_locale_root()
+        if self.collection.dir.is_dir():
+          for ext in self.collection.extensions:
+            slugs.update(
+              candidate.stem
+              for candidate in self.collection.dir.glob(f'*.{ext}')
+              if candidate.is_file()
+            )
       for locale in self.config.locales:
         if (
           self.config.default_locale_in_root

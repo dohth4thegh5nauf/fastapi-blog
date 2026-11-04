@@ -109,6 +109,27 @@ def test_multiple_folders_can_keep_default_locale_at_collection_root(tmp_path):
   assert (tmp_path / 'ru' / 'welcome.md').is_file()
 
 
+def test_default_locale_in_root_rejects_documents_left_in_locale_directory(
+  tmp_path,
+):
+  adapter = I18nCollection(
+    store.Collection('posts', tmp_path),
+    I18nConfig(
+      ('en', 'ru'),
+      'en',
+      structure='multiple_folders',
+      default_locale_in_root=True,
+    ),
+  )
+  (tmp_path / 'en').mkdir()
+  (tmp_path / 'en' / 'hello.md').write_text(
+    '---\ntitle: Hello\n---\nEnglish\n', encoding='utf-8'
+  )
+
+  with pytest.raises(I18nConfigError, match='Move them to the collection root'):
+    adapter.list()
+
+
 @pytest.mark.parametrize('structure', ['multiple_files', 'multiple_folders'])
 def test_i18n_save_read_list_delete(tmp_path: Path, structure: str):
   config = I18nConfig(('en', 'ru'), 'en', structure=structure)
