@@ -18,7 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, RedirectResponse, Response
 
-from . import helpers, store
+from . import helpers
 from .auth import ConfigurationError, add_startup_check, check_api_auth_config
 from .config import CollectionSpec
 from .models import FrontmatterSchema, SeoConfig
@@ -26,7 +26,6 @@ from .permissions import Authorizer
 from .router import get_blog_router
 from .security import install_origin_check_middleware
 from .seo import build_head, resolve_seo_config
-from .service import DocumentService
 from .validators import Validator
 
 
@@ -178,14 +177,6 @@ def add_blog_to_fastapi(
     else:
       frontmatter_schema = collection_spec.schema
 
-  public_document_service = None
-  if collection_spec is not None and collection_spec.document_authorize is not None:
-    public_document_service = DocumentService(
-      store.DocumentStore(collection_spec.to_collection()),
-      frontmatter_schema,
-      collection_spec=collection_spec,
-    )
-
   # Handle environment variable for include_api
   if include_api is None:
     env_value = os.getenv('FASTAPI_BLOG_INCLUDE_API', 'false').lower()
@@ -230,7 +221,6 @@ def add_blog_to_fastapi(
       strict=strict_frontmatter,
       locales=locales,
       default_locale=default_locale,
-      document_service=public_document_service,
     )
 
   # Health probes answer outside the blog prefix: orchestrators and load
@@ -259,7 +249,6 @@ def add_blog_to_fastapi(
     prefix=prefix,
     jsonld_routes=jsonld_routes,
     translations_dir=translations_dir,
-    document_service=public_document_service,
   )
 
   # Mount main router without locale prefix
@@ -288,7 +277,6 @@ def add_blog_to_fastapi(
       prefix=prefix,
       jsonld_routes=jsonld_routes,
       translations_dir=translations_dir,
-      document_service=public_document_service,
     )
 
     # Mount with locale prefix
@@ -425,7 +413,6 @@ def _mount_seo_routes(
   strict: bool,
   locales: list[str],
   default_locale: str,
-  document_service: DocumentService | None = None,
 ) -> None:
   """Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects (5.9.5).
 
@@ -555,8 +542,6 @@ def _mount_seo_routes(
     posts = helpers.list_posts(
       posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
     )
-    if document_service is not None:
-      posts = helpers.filter_posts_by_document_policy(posts, document_service)
     if state['posts'] is not posts:
       state['snapshot'] = build_snapshot(posts)
       state['posts'] = posts

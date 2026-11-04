@@ -223,41 +223,6 @@ def clear_posts_cache() -> None:
 list_posts.cache_clear = clear_posts_cache  # type: ignore[attr-defined]
 
 
-def filter_posts_by_document_policy(
-  posts: tuple[dict[str, Any], ...], document_service: Any
-) -> tuple[dict[str, Any], ...]:
-  """Filter public posts through the configured anonymous read policy."""
-  spec = document_service.collection_spec
-  if spec is None or spec.document_authorize is None:
-    return posts
-
-  adapter = document_service.i18n_documents
-  locale = adapter.config.default_locale if adapter is not None else None
-  visible: list[dict[str, Any]] = []
-  for post in posts:
-    slug = str(post['slug'])
-    try:
-      record = (
-        adapter.read(slug, locale, fallback=False)
-        if adapter is not None and locale is not None
-        else document_service.documents.read(slug)
-      )
-      document_service.authorize_read(
-        None, slug, locale, record.frontmatter
-      )
-    except store.OperationNotAllowedError:
-      continue
-    except Exception as exc:
-      logger.warning(
-        'Skipping public post %s because its read policy could not be checked: %s',
-        slug,
-        exc,
-      )
-      continue
-    visible.append(post)
-  return tuple(visible)
-
-
 def _read_posts(
   published: bool,
   posts_dirname: str,
