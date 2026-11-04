@@ -950,6 +950,17 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       }
       for p in posts
     ]
+    search_query = request.query_params.get('q', '').strip()
+    if search_query:
+      search_term = search_query.casefold()
+      posts_data = [
+        post
+        for post in posts_data
+        if any(
+          search_term in str(post[field]).casefold()
+          for field in ('title', 'slug', 'summary', 'tags')
+        )
+      ]
 
     from ..i18n import load_translations
 
@@ -987,6 +998,7 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       'failed_to_delete': list_t.get(
         'failed_to_delete', 'Failed to delete post'
       ),
+      'search': actions_t.get('search', 'Search'),
     }
 
     # starlette-admin assigns templates at mount time.
@@ -1006,6 +1018,7 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
         't': t,  # Add translations
         'locale_options': locale_options,
         'content_locale': content_locale,
+        'search_query': search_query,
       },
     )
 

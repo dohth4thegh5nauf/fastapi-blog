@@ -45,12 +45,20 @@ aside.navbar-vertical.navbar-expand-lg {
   min-width: 0;
   margin-bottom: 0;
 }
+.card-header .admin-post-search {
+  width: min(100%, 28rem);
+  margin: 0;
+}
+.card-header .admin-post-search .input-group {
+  width: 100%;
+}
 .card-header .card-title > .icon,
 .card-header .card-title > svg {
   flex: 0 0 auto;
   vertical-align: middle;
 }
 .card-header .card-actions {
+  margin-block: 0;
   margin-inline-start: auto;
 }
 .card-header .btn-list {
@@ -68,7 +76,8 @@ aside.navbar-vertical.navbar-expand-lg {
   align-items: center;
   justify-content: center;
   gap: .5rem;
-  height: 2.25rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
   padding: .5rem .875rem;
   font-size: .875rem;
   line-height: 1.25;
@@ -79,9 +88,32 @@ aside.navbar-vertical.navbar-expand-lg {
   height: 1em;
   margin: 0;
 }
-.table .btn-icon > .icon {
+.table .post-row-actions {
+  display: inline-flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin: 0;
+}
+.table .post-row-actions > * {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.table .post-row-actions .btn-icon {
+  display: inline-flex;
+  flex: 0 0 2.25rem;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+.table .post-row-actions .btn-icon > .icon {
+  display: block;
   width: 1em;
   height: 1em;
+  margin: 0;
 }
 /* Small status badges need enough space and a theme-aware text contrast. */
 .badge-sm {
@@ -90,8 +122,9 @@ aside.navbar-vertical.navbar-expand-lg {
   --tblr-badge-padding-y: 4px;
   --tblr-badge-padding-x: 4px;
 }
-/* Theme changes should not leave navbar controls animating behind the page. */
+/* Keep navbar controls on the same theme transition as other buttons. */
 header.navbar :is(button, a, .dropdown-toggle) {
+  transition-duration: .15s !important;
   transition-delay: 0s !important;
 }
 /* EasyMDE's defaults use dark glyphs that disappear on a dark surface. */
@@ -174,6 +207,11 @@ html[data-bs-theme='dark'] .editor-toolbar i.separator {
   }
   .card-header .card-title {
     flex: 1 1 100%;
+    width: 100%;
+  }
+  .card-header .admin-post-search {
+    width: 100%;
+    max-width: none;
   }
   .card-header .card-actions {
     width: 100%;
@@ -181,6 +219,7 @@ html[data-bs-theme='dark'] .editor-toolbar i.separator {
   }
   .card-header .card-actions .btn-list {
     justify-content: flex-start;
+    width: 100%;
   }
   header.navbar.navbar-expand-md {
     display: flex !important;

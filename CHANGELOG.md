@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.9.0.
 
 ### Added
+- Added search by title, slug, summary and tags to the file-backed Posts list,
+  aligning its toolbar with the model-backed admin lists.
 - Added a `configure_admin(locale, admin)` hook to register custom Starlette
   Admin views before each localized panel is mounted. The hook is also exposed
   through `setup_fastapi_blog()`.

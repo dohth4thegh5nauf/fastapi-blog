@@ -130,6 +130,10 @@ def test_layout_html_contains_theme_and_language_markers():
 def test_layout_has_shared_responsive_card_header_and_button_metrics():
   layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
   assert '.card-header .btn {' in layout
+  assert 'height: 2.5rem' in layout
+  assert 'min-height: 2.5rem' in layout
+  assert '.card-header .card-actions' in layout
+  assert 'margin-block: 0' in layout
   assert '.card-header .card-title {' in layout
   assert 'align-items: center' in layout
   assert 'height: 2.25rem' in layout
@@ -141,6 +145,7 @@ def test_layout_has_shared_responsive_card_header_and_button_metrics():
 def test_layout_fixes_dark_editor_toolbar_and_navbar_transition_delay():
   layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
   assert "html[data-bs-theme='dark'] .editor-toolbar a:hover" in layout
+  assert 'transition-duration: .15s !important' in layout
   assert 'transition-delay: 0s !important' in layout
 
 
@@ -151,6 +156,11 @@ def test_post_list_uses_readable_badges_and_compact_action_icons():
   layout = (ADMIN_TEMPLATES / 'layout.html').read_text()
   assert '--tblr-badge-padding-y: 4px' in layout
   assert '--tblr-badge-padding-x: 4px' in layout
+  assert '.table .post-row-actions .btn-icon {' in layout
+  assert 'width: 2.25rem' in layout
+  assert '.table .post-row-actions .btn-icon > .icon {' in layout
+  assert 'name="q"' in listing
+  assert 'name="content_locale"' in listing
   assert listing.count('width="1em" height="1em"') >= 2
   assert 'd-none d-sm-inline-block' not in listing
 
