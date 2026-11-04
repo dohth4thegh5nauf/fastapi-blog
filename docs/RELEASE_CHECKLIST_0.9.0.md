@@ -138,3 +138,12 @@ outside the restricted sandbox. This checklist update does not change package
 source; keep the 0.9.0 changes under `[Unreleased]` until the final release
 commit passes CI and the release-repository checks in the handoff section are
 complete.
+
+On 2026-11-04, `uv build` produced the 0.9.0 sdist and wheel from the same
+package source as candidate `6bc4dd0`. Both artifacts contained the public and
+admin templates and English/Russian translation files. Fresh environments
+installed from the wheel using the locked core and admin runtime sets. Core
+smoke confirmed lazy admin/SQLAlchemy imports, a rendered blog post, a 401 for
+an unauthenticated API request, and startup rejection without API credentials.
+Admin smoke confirmed configuration rejects missing credentials and mounts
+the `en` and `ru` admin panels with valid credentials.
