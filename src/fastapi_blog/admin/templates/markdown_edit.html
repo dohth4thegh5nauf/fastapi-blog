@@ -199,10 +199,12 @@
 
 <script>
 let formDirty = false;
+let hasStagedLocaleDrafts = false;
+let suppressBeforeUnload = false;
 document.getElementById('post-form').addEventListener('input', () => { formDirty = true; });
 document.getElementById('post-form').addEventListener('change', () => { formDirty = true; });
 window.addEventListener('beforeunload', (event) => {
-  if (formDirty) {
+  if (!suppressBeforeUnload && (formDirty || hasStagedLocaleDrafts)) {
     event.preventDefault();
     event.returnValue = '';
   }
@@ -388,14 +390,31 @@ function buildCurrentLocalePayload() {
 }
 
 const postForm = document.getElementById('post-form');
-const draftKey = `fastapi-blog:locale-drafts:${window.location.pathname}:` + {{ post.slug | tojson }};
+const adminUiLocales = {{ available_locales | tojson }};
+function localeIndependentAdminPath(path) {
+  const parts = path.split('/');
+  const adminIndex = parts.lastIndexOf('admin');
+  const localeIndex = adminIndex - 1;
+  if (
+    adminIndex > 0
+    && adminUiLocales.includes(parts[localeIndex])
+  ) {
+    parts.splice(localeIndex, 1);
+  }
+  return parts.join('/') || '/';
+}
+const draftKey = `fastapi-blog:locale-drafts:${localeIndependentAdminPath(window.location.pathname)}:` + {{ post.slug | tojson }};
 const localeDrafts = (() => {
   try {
-    return JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+    const stored = JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+    return stored && typeof stored === 'object' && !Array.isArray(stored)
+      ? stored
+      : {};
   } catch (error) {
     return {};
   }
 })();
+hasStagedLocaleDrafts = Object.keys(localeDrafts).length > 0;
 
 function getNested(source, path) {
   return path.reduce((value, key) => value && value[key], source);
@@ -458,7 +477,6 @@ function restoreLocaleDraft(draft) {
   const entryEtag = document.querySelector('[name="entry_etag"]');
   if (etag) etag.value = draft.etag || '';
   if (entryEtag) entryEtag.value = draft.entry_etag || '';
-  formDirty = true;
 }
 
 const activeLocale = postForm.querySelector('[name="content_locale"]')?.value;
@@ -468,21 +486,24 @@ if (activeLocale && localeDrafts[activeLocale]) {
 
 document.querySelectorAll('.nav-tabs a[href*="content_locale="]').forEach(tab => {
   tab.addEventListener('click', event => {
-    if (!formDirty || !activeLocale) return;
-    const current = buildCurrentLocalePayload();
-    if (!current) {
-      event.preventDefault();
-      return;
+    if (formDirty && activeLocale) {
+      const current = buildCurrentLocalePayload();
+      if (!current) {
+        event.preventDefault();
+        return;
+      }
+      localeDrafts[activeLocale] = current;
+      try {
+        sessionStorage.setItem(draftKey, JSON.stringify(localeDrafts));
+        hasStagedLocaleDrafts = true;
+      } catch (error) {
+        event.preventDefault();
+        alert('The locale draft could not be stored in this browser tab.');
+        return;
+      }
+      formDirty = false;
     }
-    localeDrafts[activeLocale] = current;
-    try {
-      sessionStorage.setItem(draftKey, JSON.stringify(localeDrafts));
-    } catch (error) {
-      event.preventDefault();
-      alert('The locale draft could not be stored in this browser tab.');
-      return;
-    }
-    formDirty = false;
+    suppressBeforeUnload = true;
   });
 });
 
@@ -522,6 +543,7 @@ postForm.addEventListener('submit', async (e) => {
     
     if (response.ok) {
       formDirty = false;
+      hasStagedLocaleDrafts = false;
       sessionStorage.removeItem(draftKey);
       window.location.href = '{{ url_for(__name__ ~ ':posts:list') }}';
     } else {
