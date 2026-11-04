@@ -10,6 +10,7 @@ from fastapi_blog.editor import get_api_router
 from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.service import DocumentService
+from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
 
 
 def make_service(tmp_path, policy=None):
@@ -40,6 +41,57 @@ def make_service(tmp_path, policy=None):
   )
 
 
+def test_document_policy_authorizes_generated_slug_before_writing(tmp_path):
+  calls = []
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title'),)
+  )
+
+  def policy(user, action, collection, slug, locale, before, after):
+    calls.append((action, collection, slug, locale, before, after))
+    return True
+
+  spec = CollectionSpec(
+    'notes',
+    tmp_path,
+    schema=schema,
+    slug_template=parse_template('{title_slug}', SLUG_TAGS_DEFAULT, {'title'}),
+    document_authorize=policy,
+  )
+  service = DocumentService(
+    store.DocumentStore(spec.to_collection()), schema, collection_spec=spec
+  )
+
+  result = service.save(None, {'title': 'Generated Note'}, 'Body')
+
+  assert result.slug == 'generated-note'
+  assert calls == [
+    ('create', 'notes', 'generated-note', None, None, {'title': 'Generated Note'})
+  ]
+  assert (tmp_path / 'generated-note.md').is_file()
+
+
+def test_document_policy_can_deny_generated_slug_before_writing(tmp_path):
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title'),)
+  )
+  spec = CollectionSpec(
+    'notes',
+    tmp_path,
+    schema=schema,
+    slug_template=parse_template('{title_slug}', SLUG_TAGS_DEFAULT, {'title'}),
+    document_authorize=lambda *args: 'Generated notes are not allowed',
+  )
+  service = DocumentService(
+    store.DocumentStore(spec.to_collection()), schema, collection_spec=spec
+  )
+
+  with pytest.raises(store.OperationNotAllowedError, match='Generated notes'):
+    service.save(None, {'title': 'Generated Note'}, 'Body')
+
+  assert not (tmp_path / 'generated-note.md').exists()
+
+
 def test_transition_policy_rejects_invalid_values_before_writing(tmp_path):
   service = make_service(tmp_path)
   with pytest.raises(ValueError, match='Initial value'):
@@ -57,6 +109,23 @@ def test_transition_policy_rejects_invalid_values_before_writing(tmp_path):
   assert (
     service.i18n_documents.read('note', 'en').frontmatter['status'] == 'draft'
   )
+
+
+def test_transitions_inside_object_lists_require_stable_row_identity():
+  with pytest.raises(ValueError, match='no stable identity'):
+    FieldSpec(
+      'steps',
+      type='list[object]',
+      fields=(
+        FieldSpec(
+          'status',
+          transitions={
+            'initial': ['draft'],
+            'allowed': [{'from': 'draft', 'to': 'done'}],
+          },
+        ),
+      ),
+    )
 
 
 def test_document_policy_receives_full_user_and_can_allow_transition(tmp_path):

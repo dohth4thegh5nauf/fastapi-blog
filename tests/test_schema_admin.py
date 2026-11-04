@@ -79,6 +79,65 @@ def test_admin_creates_translation_from_fallback_without_stale_locale_etag(
   )
 
 
+def test_admin_batch_save_updates_changed_locales_in_one_operation(tmp_path):
+  schema = FrontmatterSchema(fields=(FieldSpec('title', i18n='translate'),))
+  spec = CollectionSpec(
+    'posts',
+    tmp_path,
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+  )
+  manager = MarkdownFileManager(str(tmp_path), collection_spec=spec)
+  manager.service.save_localized(
+    'entry',
+    {
+      'en': ({'title': 'Hello'}, 'English body'),
+      'ru': ({'title': 'Привет'}, 'Русский текст'),
+    },
+  )
+  adapter = manager.service.i18n_documents
+  assert adapter is not None
+  etags = {
+    locale: adapter.read('entry', locale, fallback=False).etag
+    for locale in ('en', 'ru')
+  }
+
+  class Request:
+    state = SimpleNamespace(blog_user={'username': 'tester', 'role': 'admin'})
+
+    async def json(self):
+      return {
+        'slug': 'entry',
+        'locales': {
+          'en': {
+            'frontmatter': {'title': 'Hello updated'},
+            'content': 'Updated English body',
+            'etag': etags['en'],
+          },
+          'ru': {
+            'frontmatter': {'title': 'Привет обновлено'},
+            'content': 'Обновлённый текст',
+            'etag': etags['ru'],
+          },
+        },
+      }
+
+  response = asyncio.run(
+    MarkdownSaveView(
+      manager, authorize=lambda request, resource, action: True
+    ).save(Request())
+  )
+
+  assert response.status_code == 200
+  assert (
+    adapter.read('entry', 'en', fallback=False).body.strip()
+    == 'Updated English body'
+  )
+  assert (
+    adapter.read('entry', 'ru', fallback=False).body.strip() == 'Обновлённый текст'
+  )
+
+
 def test_admin_reads_shared_fields_and_body_from_canonical_locale(tmp_path):
   schema = FrontmatterSchema(
     fields=(
