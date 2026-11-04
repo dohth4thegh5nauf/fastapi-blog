@@ -1,4 +1,6 @@
+import asyncio
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -78,6 +80,43 @@ def test_document_policy_authorizes_generated_slug_before_writing(tmp_path):
   assert (tmp_path / 'generated-note.md').is_file()
 
 
+def test_document_policy_receives_actions_and_frontmatter_for_crud(tmp_path):
+  calls = []
+  schema = FrontmatterSchema(fields=(FieldSpec('title', required=True),))
+
+  def policy(user, action, collection, slug, locale, before, after):
+    calls.append((user, action, collection, slug, locale, before, after))
+    return True
+
+  spec = CollectionSpec(
+    'notes', tmp_path, schema=schema, document_authorize=policy
+  )
+  documents = store.DocumentStore(spec.to_collection())
+  service = DocumentService(documents, schema, collection_spec=spec)
+  user = {'username': 'editor'}
+
+  service.save('note', {'title': 'Original'}, 'Body', user=user)
+  service.authorize_read(user, 'note', None, documents.read('note').frontmatter)
+  service.save('note', {'title': 'Changed'}, 'Body', user=user)
+  service.delete('note', user=user)
+
+  assert calls == [
+    (user, 'create', 'notes', 'note', None, None, {'title': 'Original'}),
+    (user, 'read', 'notes', 'note', None, {'title': 'Original'}, None),
+    (
+      user,
+      'update',
+      'notes',
+      'note',
+      None,
+      {'title': 'Original'},
+      {'title': 'Changed'},
+    ),
+    (user, 'delete', 'notes', 'note', None, {'title': 'Changed'}, None),
+  ]
+  assert not documents.exists('note')
+
+
 def test_document_policy_can_deny_generated_slug_before_writing(tmp_path):
   schema = FrontmatterSchema(
     fields=(FieldSpec('title', required=True, role='title'),)
@@ -154,6 +193,73 @@ def test_document_policy_receives_full_user_and_can_allow_transition(tmp_path):
   )
   assert (user, 'publish', 'notes', 'note', 'en') in calls
   assert (user, 'transition', 'notes', 'note', 'en') in calls
+
+
+def test_transition_without_permission_uses_transition_hook(tmp_path):
+  actions = []
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec(
+        'status',
+        transitions={
+          'initial': ['draft'],
+          'allowed': [{'from': 'draft', 'to': 'published'}],
+        },
+      ),
+    )
+  )
+
+  def policy(user, action, collection, slug, locale, before, after):
+    actions.append(action)
+    return True
+
+  spec = CollectionSpec(
+    'notes', tmp_path, schema=schema, document_authorize=policy
+  )
+  service = DocumentService(
+    store.DocumentStore(spec.to_collection()), schema, collection_spec=spec
+  )
+  service.save('note', {'title': 'Title', 'status': 'draft'}, 'Body')
+  service.save('note', {'title': 'Title', 'status': 'published'}, 'Body')
+
+  assert actions[-2:] == ['update', 'transition']
+
+
+def test_rest_allows_transition_when_permission_and_hook_allow(tmp_path):
+  actions = []
+
+  def policy(user, action, collection, slug, locale, before, after):
+    actions.append(action)
+    return True
+
+  service = make_service(tmp_path, policy)
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=service.collection_spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+  created = client.put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'draft'},
+      'content': 'Body',
+    },
+  )
+  assert created.status_code == 201
+  actions.clear()
+
+  changed = client.put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'published'},
+      'content': 'Body',
+    },
+  )
+
+  assert changed.status_code == 200
+  assert actions == ['update', 'publish', 'transition']
 
 
 def test_nested_object_transition_uses_document_permission(tmp_path):
@@ -315,6 +421,48 @@ def test_rest_checks_transition_permission_before_transition_hook(tmp_path):
   assert denied.status_code == 403
   assert denied.json()['detail'] == 'Publishing denied'
   assert actions == ['update', 'publish']
+  assert service.i18n_documents.read('note', 'en').frontmatter['status'] == (
+    'draft'
+  )
+
+
+def test_admin_save_cannot_bypass_transition_permission(tmp_path):
+  pytest.importorskip('starlette_admin')
+  from fastapi_blog.admin.markdown_crud import (
+    MarkdownFileManager,
+    MarkdownSaveView,
+  )
+
+  def policy(user, action, collection, slug, locale, before, after):
+    return action != 'publish'
+
+  service = make_service(tmp_path, policy)
+  created = service.save_localized(
+    'note', {'en': ({'title': 'Title', 'status': 'draft'}, 'Body')}
+  )
+  manager = MarkdownFileManager(
+    str(tmp_path), collection_spec=service.collection_spec
+  )
+
+  class FakeRequest:
+    state = SimpleNamespace(blog_user={'username': 'editor', 'role': 'admin'})
+
+    async def json(self):
+      return {
+        'slug': 'note',
+        'content_locale': 'en',
+        'etag': created.etags['en'],
+        'frontmatter': {'title': 'Title', 'status': 'published'},
+        'content': 'Body',
+      }
+
+  response = asyncio.run(
+    MarkdownSaveView(
+      manager, authorize=lambda request, resource, action: True
+    ).save(FakeRequest())
+  )
+
+  assert response.status_code == 403
   assert service.i18n_documents.read('note', 'en').frontmatter['status'] == (
     'draft'
   )
