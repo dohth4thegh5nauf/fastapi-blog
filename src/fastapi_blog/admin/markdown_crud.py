@@ -106,8 +106,17 @@ def _value_at_path(source: Any, path: list[Any]) -> Any:
 def _replace_at_path(target: dict[str, Any], path: list[Any], value: Any) -> None:
   """Set one nested mapping/list value on an already copied document."""
   current: Any = target
-  for key in path[:-1]:
-    current = current[key]
+  for index, key in enumerate(path[:-1]):
+    if isinstance(current, dict):
+      next_key = path[index + 1]
+      expected_type = list if isinstance(next_key, int) else dict
+      if not isinstance(current.get(key), expected_type):
+        current[key] = expected_type()
+      current = current[key]
+    elif isinstance(current, list) and isinstance(key, int):
+      current = current[key]
+    else:
+      return
   current[path[-1]] = value
 
 
