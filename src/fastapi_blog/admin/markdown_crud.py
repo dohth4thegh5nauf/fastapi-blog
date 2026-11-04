@@ -3,6 +3,7 @@
 import os
 import warnings
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -54,7 +55,6 @@ def get_posts_directory(posts_dirname: str | None = None) -> str:
   """
   if posts_dirname is not None:
     return posts_dirname
-
   posts_dir_env = os.getenv('POSTS_DIR')
   if posts_dir_env:
     warnings.warn(
@@ -73,6 +73,168 @@ def get_posts_directory(posts_dirname: str | None = None) -> str:
   )
   return str(backend_dir / 'posts')
 
+
+def _field_spec_at_path(
+  fields: tuple[Any, ...], path: list[str]
+) -> Any | None:
+  """Resolve a schema field from its external-key path."""
+  current = None
+  candidates = fields
+  for key in path:
+    current = next(
+      (field for field in candidates if key in (field.key, field.name)), None
+    )
+    if current is None:
+      return None
+    candidates = current.fields or ()
+  return current
+
+
+def _value_at_path(source: Any, path: list[Any]) -> Any:
+  """Read a nested mapping/list value without mutating it."""
+  current = source
+  for key in path:
+    if isinstance(current, Mapping):
+      current = current.get(key)
+    elif isinstance(current, list) and isinstance(key, int) and key < len(current):
+      current = current[key]
+    else:
+      return None
+  return current
+
+
+def _replace_at_path(target: dict[str, Any], path: list[Any], value: Any) -> None:
+  """Set one nested mapping/list value on an already copied document."""
+  current: Any = target
+  for key in path[:-1]:
+    current = current[key]
+  current[path[-1]] = value
+
+
+def _filter_transition_choices(
+  choices: list[dict[str, Any]],
+  field: Any,
+  path: list[Any],
+  before: Mapping[str, Any] | None,
+  *,
+  service: DocumentService,
+  user: Any,
+  slug: str,
+  locale: str | None,
+  is_new: bool,
+) -> None:
+  """Disable choices that violate the schema or document transition policy."""
+  transitions = field.transitions
+  if transitions is None:
+    return
+  previous = _value_at_path(before or {}, path)
+  initial = {str(value) for value in transitions.get('initial', [])}
+  for choice in choices:
+    value = choice['value']
+    if is_new or before is None:
+      choice['disabled'] = str(value) not in initial
+      continue
+    if str(value) == str(previous):
+      choice['disabled'] = False
+      continue
+    rule = next(
+      (
+        item
+        for item in transitions.get('allowed', [])
+        if str(item['from']) == str(previous) and str(item['to']) == str(value)
+      ),
+      None,
+    )
+    choice['disabled'] = rule is None
+    if rule is None:
+      continue
+    candidate = deepcopy(dict(before))
+    _replace_at_path(candidate, path, rule['to'])
+    if rule.get('permission') and (
+      not service.collection_spec
+      or not service.collection_spec.document_authorize
+    ):
+      choice['disabled'] = True
+      continue
+    for action in (rule.get('permission'), 'transition'):
+      if not action:
+        continue
+      try:
+        service._authorize_document(
+          user, action, slug, locale, before, candidate
+        )
+      except store.OperationNotAllowedError:
+        choice['disabled'] = True
+        break
+
+
+def _filter_form_transition_choices(
+  form_fields: list[dict[str, Any]],
+  schema: FrontmatterSchema,
+  before: Mapping[str, Any] | None,
+  *,
+  service: DocumentService,
+  user: Any,
+  slug: str,
+  locale: str | None,
+  is_new: bool,
+) -> None:
+  """Apply transition-aware choice state to scalar and object-list controls."""
+  for form_field in form_fields:
+    path = form_field['path']
+    spec = _field_spec_at_path(schema.fields, path)
+    if spec is None:
+      continue
+    if spec.type == 'list[object]':
+      old_items = _value_at_path(before or {}, path)
+      old_items = old_items if isinstance(old_items, list) else []
+      for index, row in enumerate(form_field.get('items', [])):
+        for child in row:
+          child_spec = next(
+            (item for item in spec.fields or () if item.key == child['key']),
+            None,
+          )
+          if child_spec is None:
+            continue
+          _filter_transition_choices(
+            child['choices'],
+            child_spec,
+            [*path, index, child_spec.key],
+            before,
+            service=service,
+            user=user,
+            slug=slug,
+            locale=locale,
+            is_new=is_new,
+          )
+      for child in form_field.get('children', []):
+        child_spec = next(
+          (item for item in spec.fields or () if item.key == child['key']), None
+        )
+        if child_spec is not None:
+          _filter_transition_choices(
+            child['choices'],
+            child_spec,
+            [*path, len(old_items), child_spec.key],
+            before,
+            service=service,
+            user=user,
+            slug=slug,
+            locale=locale,
+            is_new=True,
+          )
+    else:
+      _filter_transition_choices(
+        form_field['choices'],
+        spec,
+        path,
+        before,
+        service=service,
+        user=user,
+        slug=slug,
+        locale=locale,
+        is_new=is_new,
+      )
 
 class MarkdownPost:
   """Represents a markdown post with frontmatter.
@@ -1021,67 +1183,23 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
     )
 
     for form_field in form_fields:
-      field_spec = next(
-        (
-          field
-          for field in self.schema.fields
-          if len(form_field['path']) == 1 and field.key == form_field['path'][0]
-        ),
-        None,
-      )
+      field_spec = _field_spec_at_path(self.schema.fields, form_field['path'])
       form_field['shared'] = bool(
         adapter is not None
         and content_locale != adapter.config.default_locale
         and field_spec is not None
         and field_spec.i18n in ('none', 'duplicate')
       )
-      if len(form_field['path']) != 1 or not form_field['choices']:
-        continue
-      spec = next(
-        (
-          field
-          for field in self.schema.fields
-          if field.key == form_field['path'][0]
-        ),
-        None,
-      )
-      if spec is None or spec.transitions is None:
-        continue
-      before = post.frontmatter
-      current = before.get(spec.key)
-      for choice in form_field['choices']:
-        choice_value = choice['value']
-        if str(current) == str(choice_value):
-          choice['disabled'] = False
-          continue
-        rule = next(
-          (
-            rule
-            for rule in spec.transitions.get('allowed', [])
-            if rule['from'] == current and str(rule['to']) == str(choice_value)
-          ),
-          None,
-        )
-        choice['disabled'] = rule is None
-        if rule and rule.get('permission'):
-          try:
-            if (
-              not self.manager.collection_spec
-              or not self.manager.collection_spec.document_authorize
-            ):
-              raise store.OperationNotAllowedError(
-                'Transition requires permission'
-              )
-            self.manager.service._authorize_document(
-              getattr(request.state, 'blog_user', None),
-              rule['permission'],
-              post.slug,
-              content_locale,
-              before,
-              {**before, spec.key: rule['to']},
-            )
-          except store.OperationNotAllowedError:
-            choice['disabled'] = True
+    _filter_form_transition_choices(
+      form_fields,
+      self.schema,
+      post.frontmatter,
+      service=self.manager.service,
+      user=getattr(request.state, 'blog_user', None),
+      slug=post.slug,
+      locale=content_locale,
+      is_new=not locale_exists,
+    )
 
     return self.templates.TemplateResponse(
       request=request,
@@ -1199,21 +1317,16 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
       ),
     )
 
-    for form_field in form_fields:
-      if len(form_field['path']) != 1 or not form_field['choices']:
-        continue
-      field = next(
-        (
-          item
-          for item in self.schema.fields
-          if item.key == form_field['path'][0]
-        ),
-        None,
-      )
-      if field is not None and field.transitions is not None:
-        allowed = {str(value) for value in field.transitions.get('initial', [])}
-        for choice in form_field['choices']:
-          choice['disabled'] = choice['value'] not in allowed
+    _filter_form_transition_choices(
+      form_fields,
+      self.schema,
+      None,
+      service=self.manager.service,
+      user=getattr(request.state, 'blog_user', None),
+      slug='',
+      locale=content_locale,
+      is_new=True,
+    )
 
     return self.templates.TemplateResponse(
       request=request,

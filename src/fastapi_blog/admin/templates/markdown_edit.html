@@ -35,7 +35,7 @@
       {% elif child.kind in ('select', 'multi_select') %}
       <select class="form-select" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="{{ child.kind }}" data-child-parent="{{ parent_name }}"{% if child.multiple %} multiple{% endif %}{% if child.read_only %} disabled{% endif %}{% if child.required %} required{% endif %}>
         {% if not child.multiple %}<option value=""></option>{% endif %}
-        {% for choice in child.choices %}<option value="{{ choice.value }}"{% if choice.value in child.selected_values %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+        {% for choice in child.choices %}<option value="{{ choice.value }}"{% if choice.value in child.selected_values %} selected{% endif %}{% if choice.disabled %} disabled{% endif %}>{{ choice.label }}</option>{% endfor %}
       </select>
       {% elif child.kind in ('textarea', 'json') %}
       <textarea class="form-control" id="{{ field_id }}" data-child-field data-child-name="{{ child.name }}" data-child-key="{{ child.key }}" data-child-kind="{{ child.kind }}" data-child-parent="{{ parent_name }}"{% if child.read_only %} readonly{% endif %}{% if child.required %} required{% endif %}>{{ child.value }}</textarea>
