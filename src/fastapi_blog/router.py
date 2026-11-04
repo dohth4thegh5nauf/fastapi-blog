@@ -10,6 +10,7 @@ from . import helpers, jsonld, store
 from .i18n import Translator, get_all_locale_names
 from .models import SLUG_RE, FrontmatterSchema, SeoConfig
 from .seo import build_head, resolve_seo_config
+from .service import DocumentService
 
 
 def get_blog_router(
@@ -27,6 +28,7 @@ def get_blog_router(
   seo: SeoConfig | None = None,
   jsonld_routes: bool = False,
   translations_dir: str | pathlib.Path | None = None,
+  document_service: DocumentService | None = None,
 ) -> APIRouter:
   router = APIRouter()
 
@@ -199,9 +201,12 @@ def get_blog_router(
     return context
 
   def _list_posts() -> tuple[dict, ...]:
-    return helpers.list_posts(
+    posts = helpers.list_posts(
       posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
     )
+    if document_service is not None:
+      posts = helpers.filter_posts_by_document_policy(posts, document_service)
+    return posts
 
   # Create routes - same paths whether locale is specified or not
   # If locale is specified, these will be mounted at /{locale}/blog
