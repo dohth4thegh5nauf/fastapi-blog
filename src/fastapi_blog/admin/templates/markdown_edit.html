@@ -319,11 +319,9 @@ for (const counter of document.querySelectorAll('.js-char-counter')) {
   update();
 }
 
-document.getElementById('post-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const formData = new FormData(e.target);
-  
+function buildCurrentLocalePayload() {
+  const form = document.getElementById('post-form');
+  const formData = new FormData(form);
   // Build frontmatter from the schema fields, under their external keys
   const frontmatter = {};
   function readFieldValue(kind, element, name) {
@@ -373,7 +371,7 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     }
   } catch (error) {
     alert(`Error: ${error.message}`);
-    return;
+    return null;
   }
   
   // Build request
@@ -385,7 +383,131 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     content_locale: formData.get('content_locale'),
     entry_etag: formData.get('entry_etag'),
   };
-  
+
+  return data;
+}
+
+const postForm = document.getElementById('post-form');
+const draftKey = `fastapi-blog:locale-drafts:${window.location.pathname}:` + {{ post.slug | tojson }};
+const localeDrafts = (() => {
+  try {
+    return JSON.parse(sessionStorage.getItem(draftKey) || '{}');
+  } catch (error) {
+    return {};
+  }
+})();
+
+function getNested(source, path) {
+  return path.reduce((value, key) => value && value[key], source);
+}
+
+function assignElementValue(element, kind, value) {
+  if (kind === 'select' && element.multiple) {
+    const values = new Set(Array.isArray(value) ? value.map(String) : []);
+    for (const option of element.options) option.selected = values.has(option.value);
+  } else if (kind === 'multi_select') {
+    const values = new Set(Array.isArray(value) ? value.map(String) : []);
+    for (const option of element.options) option.selected = values.has(option.value);
+  } else if (kind === 'bool') {
+    element.value = value ? 'true' : 'false';
+  } else if (['list', 'link_list', 'int_list'].includes(kind)) {
+    element.value = Array.isArray(value) ? value.join(', ') : '';
+  } else if (kind === 'json') {
+    element.value = value === undefined ? '' : JSON.stringify(value, null, 2);
+  } else {
+    element.value = value === undefined || value === null ? '' : String(value);
+  }
+}
+
+function restoreLocaleDraft(draft) {
+  if (!draft) return;
+  for (const field of formFields) {
+    if (field.kind === 'hidden') continue;
+    const value = getNested(draft.frontmatter || {}, field.path);
+    if (field.kind === 'object_list') {
+      const container = document.getElementById(`field-${field.name}`);
+      const template = document.getElementById(`object-template-${field.name}`);
+      container.replaceChildren();
+      for (const [index, item] of (Array.isArray(value) ? value : []).entries()) {
+        const fragment = template.content.cloneNode(true);
+        const row = fragment.querySelector('.js-object-row');
+        for (const child of row.querySelectorAll('[data-child-field]')) {
+          assignElementValue(
+            child,
+            child.dataset.childKind,
+            item[child.dataset.childKey]
+          );
+        }
+        const suffix = `${field.name}-${Date.now()}-${index}`;
+        for (const element of row.querySelectorAll('[id]')) {
+          const previousId = element.id;
+          element.id = `${previousId}-${suffix}`;
+          const label = row.querySelector(`label[for="${previousId}"]`);
+          if (label) label.htmlFor = element.id;
+        }
+        container.appendChild(fragment);
+        wireObjectRow(container.lastElementChild);
+      }
+      continue;
+    }
+    const element = document.getElementById(`field-${field.name}`);
+    if (element) assignElementValue(element, field.kind, value);
+  }
+  document.getElementById('content').value = draft.content || '';
+  const etag = document.querySelector('[name="etag"]');
+  const entryEtag = document.querySelector('[name="entry_etag"]');
+  if (etag) etag.value = draft.etag || '';
+  if (entryEtag) entryEtag.value = draft.entry_etag || '';
+  formDirty = true;
+}
+
+const activeLocale = postForm.querySelector('[name="content_locale"]')?.value;
+if (activeLocale && localeDrafts[activeLocale]) {
+  restoreLocaleDraft(localeDrafts[activeLocale]);
+}
+
+document.querySelectorAll('.nav-tabs a[href*="content_locale="]').forEach(tab => {
+  tab.addEventListener('click', event => {
+    if (!formDirty || !activeLocale) return;
+    const current = buildCurrentLocalePayload();
+    if (!current) {
+      event.preventDefault();
+      return;
+    }
+    localeDrafts[activeLocale] = current;
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify(localeDrafts));
+    } catch (error) {
+      event.preventDefault();
+      alert('The locale draft could not be stored in this browser tab.');
+      return;
+    }
+    formDirty = false;
+  });
+});
+
+postForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const current = buildCurrentLocalePayload();
+  if (!current) return;
+  if (
+    current.content_locale
+    && (formDirty || Object.keys(localeDrafts).length === 0)
+  ) {
+    localeDrafts[current.content_locale] = current;
+  }
+  const locales = Object.fromEntries(
+    Object.entries(localeDrafts).map(([locale, draft]) => [locale, {
+      frontmatter: draft.frontmatter,
+      content: draft.content,
+      etag: draft.etag,
+      entry_etag: draft.entry_etag,
+    }])
+  );
+  const data = current.content_locale
+    ? {slug: current.slug, locales}
+    : current;
+
   try {
     const csrfToken = csrfTokenValue();
     const response = await fetch(saveUrl, {
@@ -400,6 +522,7 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     
     if (response.ok) {
       formDirty = false;
+      sessionStorage.removeItem(draftKey);
       window.location.href = '{{ url_for(__name__ ~ ':posts:list') }}';
     } else {
       const error = await response.json();
