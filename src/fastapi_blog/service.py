@@ -117,6 +117,98 @@ class DocumentService:
       model, is_create=is_create, existing=existing
     )
 
+  def _authorize_document(
+    self,
+    user: Any,
+    action: str,
+    slug: str | None,
+    locale: str | None,
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+  ) -> None:
+    """Apply the optional document policy without weakening collection RBAC."""
+    policy = (
+      self.collection_spec.document_authorize if self.collection_spec else None
+    )
+    if policy is None:
+      return
+    result = policy(
+      user, action, self.documents.collection.name, slug, locale, before, after
+    )
+    if result is not True:
+      reason = (
+        result
+        if isinstance(result, str) and result
+        else 'Document access denied'
+      )
+      raise store.OperationNotAllowedError(reason)
+
+  def authorize_read(
+    self,
+    user: Any,
+    slug: str,
+    locale: str | None,
+    frontmatter: Mapping[str, Any],
+  ) -> None:
+    """Check document read access using the same policy as writes."""
+    self._authorize_document(user, 'read', slug, locale, frontmatter, None)
+
+  def _check_transitions(
+    self,
+    fields: tuple[Any, ...],
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any],
+    *,
+    user: Any,
+    slug: str | None,
+    locale: str | None,
+    prefix: str = '',
+  ) -> None:
+    """Reject unlisted field transitions before modifying any file."""
+    old = before or {}
+    for field in fields:
+      key = field.key
+      label = f'{prefix}.{field.name}' if prefix else field.name
+      previous = old.get(key)
+      current = after.get(key)
+      if field.transitions is not None and current != previous:
+        if before is None:
+          if current not in field.transitions.get('initial', []):
+            raise ValueError(
+              f'Initial value {current!r} is not allowed for {label!r}'
+            )
+        else:
+          matching = [
+            rule
+            for rule in field.transitions.get('allowed', [])
+            if rule['from'] == previous and rule['to'] == current
+          ]
+          if not matching:
+            raise ValueError(
+              f'Transition {previous!r} to {current!r} is not allowed for {label!r}'
+            )
+          permission = matching[0].get('permission')
+          if permission:
+            if (
+              not self.collection_spec
+              or not self.collection_spec.document_authorize
+            ):
+              raise store.OperationNotAllowedError(
+                f'Transition requires permission {permission!r}'
+              )
+            self._authorize_document(user, permission, slug, locale, old, after)
+          self._authorize_document(user, 'transition', slug, locale, old, after)
+      if field.type == 'object' and isinstance(current, Mapping):
+        self._check_transitions(
+          field.fields or (),
+          previous if isinstance(previous, Mapping) else None,
+          current,
+          user=user,
+          slug=slug,
+          locale=locale,
+          prefix=label,
+        )
+
   def _check_unique(
     self,
     slug: str | None,
@@ -218,6 +310,14 @@ class DocumentService:
     outside the lock.
     """
     is_generated = not slug
+    if (
+      is_generated
+      and self.collection_spec
+      and self.collection_spec.document_authorize
+    ):
+      raise store.OperationNotAllowedError(
+        'An explicit slug is required when a document policy is configured'
+      )
     if is_generated and (
       self.collection_spec is None or self.collection_spec.slug_template is None
     ):
@@ -250,6 +350,17 @@ class DocumentService:
         dict(prepare(is_new, existing))
         if prepare is not None
         else dict(frontmatter)
+      )
+      self._authorize_document(
+        user, 'create' if is_new else 'update', slug, None, existing, validated
+      )
+      self._check_transitions(
+        self.schema.fields,
+        existing,
+        validated,
+        user=user,
+        slug=slug,
+        locale=None,
       )
 
       if is_generated:
@@ -304,7 +415,10 @@ class DocumentService:
     """Delete a document with the collection's configured restrictions."""
     if self.i18n_documents is not None:
       raise store.OperationNotAllowedError('Use localized document operations')
-    self.documents.delete(slug, if_match=if_match, user=_actor(user))
+    with self.documents._lock:
+      before = self.documents.read(slug).frontmatter
+      self._authorize_document(user, 'delete', slug, None, before, None)
+      self.documents.delete(slug, if_match=if_match, user=_actor(user))
     helpers.clear_posts_cache()
 
   def save_localized(
@@ -449,6 +563,25 @@ class DocumentService:
               write_duplicates=config.write_duplicates,
             )
           prepared_entry[locale] = (validated, body)
+          before = existing_records.get(locale)
+          self._authorize_document(
+            user,
+            'create' if before is None else 'update',
+            slug,
+            locale,
+            before,
+            validated,
+          )
+          fields = (
+            self.schema.fields
+            if locale == canonical_locale
+            else tuple(
+              field for field in self.schema.fields if field.i18n == 'translate'
+            )
+          )
+          self._check_transitions(
+            fields, before, validated, user=user, slug=slug, locale=locale
+          )
         if not config.translate_body:
           canonical_body = (
             locale_documents[canonical_locale][1]
@@ -745,6 +878,11 @@ class DocumentService:
       paths_to_delete = tuple(
         self.i18n_documents.path_for(slug, item) for item in locales_to_delete
       )
+      for item in locales_to_delete:
+        before = self.i18n_documents.read(
+          slug, item, fallback=False
+        ).frontmatter
+        self._authorize_document(user, 'delete', slug, item, before, None)
       self.i18n_documents.delete_locale(
         slug, locale, cascade=cascade, if_match=if_match
       )
@@ -777,6 +915,11 @@ class DocumentService:
       locales = adapter.locales_present(old_slug)
       if old_slug == new_slug:
         return adapter.entry_etag(old_slug)
+      for locale in locales:
+        before = adapter.read(old_slug, locale, fallback=False).frontmatter
+        self._authorize_document(
+          user, 'update', old_slug, locale, before, before
+        )
       adapter.rename(
         old_slug,
         new_slug,
@@ -809,6 +952,9 @@ class DocumentService:
       raise ValueError('This collection does not enable i18n')
     with self.documents._lock:
       locales = adapter.locales_present(slug)
+      for locale in locales:
+        before = adapter.read(slug, locale, fallback=False).frontmatter
+        self._authorize_document(user, 'delete', slug, locale, before, None)
       paths = tuple(adapter.path_for(slug, locale) for locale in locales)
       if (
         expected_entry_etag is not None

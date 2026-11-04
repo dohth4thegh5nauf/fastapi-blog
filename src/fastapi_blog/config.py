@@ -113,6 +113,7 @@ class CollectionSpec:
   i18n: I18nConfig | None = None
   label: str | Mapping[str, str] | None = None
   translations_dir: pathlib.Path | None = None
+  document_authorize: Callable[..., bool | str] | None = None
 
   def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
     """Return this collection specification with an application schema."""

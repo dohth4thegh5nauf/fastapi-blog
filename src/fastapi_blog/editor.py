@@ -47,13 +47,6 @@ from .service import (
 from .validators import Validator
 
 
-def _event_actor(user: Any) -> Any:
-  """Return a stable, non-sensitive actor identifier for change events."""
-  if isinstance(user, dict):
-    return user.get('username') or user.get('id')
-  return user
-
-
 async def require_authentication(request: Request) -> dict:
   """Require authentication via session cookie.
 
@@ -290,7 +283,7 @@ def get_api_router(
         frontmatter,
         body,
         if_match=if_match,
-        user=_event_actor(user),
+        user=user,
       )
     except BlockingValidationError as exc:
       raise HTTPException(
@@ -405,6 +398,11 @@ def get_api_router(
         )
       try:
         record = adapter.read(slug, requested_locale, fallback=fallback)
+        document_service.authorize_read(
+          user, slug, record.locale, record.frontmatter
+        )
+      except store.OperationNotAllowedError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
       except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(
           status_code=status.HTTP_404_NOT_FOUND,
@@ -418,6 +416,12 @@ def get_api_router(
         canonical_record = adapter.read(
           slug, adapter.config.default_locale, fallback=False
         )
+        try:
+          document_service.authorize_read(
+            user, slug, canonical_record.locale, canonical_record.frontmatter
+          )
+        except store.OperationNotAllowedError as exc:
+          raise HTTPException(status_code=403, detail=str(exc)) from exc
         canonical = canonical_record.frontmatter
         if not adapter.config.translate_body:
           response_body = canonical_record.body
@@ -491,7 +495,7 @@ def get_api_router(
         documents[target_locale] = (frontmatter, content)
 
       is_new = not adapter.has_entry(slug)
-      await _guard('create' if is_new else 'update')(request, user)
+      user = await _guard('create' if is_new else 'update')(request, user)
       if not is_new:
         _require_if_match(if_match)
 
@@ -543,7 +547,7 @@ def get_api_router(
           if_match=locale_etags,
           expected_entry_etag=expected_entry_etag,
           expected_exists=not is_new,
-          user=_event_actor(user),
+          user=user,
         )
       except BlockingValidationError as exc:
         raise HTTPException(
@@ -617,6 +621,14 @@ def get_api_router(
         if adapter is not None
         else docs.read(slug)
       )
+      document_service.authorize_read(
+        user,
+        slug,
+        adapter.config.default_locale if adapter is not None else None,
+        record.frontmatter,
+      )
+    except store.OperationNotAllowedError as exc:
+      raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (ValueError, FileNotFoundError) as exc:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -689,12 +701,10 @@ def get_api_router(
           slug,
           cascade=cascade,
           expected_entry_etag=if_match,
-          user=_event_actor(user),
+          user=user,
         )
       else:
-        document_service.delete(
-          slug, if_match=if_match, user=_event_actor(user)
-        )
+        document_service.delete(slug, if_match=if_match, user=user)
     except store.OperationNotAllowedError as exc:
       raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)

@@ -294,6 +294,7 @@ class FieldSpec:
   fields: tuple['FieldSpec', ...] | None = None
   group: str | None = None
   i18n: str | bool = 'none'
+  transitions: Mapping[str, Any] | None = None
 
   def __post_init__(self) -> None:
     if not self.name.isidentifier() or self.name.startswith(('_', 'model_')):
@@ -313,6 +314,35 @@ class FieldSpec:
         f'Invalid i18n mode {self.i18n!r} for field {self.name!r}; '
         "expected 'translate', 'duplicate' or 'none'"
       )
+    if self.transitions is not None:
+      if not isinstance(self.transitions, Mapping) or set(self.transitions) - {
+        'initial',
+        'allowed',
+      }:
+        raise ValueError(
+          f'`transitions` of field {self.name!r} must contain only `initial` and `allowed`'
+        )
+      initial = self.transitions.get('initial', [])
+      allowed = self.transitions.get('allowed', [])
+      if not isinstance(initial, (list, tuple)) or not isinstance(
+        allowed, (list, tuple)
+      ):
+        raise ValueError(
+          f'`transitions.initial` and `transitions.allowed` of field {self.name!r} must be lists'
+        )
+      for rule in allowed:
+        if (
+          not isinstance(rule, Mapping)
+          or not {'from', 'to'} <= set(rule)
+          or set(rule) - {'from', 'to', 'permission'}
+        ):
+          raise ValueError(f'Invalid transition rule for field {self.name!r}')
+        if 'permission' in rule and (
+          not isinstance(rule['permission'], str) or not rule['permission']
+        ):
+          raise ValueError(
+            f'Transition permission for field {self.name!r} must be a non-empty string'
+          )
     if self.type not in _TYPES:
       raise ValueError(
         f'Unknown type {self.type!r} for field {self.name!r}. '
