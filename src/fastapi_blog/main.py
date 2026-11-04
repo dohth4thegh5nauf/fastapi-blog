@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
@@ -31,6 +32,7 @@ from .validators import Validator
 
 # The sitemap protocol allows at most this many URLs in one file.
 SITEMAP_URL_LIMIT = 50_000
+_SEO_SNAPSHOT_CACHE_LIMIT = 64
 _SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9'
 # W3C Datetime as used by `<lastmod>`: a date, or a date and time with a zone.
 _W3C_DATETIME = re.compile(
@@ -558,7 +560,13 @@ def _mount_seo_routes(
         entries[absolute(f'{blog_path}/tags/{quote(tag, safe="")}')] = None
     return sorted(entries.items()), aliases
 
-  state: dict[str, Any] = {}
+  state: OrderedDict[
+    str,
+    tuple[
+      tuple[dict, ...],
+      tuple[list[tuple[str, str | None]], dict[str, str]],
+    ],
+  ] = OrderedDict()
 
   def snapshot(
     request: Request | None = None,
@@ -576,6 +584,10 @@ def _mount_seo_routes(
     if cached is None or cached[0] is not posts:
       cached = (posts, build_snapshot(posts))
       state[root_key] = cached
+      if len(state) > _SEO_SNAPSHOT_CACHE_LIMIT:
+        state.popitem(last=False)
+    else:
+      state.move_to_end(root_key)
     return cached[1]
 
   def urlset(entries: list[tuple[str, str | None]]) -> bytes:
