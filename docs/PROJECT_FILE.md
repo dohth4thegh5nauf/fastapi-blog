@@ -92,6 +92,9 @@ locale-specific values, `duplicate` compares a value with the canonical
 locale, and `none` is not localized. `required_in_translations` controls
 whether required fields may be omitted in translations; `write_duplicates`
 controls whether duplicate values are mirrored to translation files.
+If an existing translation contains a shared field that differs from its
+canonical value, saving that translation is rejected with a conflict. Resolve
+the existing value first so a save cannot silently discard it.
 
 `label`, `hint`, `choices[].label` and collection `label` can be strings or
 locale maps. Resolution order is interface locale, collection default locale,
