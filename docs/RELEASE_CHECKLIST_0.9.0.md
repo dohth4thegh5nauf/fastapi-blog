@@ -64,14 +64,13 @@ tag (currently the file says `fastapi-blog:0.9.0`) and validate with
 
 ## Evidence and current state
 
-Full local gate independently re-run in this repository (ruff check, ruff
-format, mypy, pytest via the project virtual environment — the same
-invocations the Makefile performs through `uv run`): **769 passed,
-2 skipped**, Ruff and mypy clean. Note for maintainers: `make all` relies on
-`uv run`, which requires the exact interpreter pinned in `.python-version`
-(3.12.16); where that patch version is unavailable, run the same commands
-from the project's `.venv` directly. The GitHub matrix subsequently passed
-on the Python 3.12–3.15 PR.
+After commit `58d1f23`, the local Python 3.12 gate passed with **893 passed,
+2 skipped**. Pytest treated unhandled thread exceptions as errors; Ruff,
+formatting and mypy also passed. The GitHub matrix had passed on Python
+3.12–3.15 in an earlier PR; it must run again on the final release candidate.
+Note for maintainers: `make all` relies on `uv run`, which requires the exact
+interpreter pinned in `.python-version` (3.12.16); where that patch version is
+unavailable, run the same commands from the project's `.venv` directly.
 
 Release verification performed locally on top of the test gate:
 

@@ -225,7 +225,8 @@ class I18nCollection:
         continue
       canonical = self.read(slug, self.config.default_locale)
       digest = self.entry_etag(slug)
-      assert digest is not None  # A canonical file exists in ``paths``.
+      if digest is None:
+        continue
       entries.append(
         LocalizedEntry(slug, canonical, tuple(sorted(paths)), digest)
       )
