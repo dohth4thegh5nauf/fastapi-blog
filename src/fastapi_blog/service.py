@@ -208,6 +208,26 @@ class DocumentService:
           locale=locale,
           prefix=label,
         )
+      elif field.type == 'list[object]' and isinstance(current, list):
+        previous_items = previous if isinstance(previous, list) else []
+        for index, item in enumerate(current):
+          if not isinstance(item, Mapping):
+            continue
+          previous_item = (
+            previous_items[index]
+            if index < len(previous_items)
+            and isinstance(previous_items[index], Mapping)
+            else None
+          )
+          self._check_transitions(
+            field.fields or (),
+            previous_item,
+            item,
+            user=user,
+            slug=slug,
+            locale=locale,
+            prefix=f'{label}[{index}]',
+          )
 
   def _check_unique(
     self,

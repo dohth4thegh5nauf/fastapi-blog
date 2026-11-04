@@ -478,6 +478,98 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
     slug = str(slug_value).strip() if slug_value else None
     adapter = self.manager.service.i18n_documents
     content_locale = data.get('content_locale')
+    locale_payloads = data.get('locales')
+    if adapter is not None and locale_payloads is not None:
+      if not slug:
+        return JSONResponse(
+          {'detail': 'A canonical slug is required for translations'}, 400
+        )
+      if not isinstance(locale_payloads, dict) or not locale_payloads:
+        return JSONResponse(
+          {'detail': 'locales must be a non-empty object'}, 400
+        )
+      is_new = not adapter.has_entry(slug)
+      if is_new and adapter.config.default_locale not in locale_payloads:
+        return JSONResponse(
+          {'detail': 'Create the canonical locale before adding translations'},
+          409,
+        )
+      await self._require(request, 'create' if is_new else 'update')
+      documents: dict[str, tuple[Mapping[str, Any], str]] = {}
+      etags: dict[str, str] = {}
+      entry_etags: set[str] = set()
+      for locale, payload in locale_payloads.items():
+        if locale not in adapter.config.locales:
+          return JSONResponse({'detail': f'Unknown content locale: {locale}'}, 400)
+        if not isinstance(payload, dict):
+          return JSONResponse(
+            {'detail': f'Locale payload for {locale} must be an object'}, 400
+          )
+        frontmatter = payload.get('frontmatter', {})
+        content = payload.get('content', '')
+        if not isinstance(frontmatter, dict) or not isinstance(content, str):
+          return JSONResponse(
+            {
+              'detail': f'Locale {locale} requires frontmatter object and content text'
+            },
+            400,
+          )
+        locale_path = adapter.path_for(slug, locale)
+        etag = payload.get('etag')
+        entry_etag = payload.get('entry_etag')
+        if not is_new and locale_path.is_file():
+          if not etag:
+            return JSONResponse(
+              {'detail': f'The {locale} edit form is missing its etag; reload'},
+              428,
+            )
+          etags[locale] = str(etag)
+        elif not is_new:
+          if not entry_etag:
+            return JSONResponse(
+              {'detail': f'The {locale} form is stale; reload'}, 428
+            )
+          entry_etags.add(str(entry_etag))
+        documents[locale] = (frontmatter, content)
+      if len(entry_etags) > 1:
+        return JSONResponse(
+          {'detail': 'Locale drafts were opened against different entry versions'},
+          409,
+        )
+      try:
+        result = self.manager.service.save_localized(
+          slug,
+          documents,
+          if_match=etags or None,
+          expected_entry_etag=next(iter(entry_etags), None),
+          expected_exists=not is_new,
+          user=getattr(request.state, 'blog_user', None),
+        )
+      except BlockingValidationError as exc:
+        return JSONResponse(
+          {'detail': {'issues': [issue.to_dict() for issue in exc.issues]}}, 422
+        )
+      except ValidationError as exc:
+        return JSONResponse({'detail': str(exc)}, 422)
+      except store.ConflictError as exc:
+        return JSONResponse({'detail': str(exc)}, exc.status_code)
+      except store.OperationNotAllowedError as exc:
+        return JSONResponse({'detail': str(exc)}, 403)
+      except (ValueError, OSError, store.NotFoundError) as exc:
+        return JSONResponse({'detail': str(exc)}, 400)
+      response = JSONResponse(
+        {
+          'slug': result.slug,
+          'status': result.status,
+          'locales_present': list(result.locales_present),
+          'entry_etag': result.entry_etag,
+          'etags': result.etags,
+          'issues': [issue.to_dict() for issue in result.issues],
+        },
+        status_code=201 if result.status == 'created' else 200,
+      )
+      return response
+
     if adapter is not None and not content_locale:
       await self._require(request, 'update')
       return JSONResponse({'detail': 'A content locale is required'}, 400)
