@@ -309,14 +309,6 @@ class DocumentService:
     outside the lock.
     """
     is_generated = not slug
-    if (
-      is_generated
-      and self.collection_spec
-      and self.collection_spec.document_authorize
-    ):
-      raise store.OperationNotAllowedError(
-        'An explicit slug is required when a document policy is configured'
-      )
     if is_generated and (
       self.collection_spec is None or self.collection_spec.slug_template is None
     ):
@@ -350,6 +342,19 @@ class DocumentService:
         if prepare is not None
         else dict(frontmatter)
       )
+      created_at = datetime.now(UTC) if is_generated else None
+      if is_generated:
+        assert self.collection_spec is not None  # nosec B101
+        slug = self.collection_spec.make_slug(
+          validated,
+          self.documents.list(),
+          created_at=created_at,
+        )
+        if self.documents.exists(slug):
+          raise store.ConflictError(
+            f'generated document slug already exists: {slug!r}',
+            status_code=409,
+          )
       self._authorize_document(
         user, 'create' if is_new else 'update', slug, None, existing, validated
       )
@@ -363,14 +368,13 @@ class DocumentService:
       )
 
       if is_generated:
-        # The is_generated branch above guarantees a spec.
         assert self.collection_spec is not None  # nosec B101
-        self._check_unique(None, validated)
-        slug, etag = self.collection_spec.create_document(
-          self.documents,
+        assert slug is not None  # nosec B101
+        self._check_unique(slug, validated)
+        etag = self.documents.write(
+          slug,
           validated,
           body,
-          created_at=datetime.now(UTC),
           user=actor,
           notify=False,
         )
