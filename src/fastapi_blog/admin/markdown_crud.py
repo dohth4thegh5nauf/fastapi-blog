@@ -74,9 +74,7 @@ def get_posts_directory(posts_dirname: str | None = None) -> str:
   return str(backend_dir / 'posts')
 
 
-def _field_spec_at_path(
-  fields: tuple[Any, ...], path: list[str]
-) -> Any | None:
+def _field_spec_at_path(fields: tuple[Any, ...], path: list[str]) -> Any | None:
   """Resolve a schema field from its external-key path."""
   current = None
   candidates = fields
@@ -96,14 +94,18 @@ def _value_at_path(source: Any, path: list[Any]) -> Any:
   for key in path:
     if isinstance(current, Mapping):
       current = current.get(key)
-    elif isinstance(current, list) and isinstance(key, int) and key < len(current):
+    elif (
+      isinstance(current, list) and isinstance(key, int) and key < len(current)
+    ):
       current = current[key]
     else:
       return None
   return current
 
 
-def _replace_at_path(target: dict[str, Any], path: list[Any], value: Any) -> None:
+def _replace_at_path(
+  target: dict[str, Any], path: list[Any], value: Any
+) -> None:
   """Set one nested mapping/list value on an already copied document."""
   current: Any = target
   for index, key in enumerate(path[:-1]):
@@ -633,7 +635,9 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
       entry_etags: set[str] = set()
       for locale, payload in locale_payloads.items():
         if locale not in adapter.config.locales:
-          return JSONResponse({'detail': f'Unknown content locale: {locale}'}, 400)
+          return JSONResponse(
+            {'detail': f'Unknown content locale: {locale}'}, 400
+          )
         if not isinstance(payload, dict):
           return JSONResponse(
             {'detail': f'Locale payload for {locale} must be an object'}, 400
@@ -666,7 +670,9 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
         documents[locale] = (frontmatter, content)
       if len(entry_etags) > 1:
         return JSONResponse(
-          {'detail': 'Locale drafts were opened against different entry versions'},
+          {
+            'detail': 'Locale drafts were opened against different entry versions'
+          },
           409,
         )
       try:

@@ -66,7 +66,14 @@ def test_document_policy_authorizes_generated_slug_before_writing(tmp_path):
 
   assert result.slug == 'generated-note'
   assert calls == [
-    ('create', 'notes', 'generated-note', None, None, {'title': 'Generated Note'})
+    (
+      'create',
+      'notes',
+      'generated-note',
+      None,
+      None,
+      {'title': 'Generated Note'},
+    )
   ]
   assert (tmp_path / 'generated-note.md').is_file()
 

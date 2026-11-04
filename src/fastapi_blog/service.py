@@ -208,6 +208,7 @@ class DocumentService:
           locale=locale,
           prefix=label,
         )
+
   def _check_unique(
     self,
     slug: str | None,

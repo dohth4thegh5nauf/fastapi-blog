@@ -134,7 +134,8 @@ def test_admin_batch_save_updates_changed_locales_in_one_operation(tmp_path):
     == 'Updated English body'
   )
   assert (
-    adapter.read('entry', 'ru', fallback=False).body.strip() == 'Обновлённый текст'
+    adapter.read('entry', 'ru', fallback=False).body.strip()
+    == 'Обновлённый текст'
   )
 
 
