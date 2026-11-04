@@ -98,6 +98,12 @@ keeps changed locale drafts in the current browser tab and submits them in one
 batch with rollback on write failure. Concurrent readers can still observe
 intermediate file states. The save endpoint also accepts explicit per-locale
 ETags for batch callers.
+`DocumentService.save_many_localized()` returns a result per slug with
+per-locale ETags, the aggregate entry ETag, present locales, status and issues.
+Changed paths are intentionally reported on the post-commit change event, not
+duplicated in the result; a batch emits one event per slug with only that
+entry's changed locales and paths. Event callback failures are logged and do
+not turn a committed batch into a failed save response.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. The document policy

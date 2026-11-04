@@ -156,6 +156,54 @@ def test_document_policy_receives_full_user_and_can_allow_transition(tmp_path):
   assert (user, 'transition', 'notes', 'note', 'en') in calls
 
 
+def test_nested_object_transition_uses_document_permission(tmp_path):
+  calls = []
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True),
+      FieldSpec(
+        'metadata',
+        type='object',
+        fields=(
+          FieldSpec(
+            'status',
+            choices=['draft', 'published'],
+            transitions={
+              'initial': ['draft'],
+              'allowed': [
+                {'from': 'draft', 'to': 'published', 'permission': 'publish'}
+              ],
+            },
+          ),
+        ),
+      ),
+    )
+  )
+
+  def policy(user, action, collection, slug, locale, before, after):
+    calls.append(action)
+    return True
+
+  spec = CollectionSpec(
+    'notes', tmp_path, schema=schema, document_authorize=policy
+  )
+  service = DocumentService(
+    store.DocumentStore(spec.to_collection()), schema, collection_spec=spec
+  )
+  service.save(
+    'note', {'title': 'Title', 'metadata': {'status': 'draft'}}, 'Body'
+  )
+
+  service.save(
+    'note', {'title': 'Title', 'metadata': {'status': 'published'}}, 'Body'
+  )
+
+  assert calls[-3:] == ['update', 'publish', 'transition']
+  assert service.documents.read('note').frontmatter['metadata']['status'] == (
+    'published'
+  )
+
+
 def test_api_denies_document_read_and_write(tmp_path):
   service = make_service(tmp_path)
   service.save_localized(
@@ -187,6 +235,91 @@ def test_api_denies_document_read_and_write(tmp_path):
   )
 
 
+def test_rest_initial_transition_and_missing_permission_callback_fail_closed(
+  tmp_path,
+):
+  service = make_service(tmp_path)
+  app = FastAPI()
+  app.include_router(
+    get_api_router(
+      require_auth=False,
+      collection_spec=service.collection_spec,
+    ),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  invalid_initial = client.put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'published'},
+      'content': 'Body',
+    },
+  )
+  assert invalid_initial.status_code == 400
+  assert 'Initial value' in invalid_initial.json()['detail']
+  assert not (tmp_path / 'note.md').exists()
+
+  created = client.put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'draft'},
+      'content': 'Body',
+    },
+  )
+  assert created.status_code == 201
+  denied = client.put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'published'},
+      'content': 'Body',
+    },
+  )
+  assert denied.status_code == 403
+  assert service.i18n_documents.read('note', 'en').frontmatter['status'] == (
+    'draft'
+  )
+
+
+def test_rest_checks_transition_permission_before_transition_hook(tmp_path):
+  actions = []
+
+  def policy(user, action, collection, slug, locale, before, after):
+    actions.append(action)
+    if action == 'publish':
+      return 'Publishing denied'
+    return True
+
+  service = make_service(tmp_path, policy)
+  service.save_localized(
+    'note', {'en': ({'title': 'Title', 'status': 'draft'}, 'Body')}
+  )
+  actions.clear()
+  app = FastAPI()
+  app.include_router(
+    get_api_router(
+      require_auth=False,
+      collection_spec=service.collection_spec,
+    ),
+    prefix='/api/notes',
+  )
+
+  denied = TestClient(app).put(
+    '/api/notes/note',
+    json={
+      'frontmatter': {'title': 'Title', 'status': 'published'},
+      'content': 'Body',
+    },
+  )
+
+  assert denied.status_code == 403
+  assert denied.json()['detail'] == 'Publishing denied'
+  assert actions == ['update', 'publish']
+  assert service.i18n_documents.read('note', 'en').frontmatter['status'] == (
+    'draft'
+  )
+
+
 def test_batch_denial_leaves_every_entry_unchanged(tmp_path):
   def policy(user, action, collection, slug, locale, before, after):
     return 'Entry denied' if slug == 'second' else True
@@ -201,6 +334,47 @@ def test_batch_denial_leaves_every_entry_unchanged(tmp_path):
     )
   assert not (tmp_path / 'first.md').exists()
   assert not (tmp_path / 'second.md').exists()
+
+
+def test_batch_transition_denial_leaves_all_locales_unchanged(tmp_path):
+  def policy(user, action, collection, slug, locale, before, after):
+    return action != 'publish'
+
+  service = make_service(tmp_path, policy)
+  for slug in ('first', 'second'):
+    service.save_localized(
+      slug,
+      {
+        'en': ({'title': slug, 'status': 'draft'}, 'English'),
+        'ru': ({'title': slug, 'status': 'draft'}, 'Русский'),
+      },
+    )
+  before = {
+    slug: {
+      locale: service.i18n_documents.read(slug, locale, fallback=False)
+      for locale in ('en', 'ru')
+    }
+    for slug in ('first', 'second')
+  }
+
+  with pytest.raises(store.OperationNotAllowedError):
+    service.save_many_localized(
+      {
+        slug: {
+          'en': ({'title': slug, 'status': 'published'}, 'Published'),
+          'ru': ({'title': slug, 'status': 'published'}, 'Опубликовано'),
+        }
+        for slug in ('first', 'second')
+      },
+      expected_exists={'first': True, 'second': True},
+    )
+
+  for slug, locales in before.items():
+    for locale, record in locales.items():
+      current = service.i18n_documents.read(slug, locale, fallback=False)
+      assert current.etag == record.etag
+      assert current.frontmatter == record.frontmatter
+      assert current.body == record.body
 
 
 def test_admin_list_and_dashboard_exclude_denied_documents(tmp_path):

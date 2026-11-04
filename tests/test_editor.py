@@ -1078,6 +1078,65 @@ def test_localized_rest_can_write_duplicate_mirrors(app_dir):
   ]
 
 
+def test_translation_cannot_bypass_canonical_status_transition(app_dir):
+  actions = []
+
+  def policy(user, action, collection, slug, locale, before, after):
+    actions.append((action, locale))
+    return action != 'publish'
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, role='title', i18n='translate'),
+      FieldSpec(
+        'status',
+        i18n='duplicate',
+        transitions={
+          'initial': ['draft'],
+          'allowed': [
+            {'from': 'draft', 'to': 'published', 'permission': 'publish'}
+          ],
+        },
+      ),
+    )
+  )
+  spec = CollectionSpec(
+    'posts',
+    app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en'),
+    document_authorize=policy,
+  )
+  app = add_editor_to_app(
+    FastAPI(), ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  created = client.put(
+    '/api/posts/entry',
+    json={
+      'frontmatter': {'title': 'Entry', 'status': 'draft'},
+      'content': 'Body',
+    },
+  )
+  assert created.status_code == 201
+  actions.clear()
+
+  translated = client.put(
+    '/api/posts/entry?locale=ru',
+    json={
+      'frontmatter': {'title': 'Перевод', 'status': 'published'},
+      'content': 'Текст',
+    },
+  )
+  assert translated.status_code == 200
+  assert ('publish', 'ru') not in actions
+  russian = client.get('/api/posts/entry?locale=ru')
+  assert russian.json()['frontmatter']['status'] == 'draft'
+  assert (app_dir / 'posts' / 'entry.md').read_text().count(
+    'status: draft'
+  ) == 1
+
+
 def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
   schema = FrontmatterSchema(
     fields=(FieldSpec('title', required=True, role='title', i18n='translate'),)

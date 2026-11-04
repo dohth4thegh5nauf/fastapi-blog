@@ -23,6 +23,7 @@ from fastapi_blog.admin.markdown_crud import (
   MarkdownListView,
   MarkdownPost,
   MarkdownSaveView,
+  _filter_form_transition_choices,
   get_posts_directory,
 )
 from fastapi_blog.admin.views import load_posts_for_home
@@ -885,6 +886,53 @@ def test_hidden_and_read_only_object_parent_are_respected_in_admin_form():
   assert by_name['private']['kind'] == 'hidden'
   assert by_name['locked__identifier']['read_only'] is True
   assert by_name['locked__label']['read_only'] is True
+
+
+@pytest.mark.parametrize(
+  ('policy', 'expected_disabled'),
+  [
+    (None, True),
+    (lambda *_args: False, True),
+    (lambda *_args: True, False),
+  ],
+)
+def test_transition_choices_reflect_server_policy(
+  tmp_path, policy, expected_disabled
+):
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'status',
+        choices=['draft', 'published'],
+        transitions={
+          'initial': ['draft'],
+          'allowed': [
+            {'from': 'draft', 'to': 'published', 'permission': 'publish'}
+          ],
+        },
+      ),
+    )
+  )
+  spec = CollectionSpec(
+    'posts', tmp_path, schema=schema, document_authorize=policy
+  )
+  manager = MarkdownFileManager(str(tmp_path), collection_spec=spec)
+  fields = build_form_fields(schema, {'status': 'draft'}, {})
+
+  _filter_form_transition_choices(
+    fields,
+    schema,
+    {'status': 'draft'},
+    service=manager.service,
+    user={'username': 'editor'},
+    slug='entry',
+    locale=None,
+    is_new=False,
+  )
+
+  choices = {choice['value']: choice for choice in fields[0]['choices']}
+  assert choices['draft']['disabled'] is False
+  assert choices['published']['disabled'] is expected_disabled
 
 
 def test_link_autocomplete_uses_collection_value_field_and_list_filters(
