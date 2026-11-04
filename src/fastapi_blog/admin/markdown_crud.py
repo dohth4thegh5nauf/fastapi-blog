@@ -312,6 +312,8 @@ class MarkdownFileManager:
       name: spec.for_request(request) if callable(spec.dir) else spec
       for name, spec in self.collection_specs.items()
     }
+    if collection_spec is not None:
+      collection_specs[collection_spec.name] = collection_spec
     return MarkdownFileManager(
       str(collection_spec.dir)
       if collection_spec is not None
@@ -632,6 +634,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('', methods=['POST'])
   async def save(self, request: Request) -> JSONResponse:
     """Validate and persist a form submission without calling the REST API."""
+    self._set_principal(request)
     manager = self.manager.for_request(request)
     try:
       data = await request.json()
@@ -864,6 +867,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('/{slug}', methods=['DELETE'])
   async def delete(self, request: Request) -> JSONResponse:
     """Delete a document through the same service used for form saves."""
+    self._set_principal(request)
     manager = self.manager.for_request(request)
     await self._require(request, 'delete')
     slug = str(request.path_params.get('slug', ''))

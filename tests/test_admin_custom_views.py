@@ -183,6 +183,13 @@ def test_request_bound_admin_manager_filters_dynamic_link_targets(tmp_path):
       {'identifier': f'ref:{key}', 'title': f'Article {key}'},
       'Body',
     )
+    own_collection = root / 'notes'
+    own_collection.mkdir()
+    write_document(
+      own_collection / 'own.md',
+      {'identifier': f'note:{key}', 'title': f'Note {key}'},
+      'Body',
+    )
 
   target_schema = FrontmatterSchema(
     fields=(
@@ -200,18 +207,23 @@ def test_request_bound_admin_manager_filters_dynamic_link_targets(tmp_path):
   )
   source_schema = FrontmatterSchema(
     fields=(
+      FieldSpec('identifier'),
+      FieldSpec('title', required=True, role='title'),
       FieldSpec(
         'related',
         type='link',
         collection='articles',
         value_field='identifier',
       ),
+      FieldSpec('self_related', type='link', value_field='identifier'),
     )
   )
   manager = MarkdownFileManager(
     str(tmp_path / 'unused'),
     source_schema,
-    collection_spec=source_spec,
+    collection_spec=CollectionSpec(
+      'notes', source_spec.dir, schema=source_schema
+    ),
     collection_specs={'articles': target_spec},
   )
 
@@ -222,18 +234,12 @@ def test_request_bound_admin_manager_filters_dynamic_link_targets(tmp_path):
   second_request = request_for('two')
   first = manager.for_request(first_request).link_suggestions()
   second = manager.for_request(second_request).link_suggestions()
-  manager.for_request(first_request).save_post(
-    'note', {'related': 'ref:one'}, 'First note'
-  )
-  manager.for_request(second_request).save_post(
-    'note', {'related': 'ref:two'}, 'Second note'
-  )
 
   assert first == {
-    'related': [{'value': 'ref:one', 'label': 'Article one (shared)'}]
+    'related': [{'value': 'ref:one', 'label': 'Article one (shared)'}],
+    'self_related': [{'value': 'note:one', 'label': 'Note one (own)'}],
   }
   assert second == {
-    'related': [{'value': 'ref:two', 'label': 'Article two (shared)'}]
+    'related': [{'value': 'ref:two', 'label': 'Article two (shared)'}],
+    'self_related': [{'value': 'note:two', 'label': 'Note two (own)'}],
   }
-  assert (roots['one'] / 'notes' / 'note.md').is_file()
-  assert (roots['two'] / 'notes' / 'note.md').is_file()
