@@ -127,11 +127,14 @@ Release verification performed locally on top of the test gate:
   clean wheel smoke tests on the final release commit, then tag and publish
   through the release repository's approved channels.
 
-The latest pull request CI passed on the candidate before the request-scoped
-self-link fix. After that fix and the concurrent ETag regression test, the full
-local `make all` gate passed on Python 3.12: Ruff, formatting and mypy were
-clean; pytest collected **932 tests** and completed with **930 passed, 2
-skipped**; total coverage was **87%**. The full test run needs access to local
-async SQLite and was run outside the restricted sandbox. Keep the 0.9.0
-changes under `[Unreleased]` until CI passes for the latest commit and the
-release-repository checks in the handoff section are complete.
+The candidate commit `6bc4dd0` passed the pull request workflows: Test
+fastapi-blog, Validate PR, Security and API Contract (run IDs
+`41859106470`, `41859106420`, `41859106442` and `41859106643`). Its push
+validation also passed (`41859093360`). The full local `make all` gate passed
+on Python 3.12: Ruff, formatting and mypy were clean; pytest collected
+**932 tests** and completed with **930 passed, 2 skipped**; total coverage was
+**87%**. The full test run needs access to local async SQLite and was run
+outside the restricted sandbox. This checklist update does not change package
+source; keep the 0.9.0 changes under `[Unreleased]` until the final release
+commit passes CI and the release-repository checks in the handoff section are
+complete.
