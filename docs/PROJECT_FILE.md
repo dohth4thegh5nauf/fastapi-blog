@@ -78,12 +78,14 @@ Locks coordinate writers in the same process only; separate processes need
 external coordination. A crash during a multi-file operation can also leave
 an incomplete update or staged files requiring recovery.
 The REST API exposes localized reads and writes at the collection document
-route. The admin provides locale tabs, fallback indication and locale chips;
-the current editor saves the selected locale (the side-by-side editor and
-single-button save of multiple dirty locales remain future work).
+route. The admin provides locale tabs, fallback indication, locale chips and
+a side-by-side canonical preview with a link to edit the source. The save
+endpoint accepts an atomic batch of locales, but the editor currently submits
+only the selected locale; collecting and restoring multiple dirty locale
+drafts for one submission remains future work.
 Deleting an entry with translations requires an explicit cascade request.
-The optional document policy and field transitions are under development;
-the existing collection-level permissions still apply. Do not rely on the
+The optional document policy and field transitions are experimental; the
+existing collection-level permissions still apply. Do not rely on the
 document policy as a complete access-control boundary yet.
 
 The current experimental Python hook is configured with
@@ -100,8 +102,9 @@ An experimental schema field may specify `transitions` with `initial` and
 `allowed` lists. Each allowed rule has `from`, `to`, and an optional
 `permission`. Permission-bearing transitions require a document policy and
 ask it to allow both the named permission and the `transition` action.
-These checks currently cover scalar fields and nested objects; transition
-rules inside object lists and complete admin choice filtering remain open.
+These checks cover scalar fields, nested objects and fields inside object
+lists. Complete admin choice filtering remains open; the service rejects
+invalid transitions when a save is submitted.
 `check` reports missing, orphaned, unknown-locale and mismatched duplicate
 translations according to `check.translations`.
 
