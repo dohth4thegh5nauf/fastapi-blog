@@ -55,6 +55,19 @@ def test_existing_alternate_extension_is_preserved_on_update_and_rename(
   assert (tmp_path / 'renamed.markdown').is_file()
 
 
+def test_rename_rejects_destination_with_an_orphan_translation(tmp_path):
+  adapter = I18nCollection(
+    store.Collection('posts', tmp_path), I18nConfig(('en', 'ru'), 'en')
+  )
+  adapter.save_entry('source', {'en': ({'title': 'Source'}, 'body')})
+  orphan = tmp_path / 'destination.ru.md'
+  orphan.write_text('---\ntitle: Translation\n---\nText\n')
+  with pytest.raises(store.ConflictError):
+    adapter.rename('source', 'destination')
+  assert (tmp_path / 'source.md').exists()
+  assert orphan.read_text().endswith('Text\n')
+
+
 def test_i18n_config_validation():
   with pytest.raises(I18nConfigError):
     I18nConfig(('en', 'en'), 'en')

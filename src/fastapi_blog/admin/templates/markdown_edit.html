@@ -393,7 +393,7 @@ document.getElementById('post-form').addEventListener('submit', async (e) => {
     } else {
       const error = await response.json();
       if (response.status === 412 || response.status === 409) {
-        alert('This document changed after the form was opened. Reload the page before saving again.');
+        alert(typeof error.detail === 'string' ? error.detail : 'This document changed after the form was opened. Reload the page before saving again.');
       } else if (Array.isArray(error.detail?.issues)) {
         alert(error.detail.issues.map(issue => `${issue.level}: ${issue.code}: ${issue.message}`).join('\n'));
       } else {

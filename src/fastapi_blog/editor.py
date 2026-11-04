@@ -542,6 +542,7 @@ def get_api_router(
           documents,
           if_match=locale_etags,
           expected_entry_etag=expected_entry_etag,
+          expected_exists=not is_new,
           user=_event_actor(user),
         )
       except BlockingValidationError as exc:

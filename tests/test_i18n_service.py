@@ -89,6 +89,46 @@ def test_body_is_shared_when_translation_is_disabled(tmp_path):
   assert translated.body == 'Canonical body'
 
 
+def test_localized_save_rejects_empty_canonical_body(tmp_path):
+  service = _service(tmp_path)
+  with pytest.raises(ValueError, match='must not be empty'):
+    service.save_localized(
+      'hello', {'en': ({'title': 'Hello', 'code': 'A'}, '  ')}
+    )
+  assert not (tmp_path / 'hello.md').exists()
+
+
+def test_localized_save_rejects_changed_existence_after_authorization(tmp_path):
+  service = _service(tmp_path)
+  service.save_localized(
+    'hello', {'en': ({'title': 'Hello', 'code': 'A'}, 'Body')}
+  )
+  with pytest.raises(store.ConflictError):
+    service.save_localized(
+      'hello',
+      {'en': ({'title': 'Overwrite', 'code': 'A'}, 'Body')},
+      expected_exists=False,
+    )
+  assert (
+    service.i18n_documents.read('hello', 'en').frontmatter['title'] == 'Hello'
+  )
+
+
+def test_save_preserves_existing_conflicting_shared_fields(tmp_path):
+  service = _service(tmp_path)
+  service.i18n_documents.save_entry(
+    'hello',
+    {
+      'en': ({'title': 'Hello', 'code': 'A'}, 'Body'),
+      'ru': ({'title': 'Привет', 'code': 'B'}, 'Текст'),
+    },
+  )
+  previous = (tmp_path / 'hello.ru.md').read_bytes()
+  with pytest.raises(store.ConflictError, match='conflicting shared field'):
+    service.save_localized('hello', {'ru': ({'title': 'Новый'}, 'New body')})
+  assert (tmp_path / 'hello.ru.md').read_bytes() == previous
+
+
 def test_required_fields_can_be_required_in_translations(tmp_path):
   service = _service(tmp_path, required=True)
   with pytest.raises(ValidationError):
@@ -251,3 +291,24 @@ def test_localized_writes_emit_one_extended_event_per_entry(tmp_path):
   assert events[1].kind == 'delete_locale'
   assert events[1].locale == 'ru'
   assert events[1].locales == ('ru',)
+
+
+def test_events_describe_the_committed_snapshot_even_if_hook_writes(tmp_path):
+  events = []
+
+  def callback(event):
+    events.append(event)
+    if event.slug == 'first':
+      service.i18n_documents.save_entry(
+        'second', {'en': ({'title': 'Later', 'code': 'B'}, 'Later')}
+      )
+
+  service = _service(tmp_path, on_change=callback)
+  results = service.save_many_localized(
+    {
+      'first': {'en': ({'title': 'First', 'code': 'A'}, 'Body')},
+      'second': {'en': ({'title': 'Second', 'code': 'B'}, 'Body')},
+    }
+  )
+  assert events[1].entry_etag == results['second'].entry_etag
+  assert events[1].entry_etag != service.i18n_documents.entry_etag('second')

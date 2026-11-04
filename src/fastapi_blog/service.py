@@ -314,6 +314,7 @@ class DocumentService:
     *,
     if_match: Mapping[str, str] | str | None = None,
     expected_entry_etag: str | None = None,
+    expected_exists: bool | None = None,
     user: Any = None,
   ) -> LocalizedSaveResult:
     """Validate and atomically save one or more locales of an entry."""
@@ -322,6 +323,9 @@ class DocumentService:
       if_match={slug: if_match} if if_match is not None else None,
       expected_entry_etags=(
         {slug: expected_entry_etag} if expected_entry_etag is not None else None
+      ),
+      expected_exists=(
+        {slug: expected_exists} if expected_exists is not None else None
       ),
       user=user,
     )[slug]
@@ -332,6 +336,7 @@ class DocumentService:
     *,
     if_match: Mapping[str, Mapping[str, str] | str] | None = None,
     expected_entry_etags: Mapping[str, str | None] | None = None,
+    expected_exists: Mapping[str, bool] | None = None,
     user: Any = None,
   ) -> dict[str, LocalizedSaveResult]:
     """Validate and commit multiple localized entries as one transaction."""
@@ -359,6 +364,15 @@ class DocumentService:
 
         present = set(adapter.locales_present(slug))
         canonical_exists = canonical_locale in present
+        if (
+          expected_exists is not None
+          and slug in expected_exists
+          and canonical_exists != expected_exists[slug]
+        ):
+          raise store.ConflictError(
+            f'Entry {slug!r} changed while authorizing the operation',
+            status_code=409,
+          )
         was_created[slug] = not canonical_exists
         if not canonical_exists and canonical_locale not in locale_documents:
           raise ValueError(
@@ -398,6 +412,16 @@ class DocumentService:
           if locale == canonical_locale:
             validated = dict(canonical_source)
           else:
+            if locale in existing_records and canonical_existing is not None:
+              conflict = self._conflicting_shared_field(
+                self.schema.fields, existing_records[locale], canonical_existing
+              )
+              if conflict is not None:
+                raise store.ConflictError(
+                  f'Translation {locale!r} contains a conflicting shared '
+                  f'field {conflict!r}; resolve it before saving',
+                  status_code=409,
+                )
             candidate = copy.deepcopy(dict(raw_frontmatter))
             self._apply_duplicate_fields(
               self.schema.fields,
@@ -434,6 +458,9 @@ class DocumentService:
           for locale, (frontmatter, _body) in tuple(prepared_entry.items()):
             if locale != canonical_locale:
               prepared_entry[locale] = (frontmatter, canonical_body)
+        for locale, (_frontmatter, body) in prepared_entry.items():
+          if not isinstance(body, str) or not body.strip():
+            raise ValueError(f'Content for locale {locale!r} must not be empty')
         prepared[slug] = prepared_entry
 
       self._check_localized_unique(adapter, canonical_sources)
@@ -466,15 +493,22 @@ class DocumentService:
         expected_entry_etags=expected_entry_etags,
         validate=validate,
       )
+      snapshots = {
+        slug: (
+          adapter.entry_etag(slug) or '',
+          adapter.locales_present(slug),
+          tuple(
+            adapter.path_for(slug, locale) for locale in sorted(locale_etags)
+          ),
+        )
+        for slug, locale_etags in etags.items()
+      }
 
     helpers.clear_posts_cache()
     result: dict[str, LocalizedSaveResult] = {}
     for slug, locale_etags in etags.items():
-      entry_etag = adapter.entry_etag(slug) or ''
+      entry_etag, locales_present, changed_paths = snapshots[slug]
       changed_locales = tuple(sorted(locale_etags))
-      changed_paths = tuple(
-        adapter.path_for(slug, locale) for locale in changed_locales
-      )
       self.documents.notify_change(
         'created' if was_created[slug] else 'updated',
         slug,
@@ -489,11 +523,58 @@ class DocumentService:
         slug=slug,
         etags=locale_etags,
         entry_etag=entry_etag,
-        locales_present=adapter.locales_present(slug),
+        locales_present=locales_present,
         status='created' if was_created[slug] else 'updated',
         issues=tuple(issues_by_slug[slug]),
       )
     return result
+
+  def _conflicting_shared_field(
+    self,
+    fields: tuple[Any, ...],
+    translated: Mapping[str, Any],
+    canonical: Mapping[str, Any],
+    prefix: str = '',
+  ) -> str | None:
+    """Detect stored shared values that a save would otherwise discard."""
+    for field in fields:
+      key = field.key if field.key in translated else field.name
+      canonical_key = field.key if field.key in canonical else field.name
+      label = f'{prefix}.{field.name}' if prefix else field.name
+      if field.i18n in ('none', 'duplicate'):
+        if key in translated and (
+          canonical_key not in canonical
+          or translated[key] != canonical[canonical_key]
+        ):
+          return label
+      elif field.type == 'object':
+        left, right = translated.get(key), canonical.get(canonical_key)
+        if isinstance(left, Mapping):
+          conflict = self._conflicting_shared_field(
+            field.fields or (),
+            left,
+            right if isinstance(right, Mapping) else {},
+            label,
+          )
+          if conflict is not None:
+            return conflict
+      elif field.type == 'list[object]':
+        left, right = translated.get(key), canonical.get(canonical_key)
+        if isinstance(left, list):
+          right = right if isinstance(right, list) else []
+          for index, item in enumerate(left):
+            if isinstance(item, Mapping):
+              corresponding = (
+                right[index]
+                if index < len(right) and isinstance(right[index], Mapping)
+                else {}
+              )
+              conflict = self._conflicting_shared_field(
+                field.fields or (), item, corresponding, f'{label}[{index}]'
+              )
+              if conflict is not None:
+                return conflict
+    return None
 
   def _apply_duplicate_fields(
     self,

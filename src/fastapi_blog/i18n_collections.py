@@ -483,7 +483,7 @@ class I18nCollection:
         raise store.ConflictError(
           f'entry etag does not match for {old_slug!r}', status_code=412
         )
-      if any(self.path_for(new_slug, locale).exists() for locale in paths):
+      if self._all_paths(new_slug):
         raise store.ConflictError(
           f'{new_slug!r} already exists', status_code=409
         )

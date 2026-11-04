@@ -497,6 +497,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
             else None
           ),
           expected_entry_etag=(str(entry_etag) if entry_etag else None),
+          expected_exists=not is_new,
           user=getattr(request.state, 'blog_user', None),
         )
       except BlockingValidationError as exc:
