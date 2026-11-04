@@ -10,7 +10,7 @@ import logging
 import os
 import pathlib
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
@@ -356,6 +356,7 @@ def add_admin_to_app(
   auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
   translations_dir: str | pathlib.Path | None = None,
+  configure_admin: Callable[[str, Admin], None] | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -374,6 +375,9 @@ def add_admin_to_app(
     sanitize_html: Sanitize the admin Markdown preview like public pages.
                   Set False only for trusted content that intentionally uses raw HTML.
     translations_dir: Optional directory containing UI translation overlays.
+    configure_admin: Optional callback invoked with `(locale, admin)` after
+      built-in views are registered and immediately before each admin is
+      mounted. Use it to add supported Starlette Admin views.
     authorize: Shared `(request, resource, action) -> bool` permission callback.
     auth_users: Optional extra login accounts mapped to password and role.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
@@ -583,6 +587,8 @@ def add_admin_to_app(
     translations_dir=translations_dir,
   )
 
+  if configure_admin is not None:
+    configure_admin(default_locale, default_admin)
   default_admin.mount_to(app)
   admins[default_locale] = default_admin
   logger.info('Admin panel (%s) mounted at /admin', default_locale)
@@ -623,6 +629,8 @@ def add_admin_to_app(
       translations_dir=translations_dir,
     )
 
+    if configure_admin is not None:
+      configure_admin(locale, admin)
     admin.mount_to(app)
     admins[locale] = admin
     logger.info('Admin panel (%s) mounted at /%s/admin', locale, locale)

@@ -31,7 +31,10 @@ uv sync --locked --extra dev --extra admin --extra jsonld
 make all
 ```
 
-GitHub workflows have run successfully on the latest merged PR. A push starts the Tier 1 validation workflow; a pull request targeting `main` starts the Tier 2 test, API/Compose and security workflows. The CI matrix (see `.github/workflows/`) must pass before release:
+Run the GitHub workflows on the current release candidate before marking this
+checklist complete. A push starts the Tier 1 validation workflow; a pull request
+targeting `main` starts the Tier 2 test, API/Compose and security workflows. The
+CI matrix (see `.github/workflows/`) must pass before release:
 
 - Tier 1 `push-validate` — ruff, format, mypy, gitleaks on every push;
 - Tier 2 `pr-test-fastapi-blog` — Python 3.12–3.15, `core` and `all` extras;
@@ -45,7 +48,9 @@ and `exit-code: 1`. The first run may therefore fail deliberately when the
 base image contains a HIGH/CRITICAL OS vulnerability with an available fix.
 Treat that as a security finding to investigate and resolve or document; do
 not change the exit code or severity threshold merely to make CI green. The
-latest pull request passed the Trivy gate in GitHub Actions.
+last reported API Contract run failed during Trivy installation, before the
+scan started. Commit `dea11a0` downloads the pinned release archive and
+verifies its checksum; the workflow must pass again on the current candidate.
 
 This repository is a private development source. Branch protection here is
 not a release gate; release preparation and publication happen in the
@@ -120,6 +125,15 @@ Release verification performed locally on top of the test gate:
   clean wheel smoke tests on the final release commit, then tag and publish
   through the release repository's approved channels.
 
-The development repository's GitHub CI and container publication passed.
-Keep the 0.9.0 changes under `[Unreleased]` until the destination's final
-release candidate is verified and ready for publication.
+Earlier GitHub CI and container publication runs passed, but they do not verify
+the current `develop` head. The latest local regression run before the admin
+extension hook passed on Python 3.12 with **893 passed, 2 skipped**; the new
+localized custom-view test passes separately (**1 passed**). Ruff, formatting,
+mypy, Bandit, actionlint and Compose configuration checks pass on the current
+worktree. A current full `make all` run is still pending: `uv` could not fetch
+the locked build requirement because DNS/network access to PyPI is unavailable
+in the local environment. GitHub CI for the current head also remains
+unconfirmed because the local GitHub CLI token is invalid and the GitHub API
+is unreachable from this environment. Keep the 0.9.0 changes under
+`[Unreleased]` until the current candidate's CI and required package checks
+pass.
