@@ -50,7 +50,8 @@ Treat that as a security finding to investigate and resolve or document; do
 not change the exit code or severity threshold merely to make CI green. The
 last reported API Contract run failed during Trivy installation, before the
 scan started. Commit `dea11a0` downloads the pinned release archive and
-verifies its checksum; the workflow must pass again on the current candidate.
+verifies its checksum. The pull request CI passed after this change, including
+the Trivy scan.
 
 This repository is a private development source. Branch protection here is
 not a release gate; release preparation and publication happen in the
@@ -71,8 +72,9 @@ tag (currently the file says `fastapi-blog:0.9.0`) and validate with
 
 After commit `58d1f23`, the local Python 3.12 gate passed with **893 passed,
 2 skipped**. Pytest treated unhandled thread exceptions as errors; Ruff,
-formatting and mypy also passed. The GitHub matrix had passed on Python
-3.12–3.15 in an earlier PR; it must run again on the final release candidate.
+formatting and mypy also passed. The latest pull request CI passed on the
+current candidate, including the Python 3.12–3.15 matrix and the API/Trivy
+workflow. Repeat the gate if source changes after that PR run.
 Note for maintainers: `make all` relies on `uv run`, which requires the exact
 interpreter pinned in `.python-version` (3.12.16); where that patch version is
 unavailable, run the same commands from the project's `.venv` directly.
@@ -125,15 +127,12 @@ Release verification performed locally on top of the test gate:
   clean wheel smoke tests on the final release commit, then tag and publish
   through the release repository's approved channels.
 
-Earlier GitHub CI and container publication runs passed, but they do not verify
-the current `develop` head. The latest local regression run before the admin
-extension hook passed on Python 3.12 with **893 passed, 2 skipped**; the new
-localized custom-view test passes separately (**1 passed**). Ruff, formatting,
-mypy, Bandit, actionlint and Compose configuration checks pass on the current
-worktree. A current full `make all` run is still pending: `uv` could not fetch
-the locked build requirement because DNS/network access to PyPI is unavailable
-in the local environment. GitHub CI for the current head also remains
-unconfirmed because the local GitHub CLI token is invalid and the GitHub API
-is unreachable from this environment. Keep the 0.9.0 changes under
-`[Unreleased]` until the current candidate's CI and required package checks
-pass.
+The latest pull request CI passed on the current candidate. The latest local
+regression run before the admin extension hook passed on Python 3.12 with
+**893 passed, 2 skipped**; the new localized custom-view test passes separately
+(**1 passed**). Ruff, formatting, mypy, Bandit, actionlint and Compose
+configuration checks pass on the current worktree. A current full local
+`make all` run could not start because `uv` could not fetch the locked build
+requirement while DNS/network access to PyPI was unavailable; CI ran the
+corresponding validation and test gates successfully. Keep the 0.9.0 changes
+under `[Unreleased]` until any subsequent candidate change is revalidated.
