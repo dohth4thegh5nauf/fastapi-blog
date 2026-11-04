@@ -950,7 +950,7 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       }
       for p in posts
     ]
-    search_query = request.query_params.get('q', '').strip()
+    search_query = getattr(request, 'query_params', {}).get('q', '').strip()
     if search_query:
       search_term = search_query.casefold()
       posts_data = [
