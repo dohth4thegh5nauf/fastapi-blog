@@ -230,6 +230,20 @@ def test_load_project_i18n_defaults_and_collection_override(project_dir):
   assert spec.to_i18n_collection() is not None
 
 
+def test_load_project_i18n_default_locale_in_root(project_dir):
+  _write(
+    project_dir,
+    'i18n: {locales: [en, ru], default_locale: en, '
+    'structure: multiple_folders, default_locale_in_root: true}\n'
+    'collections:\n  notes:\n    dir: posts\n    i18n: true\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'notes'
+  ]
+  assert spec.i18n is not None
+  assert spec.i18n.default_locale_in_root is True
+
+
 def test_load_project_rejects_invalid_i18n_defaults(project_dir):
   _write(
     project_dir,

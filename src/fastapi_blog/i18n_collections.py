@@ -35,6 +35,7 @@ class I18nConfig:
   translate_body: bool = False
   required_in_translations: bool = False
   write_duplicates: bool = False
+  default_locale_in_root: bool = False
 
   def __post_init__(self) -> None:
     if not self.locales:
@@ -62,6 +63,7 @@ class I18nConfig:
       'translate_body',
       'required_in_translations',
       'write_duplicates',
+      'default_locale_in_root',
     ):
       if not isinstance(getattr(self, name), bool):
         raise I18nConfigError(f'i18n.{name} must be true or false')
@@ -69,6 +71,10 @@ class I18nConfig:
       raise I18nConfigError("i18n.fallback must be 'default' or 'none'")
     if self.structure == 'multiple_folders' and self.omit_default_locale_suffix:
       object.__setattr__(self, 'omit_default_locale_suffix', False)
+    if self.default_locale_in_root and self.structure != 'multiple_folders':
+      raise I18nConfigError(
+        'i18n.default_locale_in_root requires multiple_folders structure'
+      )
 
 
 @dataclass(frozen=True)
@@ -93,7 +99,8 @@ class I18nCollection:
   """Filesystem store for translations sharing one canonical slug.
 
   Multi-file layout: ``<slug>.<locale>.<ext>`` (optionally unsuffixed
-  default locale). Locale-directory layout: ``<locale>/<slug>.<ext>``.
+  default locale). Locale-directory layout: ``<locale>/<slug>.<ext>``;
+  optionally, the default locale can remain at collection root.
   Mutations share an in-process lock for the collection directory.
   """
 
@@ -130,7 +137,13 @@ class I18nCollection:
     paths = []
     for ext in extensions:
       if self.config.structure == 'multiple_folders':
-        path = self.collection.dir / locale / f'{slug}.{ext}'
+        if (
+          self.config.default_locale_in_root
+          and locale == self.config.default_locale
+        ):
+          path = self.collection.dir / f'{slug}.{ext}'
+        else:
+          path = self.collection.dir / locale / f'{slug}.{ext}'
       else:
         suffix = (
           ''
@@ -184,7 +197,19 @@ class I18nCollection:
     """Return all recognized locale files, including orphan translations."""
     slugs: set[str] = set()
     if self.config.structure == 'multiple_folders':
+      if self.config.default_locale_in_root and self.collection.dir.is_dir():
+        for ext in self.collection.extensions:
+          slugs.update(
+            candidate.stem
+            for candidate in self.collection.dir.glob(f'*.{ext}')
+            if candidate.is_file()
+          )
       for locale in self.config.locales:
+        if (
+          self.config.default_locale_in_root
+          and locale == self.config.default_locale
+        ):
+          continue
         locale_dir = self.collection.dir / locale
         if locale_dir.is_dir() and locale_dir.resolve().is_relative_to(
           self.collection.dir.resolve()

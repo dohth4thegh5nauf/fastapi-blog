@@ -345,6 +345,7 @@ def _i18n_config(
     'translate_body',
     'required_in_translations',
     'write_duplicates',
+    'default_locale_in_root',
   }
   unknown = sorted(set(value) - allowed)
   if unknown:
@@ -364,6 +365,7 @@ def _i18n_config(
       'translate_body',
       'required_in_translations',
       'write_duplicates',
+      'default_locale_in_root',
     ):
       if key in value and not isinstance(value[key], bool):
         raise I18nConfigError(f'i18n.{key} must be true or false')
@@ -387,6 +389,10 @@ def _i18n_config(
       ),
       write_duplicates=value.get(
         'write_duplicates', base.write_duplicates if base else False
+      ),
+      default_locale_in_root=value.get(
+        'default_locale_in_root',
+        base.default_locale_in_root if base else False,
       ),
     )
   except (TypeError, ValueError) as exc:
