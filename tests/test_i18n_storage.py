@@ -248,6 +248,7 @@ def test_i18n_save_many_rolls_back_all_entries_on_failure(
     slug: collection.path_for(slug, 'en').read_bytes()
     for slug in ('first', 'second')
   } == before
+  assert not list(tmp_path.rglob('.*.stage-*'))
 
 
 def test_i18n_rejects_translation_without_canonical_document(tmp_path):
