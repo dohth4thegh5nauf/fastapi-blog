@@ -472,6 +472,21 @@ class FieldSpec:
         f'`fields` of {self.name!r} must contain FieldSpec values'
       )
     object.__setattr__(self, 'fields', tuple(self.fields))
+    if self.type == 'list[object]':
+
+      def reject_row_transitions(
+        fields: tuple[FieldSpec, ...], parent: str
+      ) -> None:
+        for child in fields:
+          if child.transitions is not None:
+            raise ValueError(
+              f'`transitions` inside `list[object]` field {parent!r} are not '
+              'supported because list rows have no stable identity'
+            )
+          if child.type in ('object', 'list[object]'):
+            reject_row_transitions(child.fields or (), f'{parent}.{child.name}')
+
+      reject_row_transitions(self.fields, self.name)
     # The children of a top-level object field sit at nesting level 2.
     _validate_nested_fields(self.fields, depth=2, parent=self.name)
 

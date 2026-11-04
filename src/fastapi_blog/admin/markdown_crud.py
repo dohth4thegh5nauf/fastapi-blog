@@ -188,62 +188,24 @@ def _filter_form_transition_choices(
   locale: str | None,
   is_new: bool,
 ) -> None:
-  """Apply transition-aware choice state to scalar and object-list controls."""
+  """Apply transition-aware choice state to schema-backed controls."""
   for form_field in form_fields:
     path = form_field['path']
     spec = _field_spec_at_path(schema.fields, path)
     if spec is None:
       continue
-    if spec.type == 'list[object]':
-      old_items = _value_at_path(before or {}, path)
-      old_items = old_items if isinstance(old_items, list) else []
-      for index, row in enumerate(form_field.get('items', [])):
-        for child in row:
-          child_spec = next(
-            (item for item in spec.fields or () if item.key == child['key']),
-            None,
-          )
-          if child_spec is None:
-            continue
-          _filter_transition_choices(
-            child['choices'],
-            child_spec,
-            [*path, index, child_spec.key],
-            before,
-            service=service,
-            user=user,
-            slug=slug,
-            locale=locale,
-            is_new=is_new,
-          )
-      for child in form_field.get('children', []):
-        child_spec = next(
-          (item for item in spec.fields or () if item.key == child['key']), None
-        )
-        if child_spec is not None:
-          _filter_transition_choices(
-            child['choices'],
-            child_spec,
-            [*path, len(old_items), child_spec.key],
-            before,
-            service=service,
-            user=user,
-            slug=slug,
-            locale=locale,
-            is_new=True,
-          )
-    else:
-      _filter_transition_choices(
-        form_field['choices'],
-        spec,
-        path,
-        before,
-        service=service,
-        user=user,
-        slug=slug,
-        locale=locale,
-        is_new=is_new,
-      )
+    _filter_transition_choices(
+      form_field['choices'],
+      spec,
+      path,
+      before,
+      service=service,
+      user=user,
+      slug=slug,
+      locale=locale,
+      is_new=is_new,
+    )
+
 
 class MarkdownPost:
   """Represents a markdown post with frontmatter.
