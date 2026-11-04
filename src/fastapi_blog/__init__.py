@@ -138,7 +138,11 @@ def setup_fastapi_blog(
 
   """
   if collection_spec is not None:
-    posts_dirname = str(collection_spec.dir)
+    posts_dirname = (
+      str(collection_spec.dir)
+      if not callable(collection_spec.dir)
+      else str(pathlib.Path.cwd())
+    )
     if translations_dir is None:
       translations_dir = collection_spec.translations_dir
     if frontmatter_schema is not None:

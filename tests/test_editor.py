@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
 from fastapi_blog.config import CollectionSpec
+from fastapi_blog.editor import get_api_router
 from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
@@ -1111,3 +1112,61 @@ def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
   assert rejected.status_code == 422
   assert not (app_dir / 'posts' / 'hello.md').exists()
   assert not (app_dir / 'posts' / 'hello.ru.md').exists()
+
+
+def test_request_collection_roots_are_isolated_per_api_request(tmp_path):
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  resolver_calls = []
+
+  def resolve_root(request):
+    resolver_calls.append(request.headers['x-root'])
+    return roots[request.headers['x-root']]
+
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title'),)
+  )
+  spec = CollectionSpec(name='notes', dir=resolve_root, schema=schema)
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  for root_name, title in (('one', 'First root'), ('two', 'Second root')):
+    response = client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={'frontmatter': {'title': title}, 'content': 'Body'},
+    )
+    assert response.status_code == 201
+
+  first = client.get('/api/notes/shared/raw', headers={'x-root': 'one'})
+  second = client.get('/api/notes/shared/raw', headers={'x-root': 'two'})
+  assert first.json()['frontmatter']['title'] == 'First root'
+  assert second.json()['frontmatter']['title'] == 'Second root'
+  assert resolver_calls == ['one', 'two', 'one', 'two']
+
+  updated = client.put(
+    '/api/notes/update/shared',
+    headers={'x-root': 'one'},
+    json={'frontmatter': {'title': 'Updated first'}, 'content': 'Changed'},
+  )
+  assert updated.status_code == 200
+  first_after = client.get('/api/notes/shared/raw', headers={'x-root': 'one'})
+  second_after = client.get('/api/notes/shared/raw', headers={'x-root': 'two'})
+  assert first_after.json()['frontmatter']['title'] == 'Updated first'
+  assert second_after.json()['frontmatter']['title'] == 'Second root'
+
+  deleted = client.request(
+    'DELETE', '/api/notes/delete/shared', headers={'x-root': 'one'}
+  )
+  assert deleted.status_code == 204
+  assert (
+    client.get('/api/notes/shared/raw', headers={'x-root': 'one'}).status_code
+    == 404
+  )
+  assert (
+    client.get('/api/notes/shared/raw', headers={'x-root': 'two'}).status_code
+    == 200
+  )

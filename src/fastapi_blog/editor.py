@@ -1,7 +1,9 @@
+import dataclasses
 import pathlib
 import re
 import warnings
 from collections.abc import Callable
+from contextvars import ContextVar
 from typing import Any
 
 import jinja2
@@ -24,7 +26,7 @@ from pydantic import ValidationError
 
 from . import helpers, store
 from .auth import add_startup_check, check_api_auth_config
-from .config import CollectionSpec
+from .config import CollectionSpec, ConfigError
 from .models import (
   SLUG_PATTERN,
   SLUG_RE,
@@ -220,6 +222,19 @@ def get_api_router(
       ```
 
   """
+  dynamic_collection_spec = (
+    collection_spec
+    if collection_spec is not None and callable(collection_spec.dir)
+    else None
+  )
+  if dynamic_collection_spec is not None:
+    collection_spec = dataclasses.replace(
+      dynamic_collection_spec, dir=pathlib.Path.cwd()
+    )
+
+  request_collection_context: ContextVar[tuple[Any, Any] | None] = ContextVar(
+    'fastapi_blog_request_collection_context', default=None
+  )
   api_router = APIRouter(tags=['editor'])
   if collection_spec is not None:
     slug_re = collection_spec.to_collection().slug_pattern
@@ -239,18 +254,71 @@ def get_api_router(
       frontmatter_schema = collection_spec.schema
     if not validators:
       validators = collection_spec.validators
-  docs = store.DocumentStore(
+  docs: Any = store.DocumentStore(
     collection_spec.to_collection()
     if collection_spec is not None
     else store.blog_collections(posts_dirname)['posts']
   )
-  document_service = DocumentService(
+  document_service: Any = DocumentService(
     docs,
     frontmatter_schema,
     collection_spec=collection_spec,
     validators=validators,
     cwd=pathlib.Path.cwd(),
   )
+
+  async def bind_request_collection(request: Request):
+    if dynamic_collection_spec is None:
+      yield
+      return
+    try:
+      request_spec = dynamic_collection_spec.for_request(request)
+      request_docs = store.DocumentStore(request_spec.to_collection())
+      request_service = DocumentService(
+        request_docs,
+        frontmatter_schema,
+        collection_spec=request_spec,
+        validators=validators,
+        cwd=pathlib.Path.cwd(),
+      )
+    except ConfigError as exc:
+      raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail='Unable to resolve document collection for this request',
+      ) from exc
+    token = request_collection_context.set((request_docs, request_service))
+    try:
+      yield
+    finally:
+      request_collection_context.reset(token)
+
+  if dynamic_collection_spec is not None:
+    api_router.dependencies.append(Depends(bind_request_collection))
+
+  class RequestBoundProxy:
+    def __init__(self, index: int, attribute: str | None = None):
+      self.index = index
+      self.attribute = attribute
+
+    def _target(self):
+      context = request_collection_context.get()
+      target = (
+        context[self.index]
+        if context is not None
+        else (
+          static_docs,
+          static_service,
+        )[self.index]
+      )
+      return getattr(target, self.attribute) if self.attribute else target
+
+    def __getattr__(self, name):
+      return getattr(self._target(), name)
+
+  if dynamic_collection_spec is not None:
+    static_docs, static_service = docs, document_service
+    docs = RequestBoundProxy(0)
+    document_service = RequestBoundProxy(1)
   Payload = payload_model(strict, frontmatter_schema)
 
   def _require_if_match(if_match: str | None) -> None:
@@ -378,7 +446,13 @@ def get_api_router(
     fm_dump = _frontmatter_dump(payload, frontmatter_schema, is_create=True)
     return _write_document(None, fm_dump, _body(payload), user=user)
 
-  adapter = document_service.i18n_documents
+  adapter = (
+    None
+    if collection_spec is not None and collection_spec.i18n is None
+    else RequestBoundProxy(1, 'i18n_documents')
+    if dynamic_collection_spec is not None
+    else document_service.i18n_documents
+  )
 
   if adapter is not None:
 

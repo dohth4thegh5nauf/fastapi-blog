@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from . import helpers, jsonld, store
+from .config import CollectionSpec
 from .i18n import Translator, get_all_locale_names
 from .models import SLUG_RE, FrontmatterSchema, SeoConfig
 from .seo import build_head, resolve_seo_config
@@ -27,6 +28,7 @@ def get_blog_router(
   seo: SeoConfig | None = None,
   jsonld_routes: bool = False,
   translations_dir: str | pathlib.Path | None = None,
+  collection_spec: CollectionSpec | None = None,
 ) -> APIRouter:
   router = APIRouter()
 
@@ -198,9 +200,16 @@ def get_blog_router(
 
     return context
 
-  def _list_posts() -> tuple[dict, ...]:
+  def _posts_root(request: Request) -> pathlib.Path:
+    if collection_spec is not None:
+      return collection_spec.resolve_dir(request)
+    return pathlib.Path(posts_dirname)
+
+  def _list_posts(request: Request) -> tuple[dict, ...]:
     return helpers.list_posts(
-      posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
+      posts_dirname=str(_posts_root(request)),
+      strict=strict,
+      schema=frontmatter_schema,
     )
 
   # Create routes - same paths whether locale is specified or not
@@ -212,7 +221,7 @@ def get_blog_router(
 
   @router.get('/', name=f'blog_index{name_suffix}', response_class=HTMLResponse)
   async def blog_index(request: Request):
-    posts = _list_posts()
+    posts = _list_posts(request)
     recent_3 = posts[:3]
 
     favorite_posts: list[dict[Any, Any]] = list(
@@ -233,7 +242,7 @@ def get_blog_router(
     response_class=HTMLResponse,
   )
   async def blog_post(post_id: str, request: Request):
-    matches = [x for x in _list_posts() if x['slug'] == post_id]
+    matches = [x for x in _list_posts(request) if x['slug'] == post_id]
     if not matches:
       raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -242,7 +251,7 @@ def get_blog_router(
     post = dict(matches[0])
     try:
       post_path = store.safe_document_path(
-        pathlib.Path(posts_dirname), post_id, pattern=SLUG_RE
+        _posts_root(request), post_id, pattern=SLUG_RE
       )
     except ValueError as exc:
       raise HTTPException(
@@ -267,7 +276,7 @@ def get_blog_router(
     '/posts', name=f'blog_posts{name_suffix}', response_class=HTMLResponse
   )
   async def blog_posts(request: Request):
-    posts = _list_posts()
+    posts = _list_posts(request)
 
     context = _add_i18n_context(request, {'posts': posts})
     context['title'] = context['t'].blog.articles
@@ -279,7 +288,7 @@ def get_blog_router(
     '/tags', name=f'blog_tags{name_suffix}', response_class=HTMLResponse
   )
   async def blog_tags(request: Request):
-    posts = _list_posts()
+    posts = _list_posts(request)
 
     unsorted_tags: dict = {}
     for post in posts:
@@ -307,7 +316,7 @@ def get_blog_router(
     response_class=HTMLResponse,
   )
   async def blog_tag(tag_id: str, request: Request):
-    posts = [x for x in _list_posts() if tag_id in (x.get('tags') or [])]
+    posts = [x for x in _list_posts(request) if tag_id in (x.get('tags') or [])]
 
     context = _add_i18n_context(request, {'tag_id': tag_id, 'posts': posts})
     context['title'] = f'{context["t"].blog.tags_prefix} {tag_id}'
@@ -317,9 +326,19 @@ def get_blog_router(
 
   if jsonld_routes:
     jsonld_schema = helpers.resolve_schema(strict, frontmatter_schema)
-    jsonld_store = store.DocumentStore(
-      store.blog_collections(posts_dirname)['posts']
+    jsonld_store = (
+      store.DocumentStore(store.blog_collections(posts_dirname)['posts'])
+      if collection_spec is None
+      else None
     )
+
+    def _jsonld_store(request: Request) -> store.DocumentStore:
+      if collection_spec is not None:
+        return store.DocumentStore(
+          collection_spec.to_collection(request=request)
+        )
+      assert jsonld_store is not None  # nosec B101
+      return jsonld_store
 
     def _jsonld_context() -> Any:
       """Resolve the schema's context; an unloadable one is a 503, not "ok"."""
@@ -330,9 +349,9 @@ def get_blog_router(
           status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
 
-    def _jsonld_node(slug: str) -> dict[str, Any] | None:
+    def _jsonld_node(slug: str, request: Request) -> dict[str, Any] | None:
       try:
-        record = jsonld_store.read(slug)
+        record = _jsonld_store(request).read(slug)
       except (ValueError, FileNotFoundError):
         return None
       return jsonld.document_to_jsonld(
@@ -348,10 +367,11 @@ def get_blog_router(
     # registration order, and `index.jsonld` would otherwise also match
     # `/{slug}.jsonld` with `slug='index'` first.
     @router.get('/index.jsonld', name=f'blog_index_jsonld{name_suffix}')
-    async def blog_index_jsonld():
+    async def blog_index_jsonld(request: Request):
+      documents_store = _jsonld_store(request)
       documents = []
-      for post in _list_posts():
-        record = jsonld_store.read(post['slug'])
+      for post in _list_posts(request):
+        record = documents_store.read(post['slug'])
         documents.append(
           (post['slug'], record.frontmatter, record.body.strip())
         )
@@ -369,16 +389,16 @@ def get_blog_router(
       return JSONResponse(content=graph, media_type='application/ld+json')
 
     @router.get('/{slug}.jsonld', name=f'blog_post_jsonld{name_suffix}')
-    async def blog_post_jsonld(slug: str):
+    async def blog_post_jsonld(slug: str, request: Request):
       # Only published posts are public (TODO 5.4): `_list_posts()` already
       # filters to published (its `published` default is `True`).
-      published_slugs = {post['slug'] for post in _list_posts()}
+      published_slugs = {post['slug'] for post in _list_posts(request)}
       if slug not in published_slugs:
         raise HTTPException(
           status_code=status.HTTP_404_NOT_FOUND,
           detail=f"Post '{slug}' not found",
         )
-      node = _jsonld_node(slug)
+      node = _jsonld_node(slug, request)
       if node is None:
         raise HTTPException(
           status_code=status.HTTP_404_NOT_FOUND,

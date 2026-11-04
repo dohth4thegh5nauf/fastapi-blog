@@ -266,6 +266,13 @@ class MarkdownFileManager:
     validators: tuple[Validator, ...] = (),
   ):
     """Initialize file manager with posts directory and frontmatter schema."""
+    self._request_collection_spec = (
+      collection_spec
+      if collection_spec is not None and callable(collection_spec.dir)
+      else None
+    )
+    if self._request_collection_spec is not None:
+      collection_spec = replace(self._request_collection_spec, dir=Path.cwd())
     self.posts_dir = Path(posts_dir)
     self.schema = (
       schema
@@ -290,6 +297,29 @@ class MarkdownFileManager:
       self.schema,
       collection_spec=collection_spec,
       validators=validators,
+    )
+
+  def for_request(self, request: Request) -> 'MarkdownFileManager':
+    """Return a manager bound to each collection root resolved for a request."""
+    if self._request_collection_spec is None and not any(
+      callable(spec.dir) for spec in self.collection_specs.values()
+    ):
+      return self
+    collection_spec = self._request_collection_spec
+    if collection_spec is not None:
+      collection_spec = collection_spec.for_request(request)
+    collection_specs = {
+      name: spec.for_request(request) if callable(spec.dir) else spec
+      for name, spec in self.collection_specs.items()
+    }
+    return MarkdownFileManager(
+      str(collection_spec.dir)
+      if collection_spec is not None
+      else str(self.posts_dir),
+      self.schema,
+      collection_spec=collection_spec,
+      collection_specs=collection_specs,
+      validators=self.service.validators,
     )
 
   def list_posts(
@@ -602,6 +632,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('', methods=['POST'])
   async def save(self, request: Request) -> JSONResponse:
     """Validate and persist a form submission without calling the REST API."""
+    manager = self.manager.for_request(request)
     try:
       data = await request.json()
     except ValueError:
@@ -611,7 +642,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
 
     slug_value = data.get('slug')
     slug = str(slug_value).strip() if slug_value else None
-    adapter = self.manager.service.i18n_documents
+    adapter = manager.service.i18n_documents
     content_locale = data.get('content_locale')
     locale_payloads = data.get('locales')
     if adapter is not None and locale_payloads is not None:
@@ -676,7 +707,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
           409,
         )
       try:
-        result = self.manager.service.save_localized(
+        result = manager.service.save_localized(
           slug,
           documents,
           if_match=etags or None,
@@ -745,7 +776,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
           {'detail': 'The entry changed or the form is stale; reload'}, 428
         )
       try:
-        result = self.manager.service.save_localized(
+        result = manager.service.save_localized(
           slug,
           {content_locale: (frontmatter, content)},
           if_match=(
@@ -783,7 +814,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
       response.headers['ETag'] = result.etags[content_locale]
       return response
 
-    is_new = not slug or not self.manager.store.exists(slug)
+    is_new = not slug or not manager.store.exists(slug)
     action = 'create' if is_new else 'update'
     await self._require(request, action)
 
@@ -802,7 +833,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
       )
 
     try:
-      result = self.manager.save_post(
+      result = manager.save_post(
         slug,
         frontmatter,
         content,
@@ -833,6 +864,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('/{slug}', methods=['DELETE'])
   async def delete(self, request: Request) -> JSONResponse:
     """Delete a document through the same service used for form saves."""
+    manager = self.manager.for_request(request)
     await self._require(request, 'delete')
     slug = str(request.path_params.get('slug', ''))
     if not slug:
@@ -841,15 +873,15 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
     if not if_match:
       return JSONResponse({'detail': 'If-Match header is required'}, 428)
     try:
-      if self.manager.service.i18n_documents is not None:
-        self.manager.service.delete_localized_entry(
+      if manager.service.i18n_documents is not None:
+        manager.service.delete_localized_entry(
           slug,
           cascade=request.query_params.get('cascade') == 'true',
           expected_entry_etag=if_match,
           user=getattr(request.state, 'blog_user', None),
         )
       else:
-        self.manager.service.delete(
+        manager.service.delete(
           slug,
           if_match=if_match,
           user=getattr(request.state, 'blog_user', None),
@@ -911,7 +943,8 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
   async def index(self, request: Request) -> Response:
     """Render list of posts."""
     await self._require(request, 'read')
-    adapter = self.manager.service.i18n_documents
+    manager = self.manager.for_request(request)
+    adapter = manager.service.i18n_documents
     content_locale = None
     locale_options: tuple[str, ...] = ()
     if adapter is not None:
@@ -923,7 +956,7 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       if content_locale not in adapter.config.locales:
         return JSONResponse({'detail': 'Unknown content locale'}, 400)
       locale_options = adapter.config.locales
-    posts = self.manager.list_posts(
+    posts = manager.list_posts(
       locale=content_locale, user=getattr(request.state, 'blog_user', None)
     )
 
@@ -1072,6 +1105,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
   async def index(self, request: Request) -> Response:
     """Render edit form."""
     await self._require(request, 'update')
+    manager = self.manager.for_request(request)
     # starlette-admin assigns templates at mount time.
     assert self.templates is not None  # nosec B101
     slug = request.path_params.get('slug')
@@ -1082,7 +1116,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         context={'error': 'Missing slug parameter'},
         status_code=400,
       )
-    adapter = self.manager.service.i18n_documents
+    adapter = manager.service.i18n_documents
     content_locale = None
     locale_tabs = []
     locale_exists = True
@@ -1111,7 +1145,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         for item in adapter.config.locales
       ]
     try:
-      post = self.manager.load_post(
+      post = manager.load_post(
         slug,
         locale=content_locale,
         user=getattr(request.state, 'blog_user', None),
@@ -1163,7 +1197,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
       display_schema,
       post.frontmatter,
       t,
-      link_choices=self.manager.link_suggestions(
+      link_choices=manager.link_suggestions(
         user=getattr(request.state, 'blog_user', None)
       ),
       locale=self.locale,
@@ -1184,7 +1218,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
       form_fields,
       self.schema,
       post.frontmatter,
-      service=self.manager.service,
+      service=manager.service,
       user=getattr(request.state, 'blog_user', None),
       slug=post.slug,
       locale=content_locale,
@@ -1208,7 +1242,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         'locale_tabs': locale_tabs,
         'locale_exists': locale_exists,
         'fallback_used': post.fallback_used,
-        'canonical_post': self.manager.load_post(
+        'canonical_post': manager.load_post(
           slug,
           locale=adapter.config.default_locale,
           user=getattr(request.state, 'blog_user', None),
@@ -1226,7 +1260,7 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         ),
         'form_fields': form_fields,
         'form_fields_meta': form_fields_meta(form_fields),
-        'diagnostics': self.manager.diagnostics_for_post(slug),
+        'diagnostics': manager.diagnostics_for_post(slug),
         'is_new': False,
         'auto_slug': False,
         'base_url': request.scope['root_path'],
@@ -1281,6 +1315,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
   async def index(self, request: Request) -> Response:
     """Render create form."""
     await self._require(request, 'create')
+    manager = self.manager.for_request(request)
     # starlette-admin assigns templates at mount time.
     assert self.templates is not None  # nosec B101
     # Get translations for this view's locale
@@ -1289,7 +1324,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
     translations = load_translations(self.locale, self.translations_dir)
     t = translations['post']
 
-    adapter = self.manager.service.i18n_documents
+    adapter = manager.service.i18n_documents
     content_locale = (
       adapter.config.default_locale if adapter is not None else None
     )
@@ -1298,7 +1333,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
       {},
       t,
       is_new=True,
-      link_choices=self.manager.link_suggestions(
+      link_choices=manager.link_suggestions(
         user=getattr(request.state, 'blog_user', None)
       ),
       locale=self.locale,
@@ -1311,7 +1346,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
       form_fields,
       self.schema,
       None,
-      service=self.manager.service,
+      service=manager.service,
       user=getattr(request.state, 'blog_user', None),
       slug='',
       locale=content_locale,

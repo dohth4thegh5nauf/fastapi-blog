@@ -32,6 +32,14 @@ collections:
         blocking: [error, undefined]
 ```
 
+The YAML `dir` setting is a static path relative to the project file. Python
+applications that need tenant- or request-specific storage can instead pass a
+`CollectionSpec` whose `dir` is a callable accepting the current Starlette
+request and returning an absolute path. The resolved path is cached on that
+request and shared by the public blog, REST API, admin Markdown views,
+health-checks, and SEO routes. This is a runtime application API; project-file
+commands such as `check` and `export` require a static directory.
+
 ## Multi-locale collections
 
 A project-level `i18n` block supplies defaults to every collection. A

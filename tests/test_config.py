@@ -1,6 +1,7 @@
 """Tests for the project file (`fastapi_blog.yaml`, TODO phase D)."""
 
 import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -116,6 +117,37 @@ def test_collection_spec_carries_an_inline_schema():
   spec = config.CollectionSpec(name='notes', dir='x', schema=schema)
   assert spec.to_collection().name == 'notes'
   assert spec.schema is schema
+
+
+def test_request_directory_resolver_runs_once_and_binds_collection(tmp_path):
+  calls = []
+  first = tmp_path / 'first'
+  request = SimpleNamespace(state=SimpleNamespace())
+  spec = config.CollectionSpec(
+    name='notes',
+    dir=lambda current_request: calls.append(current_request) or first,
+  )
+
+  assert spec.resolve_dir(request) == first.resolve()
+  assert spec.for_request(request).dir == first.resolve()
+  assert spec.to_collection(request=request).dir == first.resolve()
+  assert calls == [request]
+
+
+def test_request_directory_resolver_failure_does_not_use_static_path(tmp_path):
+  request = SimpleNamespace(state=SimpleNamespace())
+  spec = config.CollectionSpec(
+    name='notes', dir=lambda _request: (_ for _ in ()).throw(OSError('denied'))
+  )
+
+  with pytest.raises(config.ConfigError, match='Unable to resolve'):
+    spec.resolve_dir(request)
+
+  relative_spec = config.CollectionSpec(
+    name='notes', dir=lambda _request: 'posts'
+  )
+  with pytest.raises(config.ConfigError, match='absolute path'):
+    relative_spec.resolve_dir(request)
 
 
 def test_slug_template_and_unique_seq_are_loaded(project_dir):

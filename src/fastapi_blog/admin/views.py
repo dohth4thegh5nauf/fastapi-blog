@@ -200,6 +200,7 @@ def load_posts_for_home(
   collection_spec=None,
   user=None,
   locale=None,
+  request: Request | None = None,
 ) -> list[Any]:
   """Load posts for the dashboard using the roles of a custom schema.
 
@@ -209,6 +210,7 @@ def load_posts_for_home(
       collection_spec: Optional collection with document policies.
       user: Principal used for document access checks.
       locale: Optional content locale.
+      request: Optional request used to resolve dynamic collection roots.
 
   Returns:
       Simple objects with `slug`, `title`, `date` (datetime or `None`),
@@ -218,9 +220,12 @@ def load_posts_for_home(
   from .markdown_crud import MarkdownFileManager
 
   posts = []
-  for post in MarkdownFileManager(
+  manager = MarkdownFileManager(
     posts_dir, schema, collection_spec=collection_spec
-  ).list_posts(locale=locale, user=user):
+  )
+  if request is not None:
+    manager = manager.for_request(request)
+  for post in manager.list_posts(locale=locale, user=user):
     if isinstance(post.tags, list | tuple):
       tags = [str(tag) for tag in post.tags]
     else:
@@ -282,24 +287,18 @@ class HomeView(CustomView):
 
     # Get all posts (with error handling for malformed posts)
     try:
-      if (
-        self.collection_spec is not None
-        and self.collection_spec.document_authorize
-      ):
-        all_posts = load_posts_for_home(
-          posts_dir,
-          self.schema or DEFAULT_SCHEMA,
-          self.collection_spec,
-          getattr(request.state, 'blog_user', None),
-          self.locale
-          if self.collection_spec.i18n
-          and self.locale in self.collection_spec.i18n.locales
-          else None,
-        )
-      else:
-        all_posts = load_posts_for_home(
-          posts_dir, self.schema or DEFAULT_SCHEMA
-        )
+      all_posts = load_posts_for_home(
+        posts_dir,
+        self.schema or DEFAULT_SCHEMA,
+        self.collection_spec,
+        getattr(request.state, 'blog_user', None),
+        self.locale
+        if self.collection_spec
+        and self.collection_spec.i18n
+        and self.locale in self.collection_spec.i18n.locales
+        else None,
+        request,
+      )
     except Exception:
       # If loading fails, return empty state
       all_posts = []
