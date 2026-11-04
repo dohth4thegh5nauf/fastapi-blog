@@ -127,12 +127,11 @@ Release verification performed locally on top of the test gate:
   clean wheel smoke tests on the final release commit, then tag and publish
   through the release repository's approved channels.
 
-The latest pull request CI passed on the current candidate. The latest local
-regression run before the admin extension hook passed on Python 3.12 with
-**893 passed, 2 skipped**; the new localized custom-view test passes separately
-(**1 passed**). Ruff, formatting, mypy, Bandit, actionlint and Compose
-configuration checks pass on the current worktree. A current full local
-`make all` run could not start because `uv` could not fetch the locked build
-requirement while DNS/network access to PyPI was unavailable; CI ran the
-corresponding validation and test gates successfully. Keep the 0.9.0 changes
-under `[Unreleased]` until any subsequent candidate change is revalidated.
+The latest pull request CI passed on the candidate before the request-scoped
+self-link fix. After that fix and the concurrent ETag regression test, the full
+local `make all` gate passed on Python 3.12: Ruff, formatting and mypy were
+clean; pytest collected **932 tests** and completed with **930 passed, 2
+skipped**; total coverage was **87%**. The full test run needs access to local
+async SQLite and was run outside the restricted sandbox. Keep the 0.9.0
+changes under `[Unreleased]` until CI passes for the latest commit and the
+release-repository checks in the handoff section are complete.
