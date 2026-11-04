@@ -264,19 +264,24 @@ def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
 
   # Unknown locale directories/files are ignored by the runtime store, but
   # must be visible to `check` instead of silently disappearing.
-  extension = spec.to_collection().extensions[0]
+  extensions = spec.to_collection().extensions
   if adapter.config.structure == 'multiple_folders':
     if spec.dir.is_dir():
       for directory in sorted(spec.dir.iterdir()):
         if (
           not directory.is_dir()
+          or not directory.resolve().is_relative_to(spec.dir.resolve())
           or directory.name in adapter.config.locales
           or not re.fullmatch(
             r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', directory.name
           )
         ):
           continue
-        for path in sorted(directory.glob(f'*.{extension}')):
+        for path in sorted(
+          path
+          for extension in extensions
+          for path in directory.glob(f'*.{extension}')
+        ):
           if path.is_file():
             issues.append(
               Issue(
@@ -288,7 +293,11 @@ def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
               )
             )
   elif spec.dir.is_dir():
-    for path in sorted(spec.dir.glob(f'*.{extension}')):
+    for path in sorted(
+      path
+      for extension in extensions
+      for path in spec.dir.glob(f'*.{extension}')
+    ):
       parsed = _locale_suffix(path.stem)
       if parsed is None:
         continue
@@ -1063,7 +1072,11 @@ def check_collection(
     )
     return report
   documents = _documents_for_spec(spec)
-  report.documents = len(documents.list())
+  try:
+    report.documents = len(documents.list())
+  except store.ConflictError as exc:
+    issues.append(Issue('error', 'file.conflict', str(exc)))
+    return report
   has_title = bool(spec.schema and spec.schema.field_for_role('title'))
   if spec.summary is not None or has_title:
     for slug in sorted(documents.list()):

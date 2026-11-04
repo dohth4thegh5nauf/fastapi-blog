@@ -1,5 +1,9 @@
 """Integrity diagnostics for multi-locale collections."""
 
+from dataclasses import replace
+
+import pytest
+
 from fastapi_blog import store
 from fastapi_blog.checks import check_collection
 from fastapi_blog.config import CollectionSpec, load_project
@@ -70,6 +74,18 @@ def test_translation_missing_severity_can_be_disabled(tmp_path):
   assert not any(issue.code == 'translation.missing' for issue in report.issues)
 
 
+def test_duplicate_extensions_are_reported_as_a_conflict(tmp_path):
+  spec = replace(_spec(tmp_path), extension=('md', 'markdown'))
+  spec.dir.mkdir()
+  (spec.dir / 'hello.md').write_text('First')
+  (spec.dir / 'hello.markdown').write_text('Second')
+  report = check_collection(spec, root=tmp_path)
+  assert any(
+    issue.level == 'error' and issue.code == 'file.conflict'
+    for issue in report.issues
+  )
+
+
 def test_multiple_files_orphan_is_found(tmp_path):
   spec = _spec(tmp_path, structure='multiple_files')
   spec.dir.mkdir()
@@ -81,6 +97,28 @@ def test_multiple_files_orphan_is_found(tmp_path):
   report = check_collection(spec, root=tmp_path)
   assert any(
     issue.code == 'translation.orphan' and issue.slug == 'orphan'
+    for issue in report.issues
+  )
+
+
+@pytest.mark.parametrize('structure', ['multiple_files', 'multiple_folders'])
+def test_unknown_locale_is_detected_for_alternate_extension(
+  tmp_path, structure
+):
+  spec = replace(
+    _spec(tmp_path, structure=structure), extension=('md', 'markdown')
+  )
+  spec.dir.mkdir()
+  path = (
+    spec.dir / 'unknown.de.markdown'
+    if structure == 'multiple_files'
+    else spec.dir / 'de' / 'unknown.markdown'
+  )
+  path.parent.mkdir(exist_ok=True)
+  path.write_text('Text')
+  report = check_collection(spec, root=tmp_path)
+  assert any(
+    issue.code == 'translation.unknown_locale' and issue.field == 'de'
     for issue in report.issues
   )
 
