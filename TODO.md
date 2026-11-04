@@ -120,9 +120,9 @@
 
 1. Круговой тест `read → write` с таблицей `|---|---|` и `---` в значении YAML — выполнено (`tests/test_store.py`).
 2. Два одновременных REST-запроса с одним `etag` дают ровно один успешный ответ и один 412 (`tests/test_editor.py::test_concurrent_updates_with_one_etag_allow_only_one_writer`).
-3. Поиск `read_text(` и `write_text(` в `src` не находит вызовов без `encoding`.
+3. Все вызовы `read_text()` и `write_text()` в `src` задают `encoding`.
 4. Все чтения и записи документов идут через `DocumentStore`; REST API и админка используют `DocumentService` для проверки схемы и блокирующих валидаторов.
-5. Все существующие тесты проходят (базовая линия: 386 тестов в 30 файлах).
+5. Полный `make all` проходит: 930 passed, 2 skipped из 932 тестов на Python 3.12; базовая линия до реализации — 386 тестов в 30 файлах.
 
 ## 5. Настраиваемый frontmatter и JSON-LD (фаза C — главный раздел)
 
