@@ -87,8 +87,9 @@ ETags for batch callers.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. The document policy
-filters API and admin document operations but does not filter public blog
-HTML routes, JSON-LD routes or the sitemap. Do not rely on it as a complete
+filters API and admin document operations, plus anonymous public blog output
+including HTML listings/details, JSON-LD and the sitemap. It can only evaluate
+the anonymous principal on public routes. Do not rely on it as a complete
 access-control boundary yet.
 
 The current experimental Python hook is configured with
