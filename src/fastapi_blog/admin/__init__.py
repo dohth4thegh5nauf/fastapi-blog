@@ -513,29 +513,27 @@ def add_admin_to_app(
     # Store engine for later access
     app.state.admin_engine = engine
 
-    # Use lifespan event for async initialization (modern approach)
-    from contextlib import asynccontextmanager
+  # Use lifespan events for database setup and cleanup.
+  from contextlib import asynccontextmanager
 
-    # Check if app already has a lifespan
-    original_lifespan = getattr(app.router, 'lifespan_context', None)
+  original_lifespan = getattr(app.router, 'lifespan_context', None)
 
-    @asynccontextmanager
-    async def admin_lifespan(app):
-      # Startup: initialize database
-      await init_db(engine)
-      logger.info('Admin database initialized')
+  @asynccontextmanager
+  async def admin_lifespan(app):
+    try:
+      if init_database:
+        await init_db(engine)
+        logger.info('Admin database initialized')
 
-      # Call original lifespan if exists
       if original_lifespan:
         async with original_lifespan(app):
           yield
       else:
         yield
+    finally:
+      await engine.dispose()
 
-      # Shutdown: cleanup if needed
-
-    # Replace app's lifespan
-    app.router.lifespan_context = admin_lifespan
+  app.router.lifespan_context = admin_lifespan
 
   # Note: admin_username is passed directly to role management views
   # to avoid app.state identity issues with uvicorn --reload

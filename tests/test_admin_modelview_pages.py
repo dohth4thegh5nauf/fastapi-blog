@@ -18,6 +18,32 @@ from fastapi.testclient import TestClient
 import fastapi_blog
 
 
+def test_admin_engine_is_disposed_on_lifespan_shutdown(monkeypatch):
+  app = FastAPI()
+  fastapi_blog.add_admin_to_app(
+    app,
+    admin_username='admin',
+    admin_password='Secret123!',
+    secret_key='x' * 64,
+    database_url='sqlite+aiosqlite:///:memory:',
+    locales=['en'],
+    default_locale='en',
+  )
+  engine = app.state.admin_engine
+  dispose = type(engine).dispose
+  disposed = []
+
+  async def track_dispose(engine):
+    disposed.append(True)
+    await dispose(engine)
+
+  monkeypatch.setattr(type(engine), 'dispose', track_dispose)
+  with TestClient(app):
+    pass
+
+  assert disposed == [True]
+
+
 @pytest.fixture
 def client():
   app = FastAPI()
