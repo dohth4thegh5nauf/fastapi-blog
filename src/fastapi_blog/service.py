@@ -520,7 +520,11 @@ class DocumentService:
             existing=canonical_existing,
           )
         else:
-          assert canonical_existing is not None
+          if canonical_existing is None:
+            raise store.ConflictError(
+              f'Canonical document {slug!r} disappeared during the update',
+              status_code=409,
+            )
           canonical_source = canonical_existing
         canonical_sources[slug] = canonical_source
 
