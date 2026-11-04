@@ -103,8 +103,9 @@ An experimental schema field may specify `transitions` with `initial` and
 `permission`. Permission-bearing transitions require a document policy and
 ask it to allow both the named permission and the `transition` action.
 These checks cover scalar fields, nested objects and fields inside object
-lists. The admin filters top-level choices; nested choice filtering remains
-open. The service rejects invalid transitions when a save is submitted.
+lists. The admin disables choices that violate the transition rules or their
+document policy. The service still rejects invalid transitions when a save
+is submitted.
 `check` reports missing, orphaned, unknown-locale and mismatched duplicate
 translations according to `check.translations`.
 
