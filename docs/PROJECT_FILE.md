@@ -88,7 +88,7 @@ Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. The document policy
 filters API and admin document operations but does not filter public blog
-routes, including article detail pages. Do not rely on it as a complete
+HTML routes, JSON-LD routes or the sitemap. Do not rely on it as a complete
 access-control boundary yet.
 
 The current experimental Python hook is configured with
