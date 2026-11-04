@@ -1,4 +1,6 @@
+import pathlib
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
@@ -1169,4 +1171,114 @@ def test_request_collection_roots_are_isolated_per_api_request(tmp_path):
   assert (
     client.get('/api/notes/shared/raw', headers={'x-root': 'two'}).status_code
     == 200
+  )
+
+
+def test_invalid_request_collection_root_fails_without_static_fallback(
+  tmp_path,
+):
+  static_root = tmp_path / 'static'
+  static_root.mkdir()
+  (static_root / 'shared.md').write_text(
+    '---\ntitle: Static fallback\n---\nBody\n', encoding='utf-8'
+  )
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda _request: pathlib.Path('relative-root'),
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(
+      posts_dirname=str(static_root),
+      require_auth=False,
+      collection_spec=spec,
+    ),
+    prefix='/api/notes',
+  )
+
+  response = TestClient(app).get('/api/notes/shared/raw')
+
+  assert response.status_code == 500
+  assert 'relative-root' not in response.text
+  assert 'Static fallback' not in response.text
+
+
+def test_request_resolved_validator_receives_its_collection_path(
+  tmp_path, monkeypatch
+):
+  import fastapi_blog.service as document_service
+
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  validated_paths = []
+
+  def capture_validator_path(_validators, **kwargs):
+    validated_paths.append(kwargs['path'])
+    return []
+
+  monkeypatch.setattr(document_service, 'run_blocking', capture_validator_path)
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda request: roots[request.headers['x-root']],
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+    validators=(Validator(name='capture', argv=('noop',), run='write'),),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  for root_name in ('one', 'two'):
+    response = client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={'frontmatter': {'title': f'Root {root_name}'}, 'content': 'Body'},
+    )
+    assert response.status_code == 201
+
+  assert validated_paths == [
+    (roots['one'] / 'shared.md').resolve(),
+    (roots['two'] / 'shared.md').resolve(),
+  ]
+
+
+def test_concurrent_writes_to_distinct_request_roots_do_not_cross_contaminate(
+  tmp_path,
+):
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda request: roots[request.headers['x-root']],
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  def create(root_name):
+    return client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={
+        'frontmatter': {'title': f'Root {root_name}'},
+        'content': f'Body {root_name}',
+      },
+    )
+
+  with ThreadPoolExecutor(max_workers=2) as executor:
+    responses = list(executor.map(create, ('one', 'two')))
+
+  assert [response.status_code for response in responses] == [201, 201]
+  assert (
+    'Root one'
+    in client.get('/api/notes/shared/raw', headers={'x-root': 'one'}).text
+  )
+  assert (
+    'Root two'
+    in client.get('/api/notes/shared/raw', headers={'x-root': 'two'}).text
   )

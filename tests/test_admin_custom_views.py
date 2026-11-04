@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from httpx2 import ASGITransport, AsyncClient
@@ -134,12 +135,30 @@ def test_admin_uses_request_resolved_collection_root(tmp_path):
           },
         )
         assert login.status_code == 303
+        for root_key in ('one', 'two'):
+          saved = await client.post(
+            '/admin/posts/save',
+            headers={'x-root': root_key, 'X-CSRFToken': token},
+            json={
+              'slug': 'admin-created',
+              'frontmatter': {
+                'title': f'Created {root_key}',
+                'published': True,
+              },
+              'content': f'Body {root_key}',
+            },
+          )
+          assert saved.status_code == 201, saved.text
         first = await client.get('/admin/posts', headers={'x-root': 'one'})
         second = await client.get('/admin/posts', headers={'x-root': 'two'})
         assert 'First root' in first.text
+        assert 'Created one' in first.text
         assert 'Second root' not in first.text
+        assert 'Created two' not in first.text
         assert 'Second root' in second.text
+        assert 'Created two' in second.text
         assert 'First root' not in second.text
+        assert 'Created one' not in second.text
         dashboard_one = await client.get('/admin/', headers={'x-root': 'one'})
         dashboard_two = await client.get('/admin/', headers={'x-root': 'two'})
         assert 'First root' in dashboard_one.text
@@ -150,3 +169,71 @@ def test_admin_uses_request_resolved_collection_root(tmp_path):
       await app.state.admin_engine.dispose()
 
   asyncio.run(assert_roots_are_isolated())
+
+
+def test_request_bound_admin_manager_filters_dynamic_link_targets(tmp_path):
+  from fastapi_blog.admin.markdown_crud import MarkdownFileManager
+
+  roots = {key: tmp_path / key for key in ('one', 'two')}
+  for key, root in roots.items():
+    target = root / 'articles'
+    target.mkdir(parents=True)
+    write_document(
+      target / 'shared.md',
+      {'identifier': f'ref:{key}', 'title': f'Article {key}'},
+      'Body',
+    )
+
+  target_schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('identifier'),
+      FieldSpec('title', required=True, role='title'),
+    )
+  )
+  target_spec = CollectionSpec(
+    'articles',
+    lambda request: roots[request.headers['x-root']] / 'articles',
+    schema=target_schema,
+  )
+  source_spec = CollectionSpec(
+    'notes', lambda request: roots[request.headers['x-root']] / 'notes'
+  )
+  source_schema = FrontmatterSchema(
+    fields=(
+      FieldSpec(
+        'related',
+        type='link',
+        collection='articles',
+        value_field='identifier',
+      ),
+    )
+  )
+  manager = MarkdownFileManager(
+    str(tmp_path / 'unused'),
+    source_schema,
+    collection_spec=source_spec,
+    collection_specs={'articles': target_spec},
+  )
+
+  def request_for(key):
+    return SimpleNamespace(state=SimpleNamespace(), headers={'x-root': key})
+
+  first_request = request_for('one')
+  second_request = request_for('two')
+  first = manager.for_request(first_request).link_suggestions()
+  second = manager.for_request(second_request).link_suggestions()
+  manager.for_request(first_request).save_post(
+    'note', {'related': 'ref:one'}, 'First note'
+  )
+  manager.for_request(second_request).save_post(
+    'note', {'related': 'ref:two'}, 'Second note'
+  )
+
+  assert first == {
+    'related': [{'value': 'ref:one', 'label': 'Article one (shared)'}]
+  }
+  assert second == {
+    'related': [{'value': 'ref:two', 'label': 'Article two (shared)'}]
+  }
+  assert (roots['one'] / 'notes' / 'note.md').is_file()
+  assert (roots['two'] / 'notes' / 'note.md').is_file()

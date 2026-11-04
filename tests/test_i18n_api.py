@@ -1,5 +1,7 @@
 """Contract tests for the localized collection REST endpoints."""
 
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -62,6 +64,101 @@ def test_put_one_locale_and_get_fallback(tmp_path):
 
   fallback = client.get('/api/articles/hello?locale=fr&fallback=true')
   assert fallback.status_code == 400
+
+
+def test_request_resolved_i18n_roots_keep_etags_and_events_isolated(tmp_path):
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  resolver_calls = []
+  events = []
+
+  def resolve_root(request):
+    resolver_calls.append(request.headers['x-root'])
+    return roots[request.headers['x-root']]
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, i18n='translate'),
+      FieldSpec('code', required=True, i18n='duplicate'),
+    ),
+    extra='forbid',
+  )
+  spec = CollectionSpec(
+    'articles',
+    resolve_root,
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
+    on_change=events.append,
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(
+      collection_spec=spec,
+      require_auth=False,
+      require_if_match=True,
+    ),
+    prefix='/api/articles',
+  )
+  client = TestClient(app)
+  headers_one = {'x-root': 'one'}
+  headers_two = {'x-root': 'two'}
+  payload = {
+    'locales': {
+      'en': {'frontmatter': {'title': 'First', 'code': 'A'}, 'content': 'One'},
+      'ru': {'frontmatter': {'title': 'Первый'}, 'content': 'Один'},
+    }
+  }
+
+  first = client.put('/api/articles/shared', headers=headers_one, json=payload)
+  second = client.put(
+    '/api/articles/shared',
+    headers=headers_two,
+    json={
+      'locales': {
+        'en': {
+          'frontmatter': {'title': 'Second', 'code': 'B'},
+          'content': 'Two',
+        }
+      }
+    },
+  )
+  assert first.status_code == second.status_code == 201
+
+  first_read = client.get('/api/articles/shared', headers=headers_one)
+  second_read = client.get('/api/articles/shared', headers=headers_two)
+  assert first_read.json()['frontmatter']['title'] == 'First'
+  assert second_read.json()['frontmatter']['title'] == 'Second'
+  assert first_read.headers['ETag'] != second_read.headers['ETag']
+
+  with ThreadPoolExecutor(max_workers=2) as executor:
+    concurrent_reads = list(
+      executor.map(
+        lambda headers: client.get('/api/articles/shared', headers=headers),
+        (headers_one, headers_two),
+      )
+    )
+  assert [item.json()['frontmatter']['title'] for item in concurrent_reads] == [
+    'First',
+    'Second',
+  ]
+
+  stale_cross_root = client.put(
+    '/api/articles/shared',
+    headers={**headers_two, 'If-Match': first_read.headers['ETag']},
+    json={
+      'locales': {
+        'en': {
+          'frontmatter': {'title': 'Stale', 'code': 'B'},
+          'content': 'Stale',
+        }
+      }
+    },
+  )
+  assert stale_cross_root.status_code == 412
+  assert resolver_calls.count('one') == 3
+  assert resolver_calls.count('two') == 4
+  assert len(events) == 2
+  assert all(path.is_relative_to(roots['one']) for path in events[0].paths)
+  assert all(path.is_relative_to(roots['two']) for path in events[1].paths)
 
 
 def test_legacy_routes_cannot_bypass_localized_storage(tmp_path):

@@ -8,6 +8,19 @@ import pytest
 from fastapi_blog import store
 
 
+def test_document_store_locks_are_shared_only_by_canonical_directory(tmp_path):
+  first_dir = tmp_path / 'first'
+  second_dir = tmp_path / 'second'
+  first = store.DocumentStore(store.Collection('posts', first_dir))
+  same_root = store.DocumentStore(
+    store.Collection('posts', first_dir / '..' / 'first')
+  )
+  second = store.DocumentStore(store.Collection('posts', second_dir))
+
+  assert first._lock is same_root._lock
+  assert first._lock is not second._lock
+
+
 def test_round_trip_preserves_a_table_and_a_dash_value(tmp_path):
   """A `---` inside a table or a YAML value must not be mistaken for a boundary."""
   frontmatter = {'title': 'Hi', 'note': 'a --- dash'}
