@@ -194,12 +194,21 @@ def _as_datetime(value: Any) -> datetime | None:
   return None
 
 
-def load_posts_for_home(posts_dir: str, schema: FrontmatterSchema) -> list[Any]:
+def load_posts_for_home(
+  posts_dir: str,
+  schema: FrontmatterSchema,
+  collection_spec=None,
+  user=None,
+  locale=None,
+) -> list[Any]:
   """Load posts for the dashboard using the roles of a custom schema.
 
   Args:
       posts_dir: Directory with the markdown files.
       schema: Frontmatter schema of the blog.
+      collection_spec: Optional collection with document policies.
+      user: Principal used for document access checks.
+      locale: Optional content locale.
 
   Returns:
       Simple objects with `slug`, `title`, `date` (datetime or `None`),
@@ -209,7 +218,9 @@ def load_posts_for_home(posts_dir: str, schema: FrontmatterSchema) -> list[Any]:
   from .markdown_crud import MarkdownFileManager
 
   posts = []
-  for post in MarkdownFileManager(posts_dir, schema).list_posts():
+  for post in MarkdownFileManager(
+    posts_dir, schema, collection_spec=collection_spec
+  ).list_posts(locale=locale, user=user):
     if isinstance(post.tags, list | tuple):
       tags = [str(tag) for tag in post.tags]
     else:
@@ -245,6 +256,7 @@ class HomeView(CustomView):
     posts_dirname: str | None = None,
     authorize=None,
     translations_dir: str | None = None,
+    collection_spec=None,
   ):
     """Initialize home view with locale and frontmatter schema."""
     super().__init__(menu_label=label, icon=icon)
@@ -253,6 +265,7 @@ class HomeView(CustomView):
     self.posts_dirname = posts_dirname
     self.authorize = authorize or default_authorize
     self.translations_dir = translations_dir
+    self.collection_spec = collection_spec
 
   def is_accessible(self, request: Request) -> bool:
     if getattr(request.state, 'blog_user', None) is None:
@@ -269,7 +282,24 @@ class HomeView(CustomView):
 
     # Get all posts (with error handling for malformed posts)
     try:
-      all_posts = load_posts_for_home(posts_dir, self.schema or DEFAULT_SCHEMA)
+      if (
+        self.collection_spec is not None
+        and self.collection_spec.document_authorize
+      ):
+        all_posts = load_posts_for_home(
+          posts_dir,
+          self.schema or DEFAULT_SCHEMA,
+          self.collection_spec,
+          getattr(request.state, 'blog_user', None),
+          self.locale
+          if self.collection_spec.i18n
+          and self.locale in self.collection_spec.i18n.locales
+          else None,
+        )
+      else:
+        all_posts = load_posts_for_home(
+          posts_dir, self.schema or DEFAULT_SCHEMA
+        )
     except Exception:
       # If loading fails, return empty state
       all_posts = []

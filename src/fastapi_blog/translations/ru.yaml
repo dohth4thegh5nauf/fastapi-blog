@@ -33,6 +33,8 @@ user:
 
 # Post management
 post:
+  original: Оригинал
+  edit_original: Редактировать оригинал
   singular: Пост
   plural: Посты
   create: Создать пост

@@ -203,6 +203,7 @@ def _create_admin_for_locale(
       posts_dirname=posts_dirname,
       authorize=authorize,
       translations_dir=str(translations_dir) if translations_dir else None,
+      collection_spec=collection_spec,
     ),
   )
 

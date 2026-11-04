@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import quote
 
 from pydantic import ValidationError
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette_admin.routing import route
@@ -156,7 +157,9 @@ class MarkdownFileManager:
       validators=validators,
     )
 
-  def list_posts(self, locale: str | None = None) -> list[MarkdownPost]:
+  def list_posts(
+    self, locale: str | None = None, user: Any = None
+  ) -> list[MarkdownPost]:
     """List canonical entries, displaying the requested locale if enabled."""
     posts = []
     adapter = self.service.i18n_documents
@@ -169,9 +172,11 @@ class MarkdownFileManager:
 
     for slug in slugs:
       try:
-        post = self.load_post(slug, locale=target_locale)
+        post = self.load_post(slug, locale=target_locale, user=user)
         if post:
           posts.append(post)
+      except store.OperationNotAllowedError:
+        continue
       except Exception as exc:
         print(f'Error loading {slug}: {exc}')
 
@@ -186,7 +191,7 @@ class MarkdownFileManager:
     return posts
 
   def load_post(
-    self, slug: str, *, locale: str | None = None
+    self, slug: str, *, locale: str | None = None, user: Any = None
   ) -> MarkdownPost | None:
     """Load a canonical document or one localized representation."""
     adapter = self.service.i18n_documents
@@ -196,6 +201,9 @@ class MarkdownFileManager:
         raise ValueError(f'Unknown content locale: {target_locale!r}')
       try:
         record = adapter.read(slug, target_locale, fallback=True)
+        self.service.authorize_read(
+          user, slug, record.locale, record.frontmatter
+        )
       except FileNotFoundError:
         return None
       localized_frontmatter = dict(record.frontmatter)
@@ -203,6 +211,9 @@ class MarkdownFileManager:
       if record.locale != adapter.config.default_locale:
         canonical = adapter.read(
           slug, adapter.config.default_locale, fallback=False
+        )
+        self.service.authorize_read(
+          user, slug, canonical.locale, canonical.frontmatter
         )
         for field in self.schema.fields:
           if field.i18n in ('none', 'duplicate'):
@@ -229,9 +240,14 @@ class MarkdownFileManager:
 
     try:
       ordinary_record = self.store.read(slug)
+      self.service.authorize_read(user, slug, None, ordinary_record.frontmatter)
     except FileNotFoundError:
       return None
     except ValueError as exc:
+      if self.collection_spec and self.collection_spec.document_authorize:
+        raise store.OperationNotAllowedError(
+          'Cannot authorize malformed document'
+        ) from exc
       path = self.store.path_for(slug) if SLUG_RE.fullmatch(slug) else None
       if path is None:
         return None
@@ -268,7 +284,9 @@ class MarkdownFileManager:
       user=user,
     )
 
-  def link_suggestions(self) -> dict[str, list[dict[str, str]]]:
+  def link_suggestions(
+    self, user: Any = None
+  ) -> dict[str, list[dict[str, str]]]:
     """Build filtered autocomplete options for link fields in the schema."""
     if self.schema is None:
       return {}
@@ -299,6 +317,11 @@ class MarkdownFileManager:
         target_store = self.store
         target_schema = self.schema
       else:
+        continue
+
+      if target_spec is not None and target_spec.document_authorize is not None:
+        # Avoid exposing documents through autocomplete until the target
+        # collection can be queried with document-level filtering.
         continue
 
       value_field = None
@@ -365,6 +388,9 @@ class MarkdownFileManager:
     """Return collection check findings that apply to one existing document."""
     from ..checks import check_collection
 
+    if self.collection_spec and self.collection_spec.document_authorize:
+      # Collection-wide findings can mention other documents.
+      return []
     spec = self.collection_spec or CollectionSpec(
       self.store.collection.name, self.posts_dir, schema=self.schema
     )
@@ -666,7 +692,9 @@ class MarkdownListView(_AuthorizedMarkdownView, CustomView):
       if content_locale not in adapter.config.locales:
         return JSONResponse({'detail': 'Unknown content locale'}, 400)
       locale_options = adapter.config.locales
-    posts = self.manager.list_posts(locale=content_locale)
+    posts = self.manager.list_posts(
+      locale=content_locale, user=getattr(request.state, 'blog_user', None)
+    )
 
     # Convert to dict for template
     posts_data = [
@@ -838,7 +866,14 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         }
         for item in adapter.config.locales
       ]
-    post = self.manager.load_post(slug, locale=content_locale)
+    try:
+      post = self.manager.load_post(
+        slug,
+        locale=content_locale,
+        user=getattr(request.state, 'blog_user', None),
+      )
+    except store.OperationNotAllowedError as exc:
+      raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if not post:
       return self.templates.TemplateResponse(
@@ -884,12 +919,77 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
       display_schema,
       post.frontmatter,
       t,
-      link_choices=self.manager.link_suggestions(),
+      link_choices=self.manager.link_suggestions(
+        user=getattr(request.state, 'blog_user', None)
+      ),
       locale=self.locale,
       default_locale=(
         adapter.config.default_locale if adapter is not None else self.locale
       ),
     )
+
+    for form_field in form_fields:
+      field_spec = next(
+        (
+          field
+          for field in self.schema.fields
+          if len(form_field['path']) == 1 and field.key == form_field['path'][0]
+        ),
+        None,
+      )
+      form_field['shared'] = bool(
+        adapter is not None
+        and content_locale != adapter.config.default_locale
+        and field_spec is not None
+        and field_spec.i18n in ('none', 'duplicate')
+      )
+      if len(form_field['path']) != 1 or not form_field['choices']:
+        continue
+      spec = next(
+        (
+          field
+          for field in self.schema.fields
+          if field.key == form_field['path'][0]
+        ),
+        None,
+      )
+      if spec is None or spec.transitions is None:
+        continue
+      before = post.frontmatter
+      current = before.get(spec.key)
+      for choice in form_field['choices']:
+        choice_value = choice['value']
+        if str(current) == str(choice_value):
+          choice['disabled'] = False
+          continue
+        rule = next(
+          (
+            rule
+            for rule in spec.transitions.get('allowed', [])
+            if rule['from'] == current and str(rule['to']) == str(choice_value)
+          ),
+          None,
+        )
+        choice['disabled'] = rule is None
+        if rule and rule.get('permission'):
+          try:
+            if (
+              not self.manager.collection_spec
+              or not self.manager.collection_spec.document_authorize
+            ):
+              raise store.OperationNotAllowedError(
+                'Transition requires permission'
+              )
+            self.manager.service._authorize_document(
+              getattr(request.state, 'blog_user', None),
+              rule['permission'],
+              post.slug,
+              content_locale,
+              before,
+              {**before, spec.key: rule['to']},
+            )
+          except store.OperationNotAllowedError:
+            choice['disabled'] = True
 
     return self.templates.TemplateResponse(
       request=request,
@@ -908,6 +1008,17 @@ class MarkdownEditView(_AuthorizedMarkdownView, CustomView):
         'locale_tabs': locale_tabs,
         'locale_exists': locale_exists,
         'fallback_used': post.fallback_used,
+        'canonical_post': self.manager.load_post(
+          slug,
+          locale=adapter.config.default_locale,
+          user=getattr(request.state, 'blog_user', None),
+        )
+        if adapter is not None
+        and content_locale != adapter.config.default_locale
+        else None,
+        'canonical_url': f'{request.url.path}?content_locale={quote(adapter.config.default_locale)}'
+        if adapter is not None
+        else '',
         'body_read_only': bool(
           adapter is not None
           and content_locale != adapter.config.default_locale
@@ -987,12 +1098,30 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
       {},
       t,
       is_new=True,
-      link_choices=self.manager.link_suggestions(),
+      link_choices=self.manager.link_suggestions(
+        user=getattr(request.state, 'blog_user', None)
+      ),
       locale=self.locale,
       default_locale=(
         adapter.config.default_locale if adapter is not None else self.locale
       ),
     )
+
+    for form_field in form_fields:
+      if len(form_field['path']) != 1 or not form_field['choices']:
+        continue
+      field = next(
+        (
+          item
+          for item in self.schema.fields
+          if item.key == form_field['path'][0]
+        ),
+        None,
+      )
+      if field is not None and field.transitions is not None:
+        allowed = {str(value) for value in field.transitions.get('initial', [])}
+        for choice in form_field['choices']:
+          choice['disabled'] = choice['value'] not in allowed
 
     return self.templates.TemplateResponse(
       request=request,

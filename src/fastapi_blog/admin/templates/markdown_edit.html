@@ -60,7 +60,17 @@
   </div>
   {% endif %}
   <div class="row">
-    <div class="col-12">
+    {% if canonical_post %}
+    <div class="col-lg-6 mb-3">
+      <div class="card"><div class="card-body">
+        <h3>{{ t.original }}: {{ canonical_post.locale }}</h3>
+        <pre style="white-space: pre-wrap">{{ canonical_post.frontmatter }}</pre>
+        <pre style="white-space: pre-wrap">{{ canonical_post.content }}</pre>
+        <a href="{{ canonical_url }}">{{ t.edit_original }}</a>
+      </div></div>
+    </div>
+    {% endif %}
+    <div class="{% if canonical_post %}col-lg-6{% else %}col-12{% endif %}">
       <div class="card">
         <form id="post-form">
           {{ csrf_input(request) }}
@@ -109,6 +119,7 @@
               {% endif %}
               <div class="{{ f.col }} mb-3">
                 <label class="form-label{% if f.required %} required{% endif %}" for="field-{{ f.name }}">{{ f.label }}</label>
+                {% if f.shared %}<small class="form-hint"><a href="{{ canonical_url }}">{{ t.edit_original }}</a></small>{% endif %}
                 {% if f.kind == 'bool' %}
                 <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}"{% if f.read_only %} disabled{% endif %}>
                   <option value="true" {% if f.value == 'true' %}selected{% endif %}>{{ t.yes }}</option>
@@ -118,7 +129,7 @@
                 <select class="form-select" id="field-{{ f.name }}" name="{{ f.name }}"{% if f.multiple %} multiple{% endif %}{% if f.read_only %} disabled{% endif %}{% if f.html_required %} required{% endif %}>
                   {% if not f.multiple %}<option value=""></option>{% endif %}
                   {% for choice in f.choices %}
-                  <option value="{{ choice.value }}"{% if choice.value in f.selected_values %} selected{% endif %}>{{ choice.label }}</option>
+                  <option value="{{ choice.value }}"{% if choice.value in f.selected_values %} selected{% endif %}{% if choice.disabled %} disabled{% endif %}>{{ choice.label }}</option>
                   {% endfor %}
                 </select>
                 {% elif f.kind == 'object_list' %}

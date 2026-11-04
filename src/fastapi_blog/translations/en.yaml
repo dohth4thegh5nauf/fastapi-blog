@@ -33,6 +33,8 @@ user:
 
 # Post management
 post:
+  original: Original
+  edit_original: Edit original
   singular: Post
   plural: Posts
   create: Create Post
