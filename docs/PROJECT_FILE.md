@@ -79,10 +79,10 @@ external coordination. A crash during a multi-file operation can also leave
 an incomplete update or staged files requiring recovery.
 The REST API exposes localized reads and writes at the collection document
 route. The admin provides locale tabs, fallback indication, locale chips and
-a side-by-side canonical preview with a link to edit the source. The save
-endpoint accepts an atomic batch of locales, but the editor currently submits
-only the selected locale; collecting and restoring multiple dirty locale
-drafts for one submission remains future work.
+a side-by-side canonical preview with a link to edit the source. The editor
+keeps changed locale drafts in the current browser tab and submits them in one
+atomic save. The save endpoint also accepts explicit per-locale ETags for
+batch callers.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. Do not rely on the
@@ -103,8 +103,8 @@ An experimental schema field may specify `transitions` with `initial` and
 `permission`. Permission-bearing transitions require a document policy and
 ask it to allow both the named permission and the `transition` action.
 These checks cover scalar fields, nested objects and fields inside object
-lists. Complete admin choice filtering remains open; the service rejects
-invalid transitions when a save is submitted.
+lists. The admin filters top-level choices; nested choice filtering remains
+open. The service rejects invalid transitions when a save is submitted.
 `check` reports missing, orphaned, unknown-locale and mismatched duplicate
 translations according to `check.translations`.
 
