@@ -82,8 +82,26 @@ route. The admin provides locale tabs, fallback indication and locale chips;
 the current editor saves the selected locale (the side-by-side editor and
 single-button save of multiple dirty locales remain future work).
 Deleting an entry with translations requires an explicit cascade request.
-Document-level authorization and state-transition policies are not yet
-implemented; the existing collection-level permissions still apply.
+The optional document policy and field transitions are under development;
+the existing collection-level permissions still apply. Do not rely on the
+document policy as a complete access-control boundary yet.
+
+The current experimental Python hook is configured with
+`CollectionSpec(document_authorize=callback)`. It is called synchronously
+with `(user, action, collection, slug, locale, before, after)`, where
+`before` and `after` are frontmatter mappings. Return `True` to allow an
+operation; `False` or a reason string denies it. It supplements the existing
+collection-level authorization. A generated slug is unavailable at the
+authorization point, so creation with an automatically generated slug is
+disabled when this hook is configured. Autocomplete and collection-wide
+diagnostics are suppressed for protected collections.
+
+An experimental schema field may specify `transitions` with `initial` and
+`allowed` lists. Each allowed rule has `from`, `to`, and an optional
+`permission`. Permission-bearing transitions require a document policy and
+ask it to allow both the named permission and the `transition` action.
+These checks currently cover scalar fields and nested objects; transition
+rules inside object lists and complete admin choice filtering remain open.
 `check` reports missing, orphaned, unknown-locale and mismatched duplicate
 translations according to `check.translations`.
 
