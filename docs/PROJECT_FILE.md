@@ -32,6 +32,14 @@ collections:
         blocking: [error, undefined]
 ```
 
+The YAML `dir` setting is a static path relative to the project file. Python
+applications that need tenant- or request-specific storage can instead pass a
+`CollectionSpec` whose `dir` is a callable accepting the current Starlette
+request and returning an absolute path. The resolved path is cached on that
+request and shared by the public blog, REST API, admin Markdown views,
+health-checks, and SEO routes. This is a runtime application API; project-file
+commands such as `check` and `export` require a static directory.
+
 ## Multi-locale collections
 
 A project-level `i18n` block supplies defaults to every collection. A
@@ -64,7 +72,13 @@ collections:
 
 The supported layouts are `multiple_files`
 (`<slug>.<locale>.md`, with the default suffix optionally omitted) and
-`multiple_folders` (`<locale>/<slug>.md`). `single_file` is rejected. Locale
+`multiple_folders` (`<locale>/<slug>.md`). `single_file` is rejected. For a
+collection that keeps its canonical documents directly in the collection
+directory and stores translations below locale directories, set
+`default_locale_in_root: true` with `multiple_folders`. Default-locale files
+left under the default locale directory are rejected with a configuration
+error so they cannot disappear silently; move them to the collection root.
+Locale
 suffixes and directories are recognized only when the locale is listed in
 `locales`. i18n is rejected for collections with `depth` greater than zero.
 The slug is canonical across locales and is derived from the default-locale
@@ -84,6 +98,12 @@ keeps changed locale drafts in the current browser tab and submits them in one
 batch with rollback on write failure. Concurrent readers can still observe
 intermediate file states. The save endpoint also accepts explicit per-locale
 ETags for batch callers.
+`DocumentService.save_many_localized()` returns a result per slug with
+per-locale ETags, the aggregate entry ETag, present locales, status and issues.
+Changed paths are intentionally reported on the post-commit change event, not
+duplicated in the result; a batch emits one event per slug with only that
+entry's changed locales and paths. Event callback failures are logged and do
+not turn a committed batch into a failed save response.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. The document policy

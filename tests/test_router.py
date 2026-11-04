@@ -100,6 +100,41 @@ def test_blog_post_rejects_path_traversal_post_id():
   assert response.status_code == 404
 
 
+def test_public_blog_resolves_collection_root_per_request(tmp_path):
+  roots = {key: tmp_path / key for key in ('first', 'second')}
+  for key, root in roots.items():
+    root.mkdir()
+    (root / 'shared.md').write_text(
+      f'---\ntitle: Shared {key}\ndate: 2026-11-04\npublished: true\n---\n{key} body',
+      encoding='utf-8',
+    )
+
+  from fastapi_blog.config import CollectionSpec
+
+  spec = CollectionSpec(
+    name='posts',
+    dir=lambda request: roots[request.query_params['tenant']],
+  )
+  dynamic_app = fastapi_blog.add_blog_to_fastapi(
+    FastAPI(), collection_spec=spec, health_routes=True
+  )
+
+  with TestClient(dynamic_app) as dynamic_client:
+    first_list = dynamic_client.get('/blog/posts?tenant=first')
+    second_list = dynamic_client.get('/blog/posts?tenant=second')
+    first_post = dynamic_client.get('/blog/posts/shared?tenant=first')
+    second_post = dynamic_client.get('/blog/posts/shared?tenant=second')
+    health = dynamic_client.get('/api/v1/health?tenant=second')
+
+  assert first_list.status_code == second_list.status_code == 200
+  assert 'Shared first' in first_list.text
+  assert 'Shared second' not in first_list.text
+  assert 'Shared second' in second_list.text
+  assert 'first body' in first_post.text
+  assert 'second body' in second_post.text
+  assert health.status_code == 200
+
+
 # --- JSON-LD routes (TODO 5.4), off by default ------------------------------
 
 

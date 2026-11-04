@@ -1,5 +1,7 @@
 """Tests for schema-aware multi-locale document service operations."""
 
+import sys
+
 import pytest
 from pydantic import ValidationError
 
@@ -312,3 +314,173 @@ def test_events_describe_the_committed_snapshot_even_if_hook_writes(tmp_path):
   )
   assert events[1].entry_etag == results['second'].entry_etag
   assert events[1].entry_etag != service.i18n_documents.entry_etag('second')
+
+
+def test_batch_save_supports_mixed_create_update_and_locale_sets(tmp_path):
+  service = _service(tmp_path)
+  original = service.save_localized(
+    'existing',
+    {
+      'en': ({'title': 'Original', 'code': 'A'}, 'English'),
+      'ru': ({'title': 'Исходный', 'code': 'A'}, 'Русский'),
+    },
+  )
+
+  results = service.save_many_localized(
+    {
+      'existing': {
+        'en': ({'title': 'Updated', 'code': 'A'}, 'Updated English'),
+        'ru': ({'title': 'Обновлённый', 'code': 'A'}, 'Обновлённый русский'),
+      },
+      'created': {'en': ({'title': 'Created', 'code': 'B'}, 'English')},
+    },
+    expected_entry_etags={'existing': original.entry_etag, 'created': None},
+    expected_exists={'existing': True, 'created': False},
+  )
+
+  assert results['existing'].status == 'updated'
+  assert results['existing'].locales_present == ('en', 'ru')
+  assert results['created'].status == 'created'
+  assert results['created'].locales_present == ('en',)
+  assert service.i18n_documents.read('existing', 'en').frontmatter['title'] == (
+    'Updated'
+  )
+  assert service.i18n_documents.read('created', 'en').frontmatter['title'] == (
+    'Created'
+  )
+
+
+def test_batch_event_callback_failure_does_not_hide_committed_result(
+  tmp_path, caplog
+):
+  def fail(_event):
+    raise RuntimeError('event delivery failed')
+
+  service = _service(tmp_path, on_change=fail)
+  results = service.save_many_localized(
+    {
+      'first': {'en': ({'title': 'First', 'code': 'A'}, 'Body')},
+      'second': {'en': ({'title': 'Second', 'code': 'B'}, 'Body')},
+    }
+  )
+
+  assert set(results) == {'first', 'second'}
+  assert service.i18n_documents.has_entry('first')
+  assert service.i18n_documents.has_entry('second')
+  failures = [
+    record
+    for record in caplog.records
+    if 'on_change failed for articles/' in record.message
+  ]
+  assert len(failures) == 2
+
+
+def test_batch_stale_etag_leaves_all_entries_unchanged(tmp_path):
+  service = _service(tmp_path)
+  originals = {
+    slug: service.save_localized(
+      slug,
+      {
+        'en': ({'title': slug, 'code': slug.upper()}, f'{slug} English'),
+        'ru': ({'title': slug, 'code': slug.upper()}, f'{slug} Russian'),
+      },
+    )
+    for slug in ('first', 'second')
+  }
+  before = {
+    path: path.read_bytes()
+    for slug in originals
+    for path in service.i18n_documents.inventory()[slug].values()
+  }
+
+  with pytest.raises(store.ConflictError):
+    service.save_many_localized(
+      {
+        'first': {'en': ({'title': 'Changed first', 'code': 'FIRST'}, 'New')},
+        'second': {
+          'en': ({'title': 'Changed second', 'code': 'SECOND'}, 'New')
+        },
+      },
+      expected_entry_etags={
+        'first': originals['first'].entry_etag,
+        'second': 'stale-entry-etag',
+      },
+      expected_exists={'first': True, 'second': True},
+    )
+
+  assert {path: path.read_bytes() for path in before} == before
+  assert not list(tmp_path.rglob('.*.stage-*'))
+
+
+def test_batch_schema_failure_leaves_all_entries_unchanged(tmp_path):
+  service = _service(tmp_path)
+  for slug in ('first', 'second'):
+    service.save_localized(
+      slug,
+      {'en': ({'title': slug, 'code': slug.upper()}, f'{slug} body')},
+    )
+  before = {
+    path: path.read_bytes()
+    for slug in ('first', 'second')
+    for path in service.i18n_documents.inventory()[slug].values()
+  }
+
+  with pytest.raises(ValidationError):
+    service.save_many_localized(
+      {
+        'first': {'en': ({'title': 'Changed first', 'code': 'FIRST'}, 'New')},
+        'second': {
+          'en': (
+            {'title': 'Changed second', 'code': 'SECOND', 'unexpected': True},
+            'New',
+          )
+        },
+      },
+      expected_exists={'first': True, 'second': True},
+    )
+
+  assert {path: path.read_bytes() for path in before} == before
+  assert not list(tmp_path.rglob('.*.stage-*'))
+
+
+def test_batch_blocking_validator_failure_leaves_all_entries_unchanged(
+  tmp_path,
+):
+  service = _service(tmp_path)
+  for slug in ('first', 'second'):
+    service.save_localized(
+      slug,
+      {'en': ({'title': slug, 'code': slug.upper()}, f'{slug} body')},
+    )
+  before = {
+    path: path.read_bytes()
+    for slug in ('first', 'second')
+    for path in service.i18n_documents.inventory()[slug].values()
+  }
+  service.validators = (
+    Validator(
+      name='reject_second',
+      argv=(
+        sys.executable,
+        '-c',
+        "import sys; sys.exit(1 if 'second' in sys.argv[1] else 0)",
+        '{path}',
+      ),
+      blocking=('error',),
+      run='write',
+    ),
+  )
+
+  with pytest.raises(BlockingValidationError):
+    service.save_many_localized(
+      {
+        'first': {'en': ({'title': 'Changed first', 'code': 'FIRST'}, 'New')},
+        'second': {
+          'en': ({'title': 'Changed second', 'code': 'SECOND'}, 'New')
+        },
+      },
+      expected_exists={'first': True, 'second': True},
+    )
+
+  assert {path: path.read_bytes() for path in before} == before
+  assert not list(tmp_path.rglob('.*.stage-*'))

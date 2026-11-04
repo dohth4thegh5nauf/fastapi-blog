@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
@@ -31,6 +32,7 @@ from .validators import Validator
 
 # The sitemap protocol allows at most this many URLs in one file.
 SITEMAP_URL_LIMIT = 50_000
+_SEO_SNAPSHOT_CACHE_LIMIT = 64
 _SITEMAP_NS = 'http://www.sitemaps.org/schemas/sitemap/0.9'
 # W3C Datetime as used by `<lastmod>`: a date, or a date and time with a zone.
 _W3C_DATETIME = re.compile(
@@ -169,7 +171,11 @@ def add_blog_to_fastapi(
 
   """
   if collection_spec is not None:
-    posts_dirname = str(collection_spec.dir)
+    posts_dirname = (
+      str(collection_spec.dir)
+      if not callable(collection_spec.dir)
+      else str(pathlib.Path.cwd())
+    )
     if translations_dir is None:
       translations_dir = collection_spec.translations_dir
     if frontmatter_schema is not None:
@@ -221,6 +227,7 @@ def add_blog_to_fastapi(
       strict=strict_frontmatter,
       locales=locales,
       default_locale=default_locale,
+      collection_spec=collection_spec,
     )
 
   # Health probes answer outside the blog prefix: orchestrators and load
@@ -230,8 +237,22 @@ def add_blog_to_fastapi(
 
     directories = [str(posts_dirname), str(pages_dirname)]
     if collection_spec is not None:
-      directories.append(str(collection_spec.dir))
-    app.include_router(get_health_router(directories), prefix='/api/v1')
+      if callable(collection_spec.dir):
+        directories = [str(pages_dirname)]
+        app.include_router(
+          get_health_router(
+            directories,
+            request_directories=lambda request: [
+              str(collection_spec.resolve_dir(request))
+            ],
+          ),
+          prefix='/api/v1',
+        )
+      else:
+        directories.append(str(collection_spec.dir))
+        app.include_router(get_health_router(directories), prefix='/api/v1')
+    else:
+      app.include_router(get_health_router(directories), prefix='/api/v1')
 
   # Create main router for default locale (no locale in URL)
   main_router = get_blog_router(
@@ -249,6 +270,7 @@ def add_blog_to_fastapi(
     prefix=prefix,
     jsonld_routes=jsonld_routes,
     translations_dir=translations_dir,
+    collection_spec=collection_spec,
   )
 
   # Mount main router without locale prefix
@@ -277,6 +299,7 @@ def add_blog_to_fastapi(
       prefix=prefix,
       jsonld_routes=jsonld_routes,
       translations_dir=translations_dir,
+      collection_spec=collection_spec,
     )
 
     # Mount with locale prefix
@@ -413,6 +436,7 @@ def _mount_seo_routes(
   strict: bool,
   locales: list[str],
   default_locale: str,
+  collection_spec: CollectionSpec | None = None,
 ) -> None:
   """Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects (5.9.5).
 
@@ -536,16 +560,35 @@ def _mount_seo_routes(
         entries[absolute(f'{blog_path}/tags/{quote(tag, safe="")}')] = None
     return sorted(entries.items()), aliases
 
-  state: dict[str, Any] = {'posts': None, 'snapshot': ([], {})}
+  state: OrderedDict[
+    str,
+    tuple[
+      tuple[dict, ...],
+      tuple[list[tuple[str, str | None]], dict[str, str]],
+    ],
+  ] = OrderedDict()
 
-  def snapshot() -> tuple[list[tuple[str, str | None]], dict[str, str]]:
-    posts = helpers.list_posts(
-      posts_dirname=posts_dirname, strict=strict, schema=frontmatter_schema
+  def snapshot(
+    request: Request | None = None,
+  ) -> tuple[list[tuple[str, str | None]], dict[str, str]]:
+    root = (
+      collection_spec.resolve_dir(request)
+      if collection_spec is not None
+      else pathlib.Path(posts_dirname)
     )
-    if state['posts'] is not posts:
-      state['snapshot'] = build_snapshot(posts)
-      state['posts'] = posts
-    return state['snapshot']
+    root_key = str(root)
+    cached = state.get(root_key)
+    posts = helpers.list_posts(
+      posts_dirname=root_key, strict=strict, schema=frontmatter_schema
+    )
+    if cached is None or cached[0] is not posts:
+      cached = (posts, build_snapshot(posts))
+      state[root_key] = cached
+      if len(state) > _SEO_SNAPSHOT_CACHE_LIMIT:
+        state.popitem(last=False)
+    else:
+      state.move_to_end(root_key)
+    return cached[1]
 
   def urlset(entries: list[tuple[str, str | None]]) -> bytes:
     root = Element('urlset', xmlns=_SITEMAP_NS)
@@ -557,8 +600,8 @@ def _mount_seo_routes(
     return tostring(root, encoding='utf-8', xml_declaration=True)
 
   @app.get('/sitemap.xml', include_in_schema=False)
-  async def seo_sitemap() -> Response:
-    entries, _ = snapshot()
+  async def seo_sitemap(request: Request) -> Response:
+    entries, _ = snapshot(request)
     if len(entries) <= SITEMAP_URL_LIMIT:
       return Response(urlset(entries), media_type='application/xml')
     root = Element('sitemapindex', xmlns=_SITEMAP_NS)
@@ -572,8 +615,8 @@ def _mount_seo_routes(
     )
 
   @app.get('/sitemap-{number}.xml', include_in_schema=False)
-  async def seo_sitemap_part(number: str) -> Response:
-    entries, _ = snapshot()
+  async def seo_sitemap_part(number: str, request: Request) -> Response:
+    entries, _ = snapshot(request)
     if (
       not (number.isascii() and number.isdigit())
       or int(number) < 1
@@ -599,7 +642,7 @@ def _mount_seo_routes(
   class RedirectFromMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Any) -> Response:
       if request.method in ('GET', 'HEAD'):
-        target = snapshot()[1].get(request.url.path.rstrip('/') or '/')
+        target = snapshot(request)[1].get(request.url.path.rstrip('/') or '/')
         if target is not None:
           return RedirectResponse(target, status_code=301)
       return await call_next(request)

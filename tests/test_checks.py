@@ -499,3 +499,30 @@ def test_i18n_check_supports_multiple_folders(tmp_path):
   assert [(issue.level, issue.code) for issue in report.issues] == [
     ('warning', 'translation.missing')
   ]
+
+
+def test_i18n_check_supports_default_locale_at_root(tmp_path):
+  from dataclasses import replace
+
+  from fastapi_blog.i18n_collections import I18nConfig
+
+  spec = _spec(
+    tmp_path,
+    FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  spec = replace(
+    spec,
+    i18n=I18nConfig(
+      ('en', 'ru'),
+      'en',
+      structure='multiple_folders',
+      default_locale_in_root=True,
+    ),
+    check_translations='error',
+  )
+  _write(spec.dir, 'hello', '---\ntitle: Hello\n---\nEnglish\n')
+  (spec.dir / 'ru').mkdir()
+  _write(spec.dir / 'ru', 'hello', '---\ntitle: Привет\n---\nРусский\n')
+  report = checks.check_collection(spec, root=tmp_path)
+  assert report.documents == 1
+  assert report.issues == []

@@ -75,6 +75,59 @@ def test_i18n_config_validation():
     I18nConfig(('en', 'ru'), 'de')
   with pytest.raises(I18nConfigError):
     I18nConfig(('en',), 'en', structure='single_file')
+  with pytest.raises(I18nConfigError, match='multiple_folders'):
+    I18nConfig(('en', 'ru'), 'en', default_locale_in_root=True)
+
+
+def test_multiple_folders_can_keep_default_locale_at_collection_root(tmp_path):
+  adapter = I18nCollection(
+    store.Collection('posts', tmp_path),
+    I18nConfig(
+      ('en', 'ru'),
+      'en',
+      structure='multiple_folders',
+      default_locale_in_root=True,
+    ),
+  )
+  (tmp_path / 'hello.md').write_text(
+    '---\ntitle: Hello\n---\nEnglish\n', encoding='utf-8'
+  )
+  (tmp_path / 'ru').mkdir()
+  (tmp_path / 'ru' / 'hello.md').write_text(
+    '---\ntitle: Привет\n---\nРусский\n', encoding='utf-8'
+  )
+
+  assert adapter.locales_present('hello') == ('en', 'ru')
+  assert adapter.read('hello', 'en', fallback=False).body == 'English\n'
+  assert adapter.read('hello', 'ru', fallback=False).body == 'Русский\n'
+  assert adapter.list()[0].locales_present == ('en', 'ru')
+  adapter.save_entry('hello', {'ru': ({'title': 'Здравствуйте'}, 'Текст')})
+  assert (tmp_path / 'hello.md').is_file()
+  assert (tmp_path / 'ru' / 'hello.md').is_file()
+  adapter.rename('hello', 'welcome')
+  assert (tmp_path / 'welcome.md').is_file()
+  assert (tmp_path / 'ru' / 'welcome.md').is_file()
+
+
+def test_default_locale_in_root_rejects_documents_left_in_locale_directory(
+  tmp_path,
+):
+  adapter = I18nCollection(
+    store.Collection('posts', tmp_path),
+    I18nConfig(
+      ('en', 'ru'),
+      'en',
+      structure='multiple_folders',
+      default_locale_in_root=True,
+    ),
+  )
+  (tmp_path / 'en').mkdir()
+  (tmp_path / 'en' / 'hello.md').write_text(
+    '---\ntitle: Hello\n---\nEnglish\n', encoding='utf-8'
+  )
+
+  with pytest.raises(I18nConfigError, match='Move them to the collection root'):
+    adapter.list()
 
 
 @pytest.mark.parametrize('structure', ['multiple_files', 'multiple_folders'])
@@ -195,6 +248,7 @@ def test_i18n_save_many_rolls_back_all_entries_on_failure(
     slug: collection.path_for(slug, 'en').read_bytes()
     for slug in ('first', 'second')
   } == before
+  assert not list(tmp_path.rglob('.*.stage-*'))
 
 
 def test_i18n_rejects_translation_without_canonical_document(tmp_path):

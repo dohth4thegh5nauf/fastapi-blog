@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.9.0.
 
 ### Added
+- Added request-scoped collection roots by accepting a path resolver in
+  `CollectionSpec.dir`. The public blog, REST API, admin, health probes and SEO
+  routes use the same resolved root for each request; static paths keep their
+  existing behavior.
+- Added search by title, slug, summary and tags to the file-backed Posts list,
+  aligning its toolbar with the model-backed admin lists.
 - Added a `configure_admin(locale, admin)` hook to register custom Starlette
   Admin views before each localized panel is mounted. The hook is also exposed
   through `setup_fastapi_blog()`.

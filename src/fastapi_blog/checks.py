@@ -207,6 +207,7 @@ def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
   """Check locale coverage, orphan files, unknown locales and duplicates."""
   if spec.i18n is None:
     return
+  spec_dir = spec.resolve_dir()
   adapter = I18nCollection(spec.to_collection(), spec.i18n)
   inventory = adapter.inventory()
   canonical_locale = adapter.config.default_locale
@@ -266,11 +267,11 @@ def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
   # must be visible to `check` instead of silently disappearing.
   extensions = spec.to_collection().extensions
   if adapter.config.structure == 'multiple_folders':
-    if spec.dir.is_dir():
-      for directory in sorted(spec.dir.iterdir()):
+    if spec_dir.is_dir():
+      for directory in sorted(spec_dir.iterdir()):
         if (
           not directory.is_dir()
-          or not directory.resolve().is_relative_to(spec.dir.resolve())
+          or not directory.resolve().is_relative_to(spec_dir.resolve())
           or directory.name in adapter.config.locales
           or not re.fullmatch(
             r'[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*', directory.name
@@ -292,11 +293,11 @@ def _check_translations(spec: CollectionSpec, issues: list[Issue]) -> None:
                 directory.name,
               )
             )
-  elif spec.dir.is_dir():
+  elif spec_dir.is_dir():
     for path in sorted(
       path
       for extension in extensions
-      for path in spec.dir.glob(f'*.{extension}')
+      for path in spec_dir.glob(f'*.{extension}')
     ):
       parsed = _locale_suffix(path.stem)
       if parsed is None:
@@ -386,7 +387,7 @@ def _relative_document_path(
   """Return the document's path relative to the project root (for `{path}`)."""
   path = documents.path_for(slug)
   if path is None:
-    return spec.dir / f'{slug}.md'
+    return spec.resolve_dir() / f'{slug}.md'
   try:
     return path.resolve().relative_to(root.resolve())
   except ValueError:
@@ -1061,7 +1062,8 @@ def check_collection(
   base = pathlib.Path.cwd() if root is None else pathlib.Path(root)
   report = Report(spec.name)
   issues = report.issues
-  if not spec.dir.is_dir():
+  spec_dir = spec.resolve_dir()
+  if not spec_dir.is_dir():
     issues.append(
       Issue(
         'undefined',

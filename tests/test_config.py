@@ -1,6 +1,7 @@
 """Tests for the project file (`fastapi_blog.yaml`, TODO phase D)."""
 
 import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -118,6 +119,37 @@ def test_collection_spec_carries_an_inline_schema():
   assert spec.schema is schema
 
 
+def test_request_directory_resolver_runs_once_and_binds_collection(tmp_path):
+  calls = []
+  first = tmp_path / 'first'
+  request = SimpleNamespace(state=SimpleNamespace())
+  spec = config.CollectionSpec(
+    name='notes',
+    dir=lambda current_request: calls.append(current_request) or first,
+  )
+
+  assert spec.resolve_dir(request) == first.resolve()
+  assert spec.for_request(request).dir == first.resolve()
+  assert spec.to_collection(request=request).dir == first.resolve()
+  assert calls == [request]
+
+
+def test_request_directory_resolver_failure_does_not_use_static_path(tmp_path):
+  request = SimpleNamespace(state=SimpleNamespace())
+  spec = config.CollectionSpec(
+    name='notes', dir=lambda _request: (_ for _ in ()).throw(OSError('denied'))
+  )
+
+  with pytest.raises(config.ConfigError, match='Unable to resolve'):
+    spec.resolve_dir(request)
+
+  relative_spec = config.CollectionSpec(
+    name='notes', dir=lambda _request: 'posts'
+  )
+  with pytest.raises(config.ConfigError, match='absolute path'):
+    relative_spec.resolve_dir(request)
+
+
 def test_slug_template_and_unique_seq_are_loaded(project_dir):
   (project_dir / 'posts').mkdir()
   (project_dir / 'schema.yaml').write_text(
@@ -228,6 +260,20 @@ def test_load_project_i18n_defaults_and_collection_override(project_dir):
   assert spec.i18n.locales == ('en', 'ru')
   assert spec.i18n.default_locale == 'en'
   assert spec.to_i18n_collection() is not None
+
+
+def test_load_project_i18n_default_locale_in_root(project_dir):
+  _write(
+    project_dir,
+    'i18n: {locales: [en, ru], default_locale: en, '
+    'structure: multiple_folders, default_locale_in_root: true}\n'
+    'collections:\n  notes:\n    dir: posts\n    i18n: true\n',
+  )
+  spec = config.load_project(project_dir / 'fastapi_blog.yaml').collections[
+    'notes'
+  ]
+  assert spec.i18n is not None
+  assert spec.i18n.default_locale_in_root is True
 
 
 def test_load_project_rejects_invalid_i18n_defaults(project_dir):

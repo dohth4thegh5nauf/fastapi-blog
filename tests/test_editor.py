@@ -1,4 +1,6 @@
+import pathlib
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
@@ -7,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from fastapi_blog import add_blog_to_fastapi, add_editor_to_app, helpers
 from fastapi_blog.config import CollectionSpec
+from fastapi_blog.editor import get_api_router
 from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
@@ -572,6 +575,41 @@ def test_update_with_stale_if_match_is_rejected(client, app_dir):
   assert response.status_code == 412
 
 
+def test_concurrent_updates_with_one_etag_allow_only_one_writer(app_dir):
+  app = FastAPI()
+  add_blog_to_fastapi(app, prefix='blog')
+  add_editor_to_app(app, require_auth=False)
+  payloads = [
+    {**VALID_PAYLOAD, 'content': 'First concurrent update'},
+    {**VALID_PAYLOAD, 'content': 'Second concurrent update'},
+  ]
+
+  with TestClient(app) as first_client, TestClient(app) as second_client:
+    created = first_client.post(
+      '/api/posts/create/hello-world', json=VALID_PAYLOAD
+    )
+    assert created.status_code == 201
+    etag = first_client.get('/api/posts/hello-world/raw').headers['etag']
+    clients = (first_client, second_client)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+      futures = [
+        executor.submit(
+          client.put,
+          '/api/posts/update/hello-world',
+          json=payload,
+          headers={'If-Match': etag},
+        )
+        for client, payload in zip(clients, payloads, strict=True)
+      ]
+      responses = [future.result() for future in futures]
+    stored = (
+      first_client.get('/api/posts/hello-world/raw').json()['content'].strip()
+    )
+
+  assert sorted(response.status_code for response in responses) == [200, 412]
+  assert stored in {'First concurrent update', 'Second concurrent update'}
+
+
 def test_delete_with_stale_if_match_is_rejected(client, app_dir):
   client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
   stale_etag = client.get('/api/posts/hello-world/raw').headers['etag']
@@ -1075,6 +1113,65 @@ def test_localized_rest_can_write_duplicate_mirrors(app_dir):
   ]
 
 
+def test_translation_cannot_bypass_canonical_status_transition(app_dir):
+  actions = []
+
+  def policy(user, action, collection, slug, locale, before, after):
+    actions.append((action, locale))
+    return action != 'publish'
+
+  schema = FrontmatterSchema(
+    fields=(
+      FieldSpec('title', required=True, role='title', i18n='translate'),
+      FieldSpec(
+        'status',
+        i18n='duplicate',
+        transitions={
+          'initial': ['draft'],
+          'allowed': [
+            {'from': 'draft', 'to': 'published', 'permission': 'publish'}
+          ],
+        },
+      ),
+    )
+  )
+  spec = CollectionSpec(
+    'posts',
+    app_dir / 'posts',
+    schema=schema,
+    i18n=I18nConfig(('en', 'ru'), 'en'),
+    document_authorize=policy,
+  )
+  app = add_editor_to_app(
+    FastAPI(), ui=False, require_auth=False, collection_spec=spec
+  )
+  client = TestClient(app)
+  created = client.put(
+    '/api/posts/entry',
+    json={
+      'frontmatter': {'title': 'Entry', 'status': 'draft'},
+      'content': 'Body',
+    },
+  )
+  assert created.status_code == 201
+  actions.clear()
+
+  translated = client.put(
+    '/api/posts/entry?locale=ru',
+    json={
+      'frontmatter': {'title': 'Перевод', 'status': 'published'},
+      'content': 'Текст',
+    },
+  )
+  assert translated.status_code == 200
+  assert ('publish', 'ru') not in actions
+  russian = client.get('/api/posts/entry?locale=ru')
+  assert russian.json()['frontmatter']['status'] == 'draft'
+  assert (app_dir / 'posts' / 'entry.md').read_text().count(
+    'status: draft'
+  ) == 1
+
+
 def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
   schema = FrontmatterSchema(
     fields=(FieldSpec('title', required=True, role='title', i18n='translate'),)
@@ -1111,3 +1208,171 @@ def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
   assert rejected.status_code == 422
   assert not (app_dir / 'posts' / 'hello.md').exists()
   assert not (app_dir / 'posts' / 'hello.ru.md').exists()
+
+
+def test_request_collection_roots_are_isolated_per_api_request(tmp_path):
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  resolver_calls = []
+
+  def resolve_root(request):
+    resolver_calls.append(request.headers['x-root'])
+    return roots[request.headers['x-root']]
+
+  schema = FrontmatterSchema(
+    fields=(FieldSpec('title', required=True, role='title'),)
+  )
+  spec = CollectionSpec(name='notes', dir=resolve_root, schema=schema)
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  for root_name, title in (('one', 'First root'), ('two', 'Second root')):
+    response = client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={'frontmatter': {'title': title}, 'content': 'Body'},
+    )
+    assert response.status_code == 201
+
+  first = client.get('/api/notes/shared/raw', headers={'x-root': 'one'})
+  second = client.get('/api/notes/shared/raw', headers={'x-root': 'two'})
+  assert first.json()['frontmatter']['title'] == 'First root'
+  assert second.json()['frontmatter']['title'] == 'Second root'
+  assert resolver_calls == ['one', 'two', 'one', 'two']
+
+  updated = client.put(
+    '/api/notes/update/shared',
+    headers={'x-root': 'one'},
+    json={'frontmatter': {'title': 'Updated first'}, 'content': 'Changed'},
+  )
+  assert updated.status_code == 200
+  first_after = client.get('/api/notes/shared/raw', headers={'x-root': 'one'})
+  second_after = client.get('/api/notes/shared/raw', headers={'x-root': 'two'})
+  assert first_after.json()['frontmatter']['title'] == 'Updated first'
+  assert second_after.json()['frontmatter']['title'] == 'Second root'
+
+  deleted = client.request(
+    'DELETE', '/api/notes/delete/shared', headers={'x-root': 'one'}
+  )
+  assert deleted.status_code == 204
+  assert (
+    client.get('/api/notes/shared/raw', headers={'x-root': 'one'}).status_code
+    == 404
+  )
+  assert (
+    client.get('/api/notes/shared/raw', headers={'x-root': 'two'}).status_code
+    == 200
+  )
+
+
+def test_invalid_request_collection_root_fails_without_static_fallback(
+  tmp_path,
+):
+  static_root = tmp_path / 'static'
+  static_root.mkdir()
+  (static_root / 'shared.md').write_text(
+    '---\ntitle: Static fallback\n---\nBody\n', encoding='utf-8'
+  )
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda _request: pathlib.Path('relative-root'),
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(
+      posts_dirname=str(static_root),
+      require_auth=False,
+      collection_spec=spec,
+    ),
+    prefix='/api/notes',
+  )
+
+  response = TestClient(app).get('/api/notes/shared/raw')
+
+  assert response.status_code == 500
+  assert 'relative-root' not in response.text
+  assert 'Static fallback' not in response.text
+
+
+def test_request_resolved_validator_receives_its_collection_path(
+  tmp_path, monkeypatch
+):
+  import fastapi_blog.service as document_service
+
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  validated_paths = []
+
+  def capture_validator_path(_validators, **kwargs):
+    validated_paths.append(kwargs['path'])
+    return []
+
+  monkeypatch.setattr(document_service, 'run_blocking', capture_validator_path)
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda request: roots[request.headers['x-root']],
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+    validators=(Validator(name='capture', argv=('noop',), run='write'),),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  for root_name in ('one', 'two'):
+    response = client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={'frontmatter': {'title': f'Root {root_name}'}, 'content': 'Body'},
+    )
+    assert response.status_code == 201
+
+  assert validated_paths == [
+    (roots['one'] / 'shared.md').resolve(),
+    (roots['two'] / 'shared.md').resolve(),
+  ]
+
+
+def test_concurrent_writes_to_distinct_request_roots_do_not_cross_contaminate(
+  tmp_path,
+):
+  roots = {'one': tmp_path / 'one', 'two': tmp_path / 'two'}
+  spec = CollectionSpec(
+    name='notes',
+    dir=lambda request: roots[request.headers['x-root']],
+    schema=FrontmatterSchema(fields=(FieldSpec('title', required=True),)),
+  )
+  app = FastAPI()
+  app.include_router(
+    get_api_router(require_auth=False, collection_spec=spec),
+    prefix='/api/notes',
+  )
+  client = TestClient(app)
+
+  def create(root_name):
+    return client.post(
+      '/api/notes/create/shared',
+      headers={'x-root': root_name},
+      json={
+        'frontmatter': {'title': f'Root {root_name}'},
+        'content': f'Body {root_name}',
+      },
+    )
+
+  with ThreadPoolExecutor(max_workers=2) as executor:
+    responses = list(executor.map(create, ('one', 'two')))
+
+  assert [response.status_code for response in responses] == [201, 201]
+  assert (
+    'Root one'
+    in client.get('/api/notes/shared/raw', headers={'x-root': 'one'}).text
+  )
+  assert (
+    'Root two'
+    in client.get('/api/notes/shared/raw', headers={'x-root': 'two'}).text
+  )

@@ -22,11 +22,12 @@ critical dependency for serving content.
 import datetime
 import os
 import time
+from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as package_version
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 
@@ -131,7 +132,11 @@ def _response(
   )
 
 
-def get_health_router(content_directories: list[str]) -> APIRouter:
+def get_health_router(
+  content_directories: list[str],
+  *,
+  request_directories: Callable[[Request], list[str]] | None = None,
+) -> APIRouter:
   """Build the health router probing the given content directories.
 
   Args:
@@ -139,6 +144,8 @@ def get_health_router(content_directories: list[str]) -> APIRouter:
           serving content (typically the collection directories). Missing
           directories are not a failure: a collection may be empty until
           the first document is written.
+      request_directories: Optional request-aware content directory resolver.
+          Use it when collection roots vary by request.
 
   Returns:
       An ``APIRouter`` with the three ``/health`` probes; mount it where
@@ -157,14 +164,19 @@ def get_health_router(content_directories: list[str]) -> APIRouter:
       'A failed critical check returns HTTP 503.'
     ),
   )
-  async def base_probe() -> Response:
+  async def base_probe(request: Request) -> Response:
     """Full report with per-component checks for monitoring."""
     report: dict[str, Any] = {
       'status': 'pass',
       'version': _service_version(),
       'checks': {'uptime': [_uptime_check()]},
     }
-    problem = _readability_problem(content_directories)
+    directories = (
+      request_directories(request)
+      if request_directories is not None
+      else content_directories
+    )
+    problem = _readability_problem(directories)
     if problem is not None:
       report['status'] = 'fail'
       report['output'] = problem
@@ -207,9 +219,14 @@ def get_health_router(content_directories: list[str]) -> APIRouter:
       'when a critical dependency is unavailable.'
     ),
   )
-  async def ready_probe() -> Response:
+  async def ready_probe(request: Request) -> Response:
     """Readiness: critical dependencies only, without the details."""
-    problem = _readability_problem(content_directories)
+    directories = (
+      request_directories(request)
+      if request_directories is not None
+      else content_directories
+    )
+    problem = _readability_problem(directories)
     if problem is not None:
       return _response(
         {'status': 'fail', 'output': problem},

@@ -206,3 +206,10 @@ failures to HTTP status codes before delegating to the same commit path; the
 admin form supplies etags and renders the service's diagnostics. The optional
 SQL database stores admin accounts and role-management data; it is not a
 mirror of Markdown content.
+
+For multi-tenant applications, `CollectionSpec.dir` may be a callable that
+accepts the current request and returns an absolute collection path. The
+resolved path is memoized on request state, so a request uses one consistent
+root across public routes, REST, admin, health probes and SEO endpoints. Static
+`Path` values remain supported. Request-resolved roots are an application
+runtime feature; project-file CLI commands require static paths.

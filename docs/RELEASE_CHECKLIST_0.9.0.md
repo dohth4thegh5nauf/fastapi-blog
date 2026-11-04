@@ -127,12 +127,23 @@ Release verification performed locally on top of the test gate:
   clean wheel smoke tests on the final release commit, then tag and publish
   through the release repository's approved channels.
 
-The latest pull request CI passed on the current candidate. The latest local
-regression run before the admin extension hook passed on Python 3.12 with
-**893 passed, 2 skipped**; the new localized custom-view test passes separately
-(**1 passed**). Ruff, formatting, mypy, Bandit, actionlint and Compose
-configuration checks pass on the current worktree. A current full local
-`make all` run could not start because `uv` could not fetch the locked build
-requirement while DNS/network access to PyPI was unavailable; CI ran the
-corresponding validation and test gates successfully. Keep the 0.9.0 changes
-under `[Unreleased]` until any subsequent candidate change is revalidated.
+The candidate commit `6bc4dd0` passed the pull request workflows: Test
+fastapi-blog, Validate PR, Security and API Contract (run IDs
+`41859106470`, `41859106420`, `41859106442` and `41859106643`). Its push
+validation also passed (`41859093360`). The full local `make all` gate passed
+on Python 3.12: Ruff, formatting and mypy were clean; pytest collected
+**932 tests** and completed with **930 passed, 2 skipped**; total coverage was
+**87%**. The full test run needs access to local async SQLite and was run
+outside the restricted sandbox. This checklist update does not change package
+source; keep the 0.9.0 changes under `[Unreleased]` until the final release
+commit passes CI and the release-repository checks in the handoff section are
+complete.
+
+On 2026-11-04, `uv build` produced the 0.9.0 sdist and wheel from the same
+package source as candidate `6bc4dd0`. Both artifacts contained the public and
+admin templates and English/Russian translation files. Fresh environments
+installed from the wheel using the locked core and admin runtime sets. Core
+smoke confirmed lazy admin/SQLAlchemy imports, a rendered blog post, a 401 for
+an unauthenticated API request, and startup rejection without API credentials.
+Admin smoke confirmed configuration rejects missing credentials and mounts
+the `en` and `ru` admin panels with valid credentials.

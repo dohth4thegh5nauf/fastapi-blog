@@ -29,6 +29,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 import fastapi_blog  # noqa: E402
+from fastapi_blog.models import FieldSpec, FrontmatterSchema  # noqa: E402
 
 
 # Create necessary directories
@@ -39,11 +40,27 @@ Path('static').mkdir(exist_ok=True)
 # Create FastAPI app
 app = FastAPI(title='My Blog')
 
+# Keep the imported example posts valid in both the blog and admin panel.
+frontmatter_schema = FrontmatterSchema(
+  fields=(
+    FieldSpec('title', required=True, role='title'),
+    FieldSpec('date', role='date'),
+    FieldSpec('published', type='bool', default=False, role='published'),
+    FieldSpec('tags', type='list[str]', role='tags'),
+    FieldSpec('description', role='description'),
+    FieldSpec('source_slug', alias='slug', read_only=True),
+    FieldSpec('time_to_read', type='int'),
+    FieldSpec('type'),
+    FieldSpec('image', type='image'),
+  ),
+)
+
 # Add blog functionality with i18n
 fastapi_blog.add_blog_to_fastapi(
   app,
   prefix='blog',
   strict_frontmatter=False,
+  frontmatter_schema=frontmatter_schema,
   sanitize_html=False,
   locales=['en', 'ru'],  # Enable language switcher in blog
   default_locale='en',
@@ -57,6 +74,7 @@ admins = fastapi_blog.add_admin_to_app(
   admin_username='admin',
   admin_password='Admin123!',
   secret_key='change-me-in-production',
+  frontmatter_schema=frontmatter_schema,
   insecure_dev=True,
   locales=['en', 'ru'],
   default_locale='en',  # /admin → /admin/en

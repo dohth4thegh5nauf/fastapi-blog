@@ -94,7 +94,7 @@ class CollectionSpec:
   """
 
   name: str
-  dir: pathlib.Path
+  dir: pathlib.Path | Callable[[Any], pathlib.Path]
   schema: FrontmatterSchema | None = None
   slug_pattern: str | None = None
   extension: str | tuple[str, ...] | None = None
@@ -115,6 +115,38 @@ class CollectionSpec:
   translations_dir: pathlib.Path | None = None
   document_authorize: Callable[..., bool | str] | None = None
 
+  def resolve_dir(self, request: Any = None) -> pathlib.Path:
+    """Resolve this collection's directory, once per request when callable."""
+    if not callable(self.dir):
+      return pathlib.Path(self.dir)
+    if request is None:
+      raise ConfigError(
+        f'Collection {self.name!r} uses a request directory resolver'
+      )
+    cache = getattr(request.state, '_fastapi_blog_collection_dirs', None)
+    if cache is None:
+      cache = {}
+      request.state._fastapi_blog_collection_dirs = cache
+    key = id(self)
+    if key not in cache:
+      try:
+        resolved = self.dir(request)
+        path = pathlib.Path(resolved).expanduser()
+      except Exception as exc:
+        raise ConfigError(
+          f'Unable to resolve directory for collection {self.name!r}'
+        ) from exc
+      if not path.is_absolute():
+        raise ConfigError(
+          f'Directory resolver for collection {self.name!r} must return an absolute path'
+        )
+      cache[key] = path.resolve(strict=False)
+    return cache[key]
+
+  def for_request(self, request: Any) -> 'CollectionSpec':
+    """Return a copy bound to this request's resolved directory."""
+    return dataclasses.replace(self, dir=self.resolve_dir(request))
+
   def with_schema(self, schema: FrontmatterSchema) -> 'CollectionSpec':
     """Return this collection specification with an application schema."""
     return dataclasses.replace(self, schema=schema)
@@ -125,7 +157,7 @@ class CollectionSpec:
       self.label, locale, self.i18n.default_locale if self.i18n else None
     )
 
-  def to_collection(self) -> store.Collection:
+  def to_collection(self, *, request: Any = None) -> store.Collection:
     """Build the storage-layer `Collection` for this spec."""
     kwargs: dict[str, Any] = {}
     if self.slug_pattern is not None:
@@ -138,7 +170,7 @@ class CollectionSpec:
       kwargs['extension'] = self.extension
     return store.Collection(
       self.name,
-      self.dir,
+      self.resolve_dir(request),
       on_change=self.on_change,
       create=self.create,
       delete=self.delete,
@@ -345,6 +377,7 @@ def _i18n_config(
     'translate_body',
     'required_in_translations',
     'write_duplicates',
+    'default_locale_in_root',
   }
   unknown = sorted(set(value) - allowed)
   if unknown:
@@ -364,6 +397,7 @@ def _i18n_config(
       'translate_body',
       'required_in_translations',
       'write_duplicates',
+      'default_locale_in_root',
     ):
       if key in value and not isinstance(value[key], bool):
         raise I18nConfigError(f'i18n.{key} must be true or false')
@@ -387,6 +421,10 @@ def _i18n_config(
       ),
       write_duplicates=value.get(
         'write_duplicates', base.write_duplicates if base else False
+      ),
+      default_locale_in_root=value.get(
+        'default_locale_in_root',
+        base.default_locale_in_root if base else False,
       ),
     )
   except (TypeError, ValueError) as exc:
