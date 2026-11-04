@@ -21,6 +21,8 @@ This repository is a development fork of [pydanny/fastapi-blog](https://github.c
 - Jinja2 templates that can be overridden with a custom loader.
 - Responsive templates, dark-mode styling and code syntax highlighting.
 - Configurable frontmatter schemas, including semantic roles for title, date, publication status, tags and description.
+- Optional multi-locale content collections with rollback on write failures, localized validation, ETags, REST routes and translation diagnostics.
+- Project-owned YAML overlays for public/admin UI translations through `translations_dir`.
 - Optional SEO metadata resolution and page-head output when SEO settings are configured.
 - Optional `sitemap.xml`, `robots.txt` and permanent redirects for moved posts (`seo_routes=True`).
 
@@ -29,7 +31,8 @@ This repository is a development fork of [pydanny/fastapi-blog](https://github.c
 - Optional Starlette Admin web interface (installed with the `admin` extra).
 - User authentication and management, with optional role-management views.
 - Markdown post CRUD operations and custom admin form fields.
-- English and Russian admin translations.
+- Initial content locale tabs, fallback indication and per-entry locale chips.
+- English and Russian admin translations, extendable with project YAML files; localized field and collection labels.
 - Optional REST API for creating, reading, updating and deleting Markdown posts.
 - API authentication through session middleware, HTTP Basic credentials or a custom FastAPI dependency.
 - Optional `If-Match` concurrency checks for update and delete operations.

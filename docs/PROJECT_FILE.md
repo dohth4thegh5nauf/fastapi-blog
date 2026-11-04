@@ -32,6 +32,78 @@ collections:
         blocking: [error, undefined]
 ```
 
+## Multi-locale collections
+
+A project-level `i18n` block supplies defaults to every collection. A
+collection may inherit those defaults, disable i18n with `i18n: false`, or
+override selected options with its own mapping. The optional
+`translations_dir` points to project-owned YAML files that extend the bundled
+admin/public UI translations:
+
+```yaml
+translations_dir: translations
+
+i18n:
+  structure: multiple_files
+  locales: [en, ru, de]
+  default_locale: en
+  omit_default_locale_suffix: true
+  fallback: default
+  translate_body: true
+  required_in_translations: false
+  write_duplicates: false
+
+collections:
+  notes:
+    dir: content/notes
+    label: {en: Notes, ru: Заметки, de: Notizen}
+    i18n: true
+    check:
+      translations: warn
+```
+
+The supported layouts are `multiple_files`
+(`<slug>.<locale>.md`, with the default suffix optionally omitted) and
+`multiple_folders` (`<locale>/<slug>.md`). `single_file` is rejected. Locale
+suffixes and directories are recognized only when the locale is listed in
+`locales`. i18n is rejected for collections with `depth` greater than zero.
+The slug is canonical across locales and is derived from the default-locale
+document. A translation cannot create or rename a slug.
+
+`DocumentService` validates and writes localized documents, checks per-locale
+and entry ETags, and coordinates multi-locale writes and change notifications.
+The service stages files and rolls back a failed replacement, but a write to
+several files is not atomic to readers: they may observe intermediate states.
+Locks coordinate writers in the same process only; separate processes need
+external coordination. A crash during a multi-file operation can also leave
+an incomplete update or staged files requiring recovery.
+The REST API exposes localized reads and writes at the collection document
+route. The admin provides locale tabs, fallback indication and locale chips;
+the current editor saves the selected locale (the side-by-side editor and
+single-button save of multiple dirty locales remain future work).
+Deleting an entry with translations requires an explicit cascade request.
+Document-level authorization and state-transition policies are not yet
+implemented; the existing collection-level permissions still apply.
+`check` reports missing, orphaned, unknown-locale and mismatched duplicate
+translations according to `check.translations`.
+
+`FieldSpec.i18n` controls content storage: `translate` (also `true`) stores
+locale-specific values, `duplicate` compares a value with the canonical
+locale, and `none` is not localized. `required_in_translations` controls
+whether required fields may be omitted in translations; `write_duplicates`
+controls whether duplicate values are mirrored to translation files.
+
+`label`, `hint`, `choices[].label` and collection `label` can be strings or
+locale maps. Resolution order is interface locale, collection default locale,
+then the first mapping entry. Unknown locale keys produce a configuration
+warning.
+
+The optional `translations_dir` must be a relative directory inside the
+project. A file named `<locale>.yaml` is deep-merged over the bundled file for
+that locale; missing entries fall back to English and are logged. Locale
+names come from the `locale.name` value in those YAML files; for a configured
+locale without a translation file, the code is used as its display name.
+
 ## External validators (TODO 6.2)
 
 A validator runs a command **without a shell** (an argument list) on every
@@ -41,11 +113,16 @@ code maps to an outcome via `exit_map` (unlisted codes are `undefined`):
 checked" and is never treated as fine.
 
 Placeholders in `argv`: `{path}` (the document's path relative to the
-project root), `{slug}`, `{collection}` and `{fields.NAME}` (a scalar
-frontmatter field). Values must match `[A-Za-z0-9._:-]+` and must not start
-with `-`, otherwise the check fails with `validator.NAME.unsafe_value` and
+project root), `{slug}`, `{collection}`, `{locale}` and `{fields.NAME}` (a
+scalar frontmatter field). Values other than `{path}` must match
+`[A-Za-z0-9._:-]+`; all values must be nonempty and must not start with `-`,
+otherwise the check fails with `validator.NAME.unsafe_value` and
 the command is **not** started. A missing command or a timeout gives the
 `unavailable` outcome.
+
+`run` may be `write`, `check` or `both` (the default). `write` validators run only on writes; `check` validators run only during project checks. For localized writes, the validator runs once for each changed locale file.
+During localized writes, `{path}` names the staged file containing the
+proposed document, rather than the final file name.
 
 `blocking` lists the outcomes that refuse a write through the REST API
 (TODO 6.3): the file is rolled back to its previous bytes (a just-created

@@ -9,6 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.9.0.
 
 ### Added
+- Added multi-locale content collections: project and collection i18n
+  configuration, localized storage with rollback and `DocumentService`
+  integration, validation modes, ETags, events, REST routes and translation
+  integrity diagnostics.
+- Added the first admin i18n workflow (locale tabs, fallback banner and
+  locale chips), localized schema/collection labels, and project-owned UI
+  translation overlays through `translations_dir`.
+- Added validator `run: write | check | both` and per-locale `{locale}`
+  expansion for localized writes.
+- Split localized document storage primitives into `i18n_collections.py`,
+  preserving the public blog/admin translation API in `i18n.py`.
 
 - Added configurable frontmatter schemas with aliases, semantic roles,
   validation, defaults, nested objects, links, media fields and schema-driven

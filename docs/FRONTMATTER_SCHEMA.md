@@ -464,3 +464,46 @@ seo:
     duplicate_description: warn
     image_alt_required: error
 ```
+
+
+## Field translation mode
+
+A field may declare an i18n storage mode:
+
+```yaml
+fields:
+  title:
+    type: str
+    i18n: translate
+  status:
+    type: str
+    i18n: none
+```
+
+`i18n` accepts `translate`, `duplicate`, or `none` (the default). Boolean
+`true` is an alias for `translate`. `translate` stores a separate value per
+locale. `duplicate` is checked against the canonical locale; a mismatch is a
+warning, and `write_duplicates: true` mirrors the canonical value into
+translation files. `none` remains shared. Required fields are enforced in the
+default locale; translations may omit them unless
+`required_in_translations: true` is configured.
+
+Field `label`, `hint` and `choices[].label` may be strings or locale maps:
+
+```yaml
+fields:
+  title:
+    type: str
+    label: {en: Title, ru: Заголовок}
+    hint: {en: Short title, ru: Краткий заголовок}
+  status:
+    type: str
+    choices:
+      - value: draft
+        label: {en: Draft, ru: Черновик}
+```
+
+The same locale-map form is available for a collection's `label` in
+`fastapi_blog.yaml`. Text resolves by interface locale, then the collection's
+`default_locale`, then the first mapping value. Unknown locale keys produce a
+configuration warning.
