@@ -390,7 +390,7 @@ function buildCurrentLocalePayload() {
 }
 
 const postForm = document.getElementById('post-form');
-const adminUiLocales = {{ available_locales | tojson }};
+const adminUiLocales = {{ available_locales | default([]) | tojson }};
 function localeIndependentAdminPath(path) {
   const parts = path.split('/');
   const adminIndex = parts.lastIndexOf('admin');
