@@ -575,6 +575,41 @@ def test_update_with_stale_if_match_is_rejected(client, app_dir):
   assert response.status_code == 412
 
 
+def test_concurrent_updates_with_one_etag_allow_only_one_writer(app_dir):
+  app = FastAPI()
+  add_blog_to_fastapi(app, prefix='blog')
+  add_editor_to_app(app, require_auth=False)
+  payloads = [
+    {**VALID_PAYLOAD, 'content': 'First concurrent update'},
+    {**VALID_PAYLOAD, 'content': 'Second concurrent update'},
+  ]
+
+  with TestClient(app) as first_client, TestClient(app) as second_client:
+    created = first_client.post(
+      '/api/posts/create/hello-world', json=VALID_PAYLOAD
+    )
+    assert created.status_code == 201
+    etag = first_client.get('/api/posts/hello-world/raw').headers['etag']
+    clients = (first_client, second_client)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+      futures = [
+        executor.submit(
+          client.put,
+          '/api/posts/update/hello-world',
+          json=payload,
+          headers={'If-Match': etag},
+        )
+        for client, payload in zip(clients, payloads, strict=True)
+      ]
+      responses = [future.result() for future in futures]
+    stored = (
+      first_client.get('/api/posts/hello-world/raw').json()['content'].strip()
+    )
+
+  assert sorted(response.status_code for response in responses) == [200, 412]
+  assert stored in {'First concurrent update', 'Second concurrent update'}
+
+
 def test_delete_with_stale_if_match_is_rejected(client, app_dir):
   client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
   stale_etag = client.get('/api/posts/hello-world/raw').headers['etag']
