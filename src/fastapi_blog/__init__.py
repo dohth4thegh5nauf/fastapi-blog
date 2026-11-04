@@ -1,6 +1,7 @@
 import importlib
 import os
 import pathlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
@@ -83,6 +84,7 @@ def setup_fastapi_blog(
   https_only: bool = False,
   auth_users: dict[str, dict[str, str]] | None = None,
   translations_dir: str | pathlib.Path | None = None,
+  configure_admin: Callable[[str, 'Admin'], None] | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
@@ -125,6 +127,8 @@ def setup_fastapi_blog(
           configured `slug_template` enables generated slugs.
       translations_dir: Optional project directory containing UI translation
           YAML overlays; derived from `collection_spec` when omitted.
+      configure_admin: Optional synchronous callback invoked with `(locale,
+          admin)` immediately before each localized admin instance is mounted.
 
   Returns:
       Admin instances by locale, or an empty dict when `admin=False`.
@@ -195,4 +199,5 @@ def setup_fastapi_blog(
     auth_users=auth_users,
     sanitize_html=sanitize_html,
     translations_dir=translations_dir,
+    configure_admin=configure_admin,
   )

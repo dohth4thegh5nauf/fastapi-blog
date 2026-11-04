@@ -130,6 +130,53 @@ add_admin_to_app(
 
 The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). Configure credentials and a strong session secret for your deployment; do not use example or default credentials in production.
 
+To add a custom Starlette Admin view to every localized panel, pass
+`configure_admin`. It receives the locale and fully configured `Admin` instance
+after FastAPI Blog has registered its built-in views and immediately before
+that instance is mounted:
+
+```python
+from fastapi_blog import add_admin_to_app
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette_admin import CustomView
+from starlette_admin.routing import route
+
+
+class DecisionsView(CustomView):
+  def __init__(self, locale: str):
+    super().__init__(
+      menu_label='Decisions',
+      path='/decisions',
+      route_name=f'decisions_{locale}',
+    )
+    self.locale = locale
+
+  @route('')
+  async def index(self, request: Request):
+    return PlainTextResponse(f'Decisions ({self.locale})')
+
+
+def configure_admin(locale: str, admin) -> None:
+  admin.add_view(DecisionsView(locale))
+
+
+admins = add_admin_to_app(
+  app,
+  locales=['en', 'ru'],
+  default_locale='en',
+  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  secret_key=os.environ['SECRET_KEY'],
+  configure_admin=configure_admin,
+)
+```
+
+The added view is reachable inside each panel at `/admin/decisions` and
+`/ru/admin/decisions`. The callback is synchronous and may use the public
+`admin.add_view()` API; it must not mount the admin instance itself.
+The same `configure_admin` callback is available through
+`setup_fastapi_blog()` when using unified setup.
+
 ### Unified setup
 
 `setup_fastapi_blog()` configures the blog and, optionally, the admin panel together. It passes a shared frontmatter schema to both.

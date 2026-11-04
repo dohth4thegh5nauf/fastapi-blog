@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.9.0.
 
 ### Added
+- Added a `configure_admin(locale, admin)` hook to register custom Starlette
+  Admin views before each localized panel is mounted. The hook is also exposed
+  through `setup_fastapi_blog()`.
 - Added multi-locale content collections: project and collection i18n
   configuration, localized storage with rollback and `DocumentService`
   integration, validation modes, ETags, events, REST routes and translation
