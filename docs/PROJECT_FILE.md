@@ -81,12 +81,15 @@ The REST API exposes localized reads and writes at the collection document
 route. The admin provides locale tabs, fallback indication, locale chips and
 a side-by-side canonical preview with a link to edit the source. The editor
 keeps changed locale drafts in the current browser tab and submits them in one
-atomic save. The save endpoint also accepts explicit per-locale ETags for
-batch callers.
+batch with rollback on write failure. Concurrent readers can still observe
+intermediate file states. The save endpoint also accepts explicit per-locale
+ETags for batch callers.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
-existing collection-level permissions still apply. Do not rely on the
-document policy as a complete access-control boundary yet.
+existing collection-level permissions still apply. The document policy
+filters API and admin document operations but does not filter public blog
+routes, including article detail pages. Do not rely on it as a complete
+access-control boundary yet.
 
 The current experimental Python hook is configured with
 `CollectionSpec(document_authorize=callback)`. It is called synchronously
