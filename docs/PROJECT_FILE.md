@@ -105,10 +105,11 @@ An experimental schema field may specify `transitions` with `initial` and
 `allowed` lists. Each allowed rule has `from`, `to`, and an optional
 `permission`. Permission-bearing transitions require a document policy and
 ask it to allow both the named permission and the `transition` action.
-These checks cover scalar fields, nested objects and fields inside object
-lists. The admin disables choices that violate the transition rules or their
-document policy. The service still rejects invalid transitions when a save
-is submitted.
+These checks cover scalar fields and nested objects. Transitions inside
+`list[object]` are rejected at schema load because rows have no stable identity
+for safe matching after reordering. The admin disables choices that violate
+the transition rules or their document policy. The service still rejects
+invalid transitions when a save is submitted.
 `check` reports missing, orphaned, unknown-locale and mismatched duplicate
 translations according to `check.translations`.
 
