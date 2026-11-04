@@ -259,22 +259,26 @@ html[data-bs-theme='dark'] .editor-toolbar i.separator {
   }
 
   var defaultLocale = {{ default_locale | tojson | safe }};
+  var availableLocales = {{ available_locales | tojson | safe }};
   document.querySelectorAll('.custom-language-item').forEach(function (item) {
     item.addEventListener('click', function (e) {
       e.preventDefault();
       var target = this.getAttribute('data-lang');
       var path = window.location.pathname;
       var query = window.location.search;
+      var pathParts = path.split('/');
+      var adminIndex = pathParts.lastIndexOf('admin');
       var newPath;
-      if (target === defaultLocale) {
-        var m = path.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
-        newPath = m ? '/admin' + (m[2] || '') : path;
+      if (adminIndex < 0) {
+        newPath = target === defaultLocale ? '/admin' : '/' + target + '/admin';
       } else {
-        var dm = path.match(/^\/admin(\/.*)?$/);
-        var lm = path.match(/^\/([a-z]{2})\/admin(\/.*)?$/);
-        if (dm) newPath = '/' + target + '/admin' + (dm[1] || '');
-        else if (lm) newPath = '/' + target + '/admin' + (lm[2] || '');
-        else newPath = '/' + target + '/admin';
+        var localeIndex = adminIndex - 1;
+        if (availableLocales.indexOf(pathParts[localeIndex]) >= 0) {
+          pathParts.splice(localeIndex, 1);
+          adminIndex -= 1;
+        }
+        if (target !== defaultLocale) pathParts.splice(adminIndex, 0, target);
+        newPath = pathParts.join('/') || '/';
       }
       window.location.href = newPath + query;
     });
