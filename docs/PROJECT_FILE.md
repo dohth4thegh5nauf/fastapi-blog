@@ -87,19 +87,20 @@ ETags for batch callers.
 Deleting an entry with translations requires an explicit cascade request.
 The optional document policy and field transitions are experimental; the
 existing collection-level permissions still apply. The document policy
-filters API and admin document operations but does not filter public blog
-HTML routes, JSON-LD routes or the sitemap. Do not rely on it as a complete
-access-control boundary yet.
+applies to REST and admin document operations. The public blog frontend is
+outside the scope of multilingual collections and is not filtered by this
+hook. Do not rely on the hook as a complete access-control boundary.
 
 The current experimental Python hook is configured with
 `CollectionSpec(document_authorize=callback)`. It is called synchronously
 with `(user, action, collection, slug, locale, before, after)`, where
 `before` and `after` are frontmatter mappings. Return `True` to allow an
 operation; `False` or a reason string denies it. It supplements the existing
-collection-level authorization. A generated slug is unavailable at the
-authorization point, so creation with an automatically generated slug is
-disabled when this hook is configured. Autocomplete and collection-wide
-diagnostics are suppressed for protected collections.
+collection-level authorization. For generated-slug creates, the service
+computes the slug under the collection lock and calls the hook with it before
+writing the file.
+Autocomplete and collection-wide diagnostics are suppressed for protected
+collections.
 
 An experimental schema field may specify `transitions` with `initial` and
 `allowed` lists. Each allowed rule has `from`, `to`, and an optional
