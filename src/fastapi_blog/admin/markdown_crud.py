@@ -440,6 +440,7 @@ class MarkdownFileManager:
     if_match: str | None = None,
     expected_exists: bool | None = None,
     user: Any = None,
+    request_context: Any = None,
   ):
     """Save a post through the shared schema-aware document service."""
     return self.service.save(
@@ -449,6 +450,7 @@ class MarkdownFileManager:
       if_match=if_match,
       expected_exists=expected_exists,
       user=user,
+      request_context=request_context,
     )
 
   def link_suggestions(
@@ -649,15 +651,11 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
     content_locale = data.get('content_locale')
     locale_payloads = data.get('locales')
     if adapter is not None and locale_payloads is not None:
-      if not slug:
-        return JSONResponse(
-          {'detail': 'A canonical slug is required for translations'}, 400
-        )
       if not isinstance(locale_payloads, dict) or not locale_payloads:
         return JSONResponse(
           {'detail': 'locales must be a non-empty object'}, 400
         )
-      is_new = not adapter.has_entry(slug)
+      is_new = not slug or not adapter.has_entry(slug)
       if is_new and adapter.config.default_locale not in locale_payloads:
         return JSONResponse(
           {'detail': 'Create the canonical locale before adding translations'},
@@ -685,10 +683,10 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
             },
             400,
           )
-        locale_path = adapter.path_for(slug, locale)
+        locale_path = adapter.path_for(slug, locale) if slug else None
         etag = payload.get('etag')
         entry_etag = payload.get('entry_etag')
-        if not is_new and locale_path.is_file():
+        if not is_new and locale_path is not None and locale_path.is_file():
           if not etag:
             return JSONResponse(
               {'detail': f'The {locale} edit form is missing its etag; reload'},
@@ -711,12 +709,13 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
         )
       try:
         result = manager.service.save_localized(
-          slug,
+          slug or '',
           documents,
           if_match=etags or None,
           expected_entry_etag=next(iter(entry_etags), None),
           expected_exists=not is_new,
           user=getattr(request.state, 'blog_user', None),
+          request_context=request,
         )
       except BlockingValidationError as exc:
         return JSONResponse(
@@ -747,13 +746,9 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
       await self._require(request, 'update')
       return JSONResponse({'detail': 'A content locale is required'}, 400)
     if adapter is not None and content_locale:
-      if not slug:
-        return JSONResponse(
-          {'detail': 'A canonical slug is required for a translation'}, 400
-        )
       if content_locale not in adapter.config.locales:
         return JSONResponse({'detail': 'Unknown content locale'}, 400)
-      is_new = not adapter.has_entry(slug)
+      is_new = not slug or not adapter.has_entry(slug)
       if is_new and content_locale != adapter.config.default_locale:
         return JSONResponse(
           {'detail': 'Create the canonical locale before adding translations'},
@@ -767,29 +762,40 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
           {'detail': 'frontmatter must be an object and content must be text'},
           400,
         )
-      locale_path = adapter.path_for(slug, content_locale)
+      locale_path = adapter.path_for(slug, content_locale) if slug else None
       etag = data.get('etag')
       entry_etag = data.get('entry_etag')
-      if not is_new and locale_path.is_file() and not etag:
+      if (
+        not is_new
+        and locale_path is not None
+        and locale_path.is_file()
+        and not etag
+      ):
         return JSONResponse(
           {'detail': 'The locale edit form is missing its etag; reload'}, 428
         )
-      if not is_new and not locale_path.is_file() and not entry_etag:
+      if (
+        not is_new
+        and locale_path is not None
+        and not locale_path.is_file()
+        and not entry_etag
+      ):
         return JSONResponse(
           {'detail': 'The entry changed or the form is stale; reload'}, 428
         )
       try:
         result = manager.service.save_localized(
-          slug,
+          slug or '',
           {content_locale: (frontmatter, content)},
           if_match=(
             {content_locale: str(etag)}
-            if etag and locale_path.is_file()
+            if etag and locale_path is not None and locale_path.is_file()
             else None
           ),
           expected_entry_etag=(str(entry_etag) if entry_etag else None),
           expected_exists=not is_new,
           user=getattr(request.state, 'blog_user', None),
+          request_context=request,
         )
       except BlockingValidationError as exc:
         return JSONResponse(
@@ -843,6 +849,7 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
         if_match=str(etag) if etag else None,
         expected_exists=not is_new,
         user=getattr(request.state, 'blog_user', None),
+        request_context=request,
       )
     except BlockingValidationError as exc:
       return JSONResponse(
@@ -1378,8 +1385,7 @@ class MarkdownCreateView(_AuthorizedMarkdownView, CustomView):
         'form_fields_meta': form_fields_meta(form_fields),
         'is_new': True,
         'auto_slug': bool(
-          adapter is None
-          and self.collection_spec is not None
+          self.collection_spec is not None
           and self.collection_spec.slug_template is not None
         ),
         'base_url': request.scope['root_path'],

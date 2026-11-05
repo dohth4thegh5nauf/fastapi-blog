@@ -47,6 +47,19 @@ def test_build_slug_uses_date_and_sequence():
   assert slug == '2026/0010-café-déjà-vu'
 
 
+def test_build_slug_accepts_allocated_sequence():
+  template = parse_template('{seq|pad(4)}-{title_slug}', TAGS)
+  slug = build_slug(template, title='Hello World', sequence=42)
+  assert slug == '0042-hello-world'
+
+
+def test_build_slug_rejects_invalid_allocated_sequence():
+  template = parse_template('{seq|pad(4)}-{title_slug}', TAGS)
+  for sequence in (0, -1, True, '42'):
+    with pytest.raises(ValueError, match='positive integer'):
+      build_slug(template, title='Hello World', sequence=sequence)
+
+
 def test_build_slug_uses_first_save_utc_when_date_missing():
   template = parse_template('{year}-{month}-{day}-{title_slug}', TAGS)
   slug = build_slug(

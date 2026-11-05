@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Changes planned for version 0.9.0.
+Changes planned for version 0.10.0.
 
 ### Added
+- Added a request-scoped sequence allocator to `CollectionSpec`; the admin
+  save flow passes the reserved sequence into slug generation, including
+  localized canonical-record creation.
 - Added request-scoped collection roots by accepting a path resolver in
   `CollectionSpec.dir`. The public blog, REST API, admin, health probes and SEO
   routes use the same resolved root for each request; static paths keep their

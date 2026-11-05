@@ -19,7 +19,7 @@ if TYPE_CHECKING:
   from .admin import Admin, add_admin_to_app
 
 
-__version__ = '0.9.0'
+__version__ = '0.10.0'
 
 _ADMIN_EXTRA_HINT = (
   'The admin panel needs the `admin` extra: pip install "fastapi-blog[admin]"'

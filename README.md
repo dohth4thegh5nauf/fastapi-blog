@@ -2,7 +2,7 @@
 
 > A file-based Markdown blog and content-management toolkit for FastAPI.
 
-**Package version:** `0.9.0` (development release; see [CHANGELOG.md](CHANGELOG.md))  
+**Package version:** `0.10.0` (development release; see [CHANGELOG.md](CHANGELOG.md))
 **Python:** 3.12+  
 **Platforms:** Ubuntu (latest LTS), as specified by the project guidelines.
 
@@ -524,7 +524,7 @@ The repository contains 37 test modules covering the core blog, storage, schema 
 - [Database](docs/DATABASE.md) — database models and setup.
 - [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) — environment-based configuration.
 - [Role Management](docs/ROLE_MANAGEMENT.md) — optional RBAC functionality.
-- [Changelog](CHANGELOG.md) — changes in version `0.9.0` and earlier.
+- [Changelog](CHANGELOG.md) — changes in version `0.10.0` and earlier.
 
 ## License
 

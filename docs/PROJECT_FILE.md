@@ -197,6 +197,13 @@ under the store lock), `title_slug` (the title-role field, sanitized per the
 date-role field, or the first-save UTC time when it is absent), `collection`
 and, for nested collections, `dirname`.
 
+Applications may set `CollectionSpec.sequence_allocator` to a callable that
+accepts the current request context and returns a positive integer. When set,
+the value replaces the locally derived `{seq}` for a generated slug. The
+localized admin form passes the request context when it creates a canonical
+record with a blank slug; translations continue to use that canonical slug.
+This callback is Python-only and is not loaded from the project YAML file.
+
 `unique` lists field names (or `seq`) whose values must not repeat; `check`
 reports duplicates, and creating a document with a duplicate value fails
 with HTTP 409.

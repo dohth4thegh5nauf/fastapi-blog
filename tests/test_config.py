@@ -176,6 +176,27 @@ def test_slug_template_and_unique_seq_are_loaded(project_dir):
   assert spec.summarize('0001-hello-world', {'title': 'Hello'}) == 'Hello'
 
 
+def test_collection_sequence_allocator_receives_request_context(project_dir):
+  from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
+
+  seen = []
+  spec = config.CollectionSpec(
+    name='posts',
+    dir=project_dir / 'posts',
+    schema=FrontmatterSchema(fields=(FieldSpec('title', role='title'),)),
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}', SLUG_TAGS_DEFAULT, {'title'}
+    ),
+    sequence_allocator=lambda context: seen.append(context) or 27,
+  )
+  request = object()
+  assert (
+    spec.make_slug({'title': 'Reserved'}, [], request_context=request)
+    == '0027-reserved'
+  )
+  assert seen == [request]
+
+
 def test_default_schema_fields_are_available_to_collection_templates(
   project_dir,
 ):

@@ -11,15 +11,22 @@ from fastapi_blog.i18n_collections import I18nConfig
 from fastapi_blog.issues import Issue
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.service import BlockingValidationError, DocumentService
+from fastapi_blog.templates import SLUG_TAGS_DEFAULT, parse_template
 from fastapi_blog.validators import Validator
 
 
 def _service(
-  tmp_path, *, write_duplicates=False, required=False, on_change=None
+  tmp_path,
+  *,
+  write_duplicates=False,
+  required=False,
+  on_change=None,
+  sequence_allocator=None,
+  slug_template=None,
 ):
   schema = FrontmatterSchema(
     fields=(
-      FieldSpec('title', required=True, i18n='translate'),
+      FieldSpec('title', required=True, role='title', i18n='translate'),
       FieldSpec('code', required=True, i18n='duplicate'),
       FieldSpec('summary'),
     ),
@@ -36,9 +43,34 @@ def _service(
       required_in_translations=required,
     ),
     on_change=on_change,
+    sequence_allocator=sequence_allocator,
+    slug_template=slug_template,
   )
   documents = store.DocumentStore(collection.to_collection())
   return DocumentService(documents, schema, collection_spec=collection)
+
+
+def test_generated_localized_entry_uses_rulez_sequence_allocator(tmp_path):
+  contexts = []
+  service = _service(
+    tmp_path,
+    slug_template=parse_template(
+      '{seq|pad(4)}-{title_slug}', SLUG_TAGS_DEFAULT, {'title'}
+    ),
+    sequence_allocator=lambda context: contexts.append(context) or 18,
+  )
+  request = object()
+  result = service.save_localized(
+    '',
+    {
+      'en': ({'title': 'Reserved Entry', 'code': 'A'}, 'English body'),
+      'ru': ({'title': 'Запись', 'code': 'A'}, 'Russian body'),
+    },
+    request_context=request,
+  )
+  assert result.slug == '0018-reserved-entry'
+  assert result.locales_present == ('en', 'ru')
+  assert contexts == [request]
 
 
 def test_translation_relaxes_required_fields_and_reports_duplicate_mismatch(

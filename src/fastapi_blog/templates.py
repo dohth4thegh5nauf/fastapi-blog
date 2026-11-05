@@ -391,6 +391,7 @@ def build_slug(
   created_at: datetime.datetime | None = None,
   dirname: str = '',
   options: SlugOptions | None = None,
+  sequence: int | None = None,
 ) -> str:
   """Render a new document slug from a parsed collection template.
 
@@ -420,8 +421,14 @@ def build_slug(
   else:
     moment = now
   values = dict(fields or {})
+  if sequence is not None and (
+    not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1
+  ):
+    raise ValueError('sequence must be a positive integer')
   tags = {
-    'seq': next_seq(template, existing_slugs),
+    'seq': sequence
+    if sequence is not None
+    else next_seq(template, existing_slugs),
     'title_slug': make_slug_part(title, options),
     'year': moment.year,
     'month': f'{moment.month:02d}',

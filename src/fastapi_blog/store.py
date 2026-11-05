@@ -550,6 +550,7 @@ class DocumentStore:
     created_at: Any = None,
     dirname: str = '',
     options: Any = None,
+    sequence: int | None = None,
     user: Any = None,
     notify: bool = True,
   ) -> tuple[str, str]:
@@ -572,6 +573,7 @@ class DocumentStore:
         created_at=created_at,
         dirname=dirname,
         options=options,
+        sequence=sequence,
       )
       if self.exists(slug):
         raise ConflictError(
