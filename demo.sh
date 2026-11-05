@@ -34,7 +34,7 @@ case "$EXAMPLE" in
     echo "📍 Blog:        http://localhost:8000/blog"
     echo "📍 API Docs:    http://localhost:8000/docs"
     echo ""
-    echo "🔑 Login: admin / Admin123!"
+    echo "🔑 Demo login: admin / Admin123! (demo only)"
     echo ""
     uvicorn quickstart:app --reload
     ;;
@@ -60,7 +60,7 @@ case "$EXAMPLE" in
     echo "📍 Admin Panel: http://localhost:8000/admin"
     echo "🌍 Languages: English, Русский"
     echo ""
-    echo "🔑 Login: admin / Admin123!"
+    echo "🔑 Demo login: admin / Admin123! (demo only)"
     echo ""
     uvicorn admin_i18n:app --reload
     ;;
@@ -72,7 +72,7 @@ case "$EXAMPLE" in
     echo "📍 Admin Panel: http://localhost:8000/admin"
     echo "✨ Features: i18n, custom fields, roles"
     echo ""
-    echo "🔑 Login: admin / Admin123!"
+    echo "🔑 Demo login: admin / Admin123! (demo only)"
     echo ""
     uvicorn admin_full_featured:app --reload
     ;;

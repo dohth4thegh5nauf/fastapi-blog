@@ -115,7 +115,8 @@ def test_create_then_list_then_detail_then_edit(client):
 def test_already_authenticated_user_visiting_login_is_redirected(client):
   """A custom `render_login` must still redirect an authenticated visitor.
 
-  Regression test: the ported `render_login` (see `admin/auth_provider.py`)
+  Regression test: the legacy `render_login`
+  (see `admin/_legacy_auth_provider.py`)
   initially dropped this check, so a logged-in user hitting `/admin/login`
   saw the login form rendered underneath the framework's own authenticated
   navbar — two independent UIs overlapping on screen. Found via a manual

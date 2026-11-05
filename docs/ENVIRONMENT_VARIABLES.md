@@ -2,6 +2,12 @@
 
 FastAPI Blog supports configuration through environment variables for common settings.
 
+`FASTAPI_BLOG_ADMIN_LOGIN` and `FASTAPI_BLOG_ADMIN_PASSWORD` configure only
+the transitional legacy login path. They are ignored when an external
+`auth_provider` is supplied. New applications should let the host-owned
+provider read its own identity settings; see
+[Admin Authentication Providers](ADMIN_AUTHENTICATION.md).
+
 ## Available Environment Variables
 
 ### Blog Configuration
@@ -46,7 +52,7 @@ fastapi_blog.add_blog_to_fastapi(app)  # Uses FASTAPI_BLOG_INCLUDE_API env var
 
 #### `FASTAPI_BLOG_ADMIN_LOGIN`
 
-Default admin username for login.
+Legacy admin username for login when no external `auth_provider` is configured.
 
 **Default:** `admin`
 
@@ -66,7 +72,8 @@ admins = fastapi_blog.add_admin_to_app(app)
 
 #### `FASTAPI_BLOG_ADMIN_PASSWORD`
 
-Admin password for login. It is required when the admin panel is enabled.
+Legacy admin password for login. It is required when the admin panel is
+enabled without an external `auth_provider`.
 
 **Default:** unset. No password is generated or supplied by the package.
 

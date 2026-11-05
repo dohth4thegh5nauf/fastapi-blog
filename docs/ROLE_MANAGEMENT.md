@@ -2,6 +2,11 @@
 
 FastAPI Blog includes a built-in role-based access policy shared by the REST API and admin panel. The same `authorize(request, resource, action)` callback can be supplied to replace the policy.
 
+Authentication is separate from this policy. The recommended integration
+passes a host-owned Starlette Admin `AuthProvider`; FastAPI Blog's user and role
+views only manage their own CRUD records and do not change accounts in that
+provider. See [Admin Authentication Providers](ADMIN_AUTHENTICATION.md).
+
 ## Overview
 
 The role management system provides:
@@ -77,6 +82,7 @@ import os
 from fastapi import FastAPI
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
@@ -86,8 +92,7 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 # Add admin panel
 admins = fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 
@@ -118,8 +123,9 @@ async with session_factory() as session:
   await create_default_roles(session)
 ```
 
-The built-in policy has three roles (assigned to login accounts through
-`auth_users`):
+The legacy compatibility provider can assign three roles through
+`auth_users`. With an external provider, the host should populate
+`request.state.blog_user` and supply its own role or permission mapping:
 
 - **admin:** Full access to posts, users, settings, and role management.
 - **editor:** Can create, read, update, and publish posts; can read users and
@@ -127,6 +133,7 @@ The built-in policy has three roles (assigned to login accounts through
 - **viewer:** Can read posts only.
 
 ```python
+# Legacy migration example only; don't combine these parameters with auth_provider.
 admins = fastapi_blog.add_admin_to_app(
   app,
   admin_username='root',
@@ -139,8 +146,9 @@ admins = fastapi_blog.add_admin_to_app(
 )
 ```
 
-The primary `admin_username`/`admin_password` account always receives the
-`admin` role. Additional `auth_users` are panel login identities; the role is
+In the legacy path only, the primary `admin_username`/`admin_password` account
+receives the `admin` role. Additional `auth_users` are legacy panel login
+identities; the role is
 stored in the signed session and is preserved when that cookie authenticates
 REST API calls. Unknown or unrecognized roles are denied. An
 authenticated principal without any role (a custom `auth_dependency`,

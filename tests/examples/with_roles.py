@@ -1,4 +1,4 @@
-"""Example with role-based access control.
+"""Example with role and user CRUD views.
 
 This example demonstrates how to use the Role and UserWithRoles models
 for more granular access control.
@@ -11,8 +11,8 @@ Then open:
     Admin UI: http://localhost:8000/admin
 
 Note: This example shows how to set up role management views.
-      The actual role enforcement logic needs to be implemented
-      in your auth provider (see RoleBasedAuthProvider).
+      Login uses the separate demo provider and does not read these records.
+      See admin_with_roles.py for a standalone provider with explicit demo roles.
 """
 
 import sys  # noqa: I001
@@ -23,6 +23,8 @@ from fastapi.staticfiles import StaticFiles
 
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
+from fastapi_blog.admin.models import Role, UserWithRoles
+from demo_auth import create_demo_auth_provider
 
 # Clear any cached imports
 for mod in list(sys.modules.keys()):
@@ -46,31 +48,25 @@ fastapi_blog.add_blog_to_fastapi(
   sanitize_html=False,
 )
 
+
+def configure_admin(locale, admin):
+  """Add the CRUD role views before each localized panel is mounted."""
+  admin.add_view(RoleModelView(Role, locale=locale, icon='fa fa-shield'))
+  admin.add_view(
+    UserWithRolesModelView(UserWithRoles, locale=locale, icon='fa fa-users-cog')
+  )
+
+
 # Add admin panel
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin with Roles',
-  admin_username='admin',
-  admin_password='Admin123!',
-  secret_key='change-me-in-production',
-  insecure_dev=True,
+  secret_key='demo-only-session-secret-0123456789abcdef0123456789',
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   locales=['en', 'ru'],
   default_locale='en',
+  configure_admin=configure_admin,
 )
-
-# Add role management views to each locale admin
-for locale, admin in admins.items():
-  # Add Role management view
-  from fastapi_blog.admin.models import Role, UserWithRoles
-
-  role_view = RoleModelView(Role, icon='fa fa-shield')
-  admin.add_view(role_view)
-
-  # Add UserWithRoles management view
-  user_roles_view = UserWithRolesModelView(
-    UserWithRoles, icon='fa fa-users-cog'
-  )
-  admin.add_view(user_roles_view)
 
 # Mount static files
 app.mount('/static', StaticFiles(directory='static'), name='static')
@@ -90,7 +86,7 @@ async def root():
       'User management with roles',
       'Granular permissions',
     ],
-    'admin_login': {
+    'demo_admin_login': {
       'username': 'admin',
       'password': 'Admin123!',
     },

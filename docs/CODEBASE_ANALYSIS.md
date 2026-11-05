@@ -68,7 +68,7 @@ fastapi-blog/
 │   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # Представления админки
 │   │   ├── views_role.py        # Представления для ролей
-│   │   ├── auth_provider.py     # Провайдер аутентификации
+│   │   ├── _legacy_auth_provider.py # Временная совместимость логина
 │   │   ├── database.py          # Настройка БД
 │   │   ├── fields.py            # Кастомные поля (Markdown, Tags, Slug)
 │   │   ├── i18n.py              # Интернационализация

@@ -106,8 +106,8 @@ def test_no_project_login_override():
   `layout.html` (the `navbar` block just doesn't render pre-login, since
   there's no `current_user` yet — nothing project-specific to add). Letting
   the framework serve its own login page keeps it visually identical to
-  every other page with zero duplicated code, and `SimpleAuthProvider.
-  render_login` (see `admin/auth_provider.py`) only needs to swap in the
+  every other page with zero duplicated code. The legacy compatibility
+  provider (see `admin/_legacy_auth_provider.py`) can still supply the
   project's YAML-based `_` translator via the template context.
   """
   assert not (ADMIN_TEMPLATES / 'login.html').exists()

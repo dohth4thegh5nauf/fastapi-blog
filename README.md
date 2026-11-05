@@ -116,19 +116,19 @@ Install the `admin` extra, then configure both components:
 import os
 from fastapi import FastAPI
 from fastapi_blog import add_admin_to_app, add_blog_to_fastapi
+from myapp.auth import create_admin_auth_provider
 
 app = FastAPI()
 
 add_blog_to_fastapi(app, prefix='blog')
 add_admin_to_app(
   app,
-  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
-The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). Configure credentials and a strong session secret for your deployment; do not use example or default credentials in production.
+The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). The host application owns login and account storage; see [Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md) for the provider contract, legacy migration path, and session requirements.
 
 To add a custom Starlette Admin view to every localized panel, pass
 `configure_admin`. It receives the locale and fully configured `Admin` instance
@@ -136,7 +136,10 @@ after FastAPI Blog has registered its built-in views and immediately before
 that instance is mounted:
 
 ```python
+import os
+
 from fastapi_blog import add_admin_to_app
+from myapp.auth import create_admin_auth_provider
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette_admin import CustomView
@@ -165,7 +168,7 @@ admins = add_admin_to_app(
   app,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   configure_admin=configure_admin,
 )
@@ -194,8 +197,7 @@ setup_fastapi_blog(
   include_api=True,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   enable_role_management=False,
 )

@@ -18,6 +18,7 @@ Compare with quickstart.py:
 Remember: Admin panel (/admin) is a web UI, not REST API.
 """
 
+from demo_auth import create_demo_auth_provider
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -41,6 +42,8 @@ fastapi_blog.add_blog_to_fastapi(
   include_api=True,  # Enable REST API
   api_prefix='/api/posts',
   api_require_auth=True,  # Require authentication for API
+  admin_username='api-demo',
+  admin_password='ApiDemo123!',
   strict_frontmatter=False,
   sanitize_html=False,
 )
@@ -49,10 +52,8 @@ fastapi_blog.add_blog_to_fastapi(
 fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
-  admin_username='admin',
-  admin_password='Admin123!',
   secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
-  insecure_dev=True,
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   add_session_middleware=False,  # Already added above
 )
 
@@ -64,7 +65,7 @@ async def index() -> dict:
   return {
     'message': 'Blog with optional REST API example',
     'blog': 'http://localhost:8000/blog',
-    'admin': 'http://localhost:8000/dashboard',
+    'admin': 'http://localhost:8000/admin',
     'api_docs': 'http://localhost:8000/docs',
-    'note': 'REST API at /api/posts requires authentication',
+    'note': 'Admin demo login: admin / Admin123!. API demo Basic auth: api-demo / ApiDemo123!.',
   }

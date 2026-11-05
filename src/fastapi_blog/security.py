@@ -89,6 +89,22 @@ def resolve_admin_credentials(
   return username, password, secret_key
 
 
+def resolve_session_secret(secret_key: str | None) -> str:
+  """Resolve and validate the session secret without requiring login credentials."""
+  secret_key = secret_key or os.getenv('SECRET_KEY')
+  if not secret_key:
+    raise ConfigurationError(
+      'No session secret (pass secret_key or set SECRET_KEY; generate one '
+      f'with {_GENERATE_HINT})'
+    )
+  if is_weak_secret(secret_key):
+    raise ConfigurationError(
+      f'The session secret is weak (minimum {MIN_SECRET_LENGTH} characters; '
+      f'generate one with {_GENERATE_HINT})'
+    )
+  return secret_key
+
+
 _UNSAFE_METHODS = frozenset({'POST', 'PUT', 'PATCH', 'DELETE'})
 
 

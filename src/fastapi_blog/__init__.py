@@ -16,7 +16,7 @@ from .router import get_blog_router
 
 
 if TYPE_CHECKING:
-  from .admin import Admin, add_admin_to_app
+  from .admin import Admin, AuthProvider, AuthProviderFactory, add_admin_to_app
 
 
 __version__ = '0.10.0'
@@ -27,7 +27,7 @@ _ADMIN_EXTRA_HINT = (
 
 # Names loaded on first access, so that `import fastapi_blog` doesn't import
 # anything from the admin panel (see `__getattr__`)
-_LAZY_ADMIN_NAMES = ('Admin', 'add_admin_to_app')
+_LAZY_ADMIN_NAMES = ('Admin', 'AuthProviderFactory', 'add_admin_to_app')
 
 
 def _import_admin() -> Any:
@@ -85,6 +85,8 @@ def setup_fastapi_blog(
   auth_users: dict[str, dict[str, str]] | None = None,
   translations_dir: str | pathlib.Path | None = None,
   configure_admin: Callable[[str, 'Admin'], None] | None = None,
+  auth_provider: 'AuthProvider | AuthProviderFactory | None' = None,
+  api_auth_dependency: Callable[..., Any] | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
@@ -109,6 +111,9 @@ def setup_fastapi_blog(
       insecure_dev: Explicitly allow the old development credentials (unsafe).
       https_only: Mark the session cookie Secure (HTTPS only).
       auth_users: Optional additional admin-panel accounts with password/role.
+      auth_provider: Starlette Admin provider instance or locale-to-provider
+          factory for the admin UI. The host application owns authentication.
+      api_auth_dependency: Optional independent auth dependency for the REST API.
       enable_role_management: Add the role management views to the admin panel.
       frontmatter_schema: Custom schema of the post frontmatter.
       seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
@@ -153,24 +158,68 @@ def setup_fastapi_blog(
   # Fail early (before any route is added) if the admin panel is unavailable
   add_admin = _import_admin().add_admin_to_app if admin else None
 
-  # Resolve environment values once; the admin setup validates that a
-  # password and strong session secret exist unless insecure_dev is explicit.
-  if admin_username is None:
-    admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN')
-  if admin_password is None:
-    admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
-
-  if add_admin is not None and not insecure_dev:
-    from .security import resolve_admin_credentials
-
-    admin_username, admin_password, secret_key = resolve_admin_credentials(
-      admin_username, admin_password, secret_key
+  if auth_provider is not None and not admin:
+    raise ConfigurationError('auth_provider requires admin=True.')
+  if auth_provider is not None and (
+    admin_username is not None
+    or admin_password is not None
+    or auth_users is not None
+  ):
+    raise ConfigurationError(
+      'auth_provider cannot be combined with admin_username, admin_password, '
+      'or auth_users; configure authentication in the provider only.'
     )
+
+  if auth_provider is not None and add_admin is not None:
+    provider_locales = list(locales)
+    if not provider_locales or len(set(provider_locales)) != len(
+      provider_locales
+    ):
+      raise ValueError('locales must contain at least one unique locale.')
+    if default_locale not in provider_locales:
+      raise ValueError(
+        f"default_locale '{default_locale}' must be in locales list "
+        f'{provider_locales}'
+      )
+    admin_module = _import_admin()
+    providers = admin_module._resolve_auth_providers(
+      auth_provider,
+      provider_locales,
+      default_locale=default_locale,
+      admin_username='admin',
+      admin_password='',
+      auth_users=None,
+      translations_dir=translations_dir,
+    )
+
+    def resolved_auth_provider(locale: str) -> Any:
+      return providers[locale]
+
+    auth_provider = resolved_auth_provider
+
+  # Resolve credentials once for the legacy admin and API authentication path.
+  if auth_provider is None:
+    if admin_username is None:
+      admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN')
+    if admin_password is None:
+      admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
+
+    if add_admin is not None and not insecure_dev:
+      from .security import resolve_admin_credentials
+
+      admin_username, admin_password, secret_key = resolve_admin_credentials(
+        admin_username, admin_password, secret_key
+      )
+  elif admin:
+    from .security import resolve_session_secret
+
+    secret_key = resolve_session_secret(secret_key)
 
   add_blog_to_fastapi(
     app,
     posts_dirname=posts_dirname,
     include_api=include_api,
+    api_auth_dependency=api_auth_dependency,
     locales=locales,
     default_locale=default_locale,
     admin_username=admin_username,
@@ -204,4 +253,5 @@ def setup_fastapi_blog(
     sanitize_html=sanitize_html,
     translations_dir=translations_dir,
     configure_admin=configure_admin,
+    auth_provider=auth_provider,
   )

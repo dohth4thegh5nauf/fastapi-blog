@@ -21,6 +21,9 @@ Changes planned for version 0.10.0.
 - Added a `configure_admin(locale, admin)` hook to register custom Starlette
   Admin views before each localized panel is mounted. The hook is also exposed
   through `setup_fastapi_blog()`.
+- Added host-supplied Starlette Admin authentication providers to
+  `add_admin_to_app()` and `setup_fastapi_blog()`, with per-locale factories,
+  construction-time validation and explicit separation from REST API auth.
 - Added multi-locale content collections: project and collection i18n
   configuration, localized storage with rollback and `DocumentService`
   integration, validation modes, ETags, events, REST routes and translation
@@ -58,6 +61,11 @@ Changes planned for version 0.10.0.
 
 ### Changed
 
+- Moved the fixed-credential provider to the demo application. Legacy login
+  parameters remain available through a private compatibility adapter and
+  cannot be combined with an external provider.
+- Updated runnable demos to create explicit providers and clarified that the
+  User and Role views manage CRUD records, not host authentication accounts.
 - The core package runs without the admin or JSON-LD extras. Admin imports are
   lazy, and `setup_fastapi_blog(admin=False)` does not require the admin extra.
 - The post-list cache detects external file changes from directory signatures.
@@ -96,6 +104,8 @@ Changes planned for version 0.10.0.
 
 ### Removed
 
+- Removed the public `SimpleAuthProvider` export and the unused
+  database-backed `RBACAuthProvider` implementation.
 - Removed unused Redis and PyJWT dependencies and superseded CI workflows.
 
 ### Security

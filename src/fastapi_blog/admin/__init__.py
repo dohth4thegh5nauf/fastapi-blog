@@ -3,7 +3,7 @@
 Provides starlette-admin based administration interface with:
 - User management
 - Post management with WYSIWYG editor
-- Simple authentication provider
+- Starlette Admin authentication provider integration
 """
 
 import logging
@@ -14,14 +14,15 @@ from collections.abc import Callable, Mapping
 
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
+from starlette_admin.auth import AuthProvider
 from starlette_admin.contrib.sqla import Admin
 from starlette_admin.i18n import I18nConfig
 
 from ..config import CollectionSpec
 from ..models import FrontmatterSchema
 from ..permissions import Authorizer
-from ..security import resolve_admin_credentials
-from .auth_provider import SimpleAuthProvider
+from ..security import resolve_admin_credentials, resolve_session_secret
+from ._legacy_auth_provider import _LegacyAuthProvider
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
 from .models import Post, Role, User, UserWithRoles
@@ -52,11 +53,11 @@ logger = logging.getLogger('fastapi_blog.admin')
 
 __all__ = [
   'add_admin_to_app',
+  'AuthProviderFactory',
   'User',
   'Post',
   'Role',
   'UserWithRoles',
-  'SimpleAuthProvider',
   'UserModelView',
   'PostModelView',
   'HomeView',
@@ -66,6 +67,92 @@ __all__ = [
   'TagsField',
   'SlugField',
 ]
+
+AuthProviderFactory = Callable[[str], AuthProvider]
+
+
+def _resolve_auth_providers(
+  auth_provider: AuthProvider | AuthProviderFactory | None,
+  locales: list[str],
+  *,
+  default_locale: str,
+  admin_username: str,
+  admin_password: str,
+  auth_users: Mapping[str, Mapping[str, str]] | None,
+  translations_dir: str | pathlib.Path | None,
+) -> dict[str, AuthProvider]:
+  """Build and validate one independent provider for each admin locale."""
+
+  def validate_provider(provider: object, locale: str) -> AuthProvider:
+    from ..auth import ConfigurationError
+
+    if not isinstance(provider, AuthProvider):
+      raise ConfigurationError(
+        f'The auth_provider factory returned an invalid provider for '
+        f'locale {locale!r}; expected starlette_admin.auth.AuthProvider.'
+      )
+    missing_methods = [
+      method_name
+      for method_name in ('login', 'authenticate', 'logout')
+      if getattr(type(provider), method_name)
+      is getattr(AuthProvider, method_name)
+    ]
+    if missing_methods:
+      raise ConfigurationError(
+        f'The auth provider for locale {locale!r} must implement '
+        f'{", ".join(missing_methods)}().'
+      )
+    return provider
+
+  if auth_provider is None:
+    return {
+      locale: _LegacyAuthProvider(
+        username=admin_username,
+        password=admin_password,
+        redirect_after_login=(
+          '/admin/user/list'
+          if locale == default_locale
+          else f'/{locale}/admin/user/list'
+        ),
+        locale=locale,
+        users=auth_users,
+        translations_dir=(str(translations_dir) if translations_dir else None),
+      )
+      for locale in locales
+    }
+
+  if isinstance(auth_provider, AuthProvider):
+    if len(locales) != 1:
+      from ..auth import ConfigurationError
+
+      raise ConfigurationError(
+        'A single auth_provider instance can only be used with one locale. '
+        'Pass a locale-to-provider factory for localized admin panels.'
+      )
+    return {locales[0]: validate_provider(auth_provider, locales[0])}
+
+  if not callable(auth_provider):
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      'auth_provider must be a Starlette Admin AuthProvider instance or a '
+      'factory accepting a locale.'
+    )
+
+  providers: dict[str, AuthProvider] = {}
+  identities: set[int] = set()
+  for locale in locales:
+    provider = validate_provider(auth_provider(locale), locale)
+    if id(provider) in identities:
+      from ..auth import ConfigurationError
+
+      raise ConfigurationError(
+        'The auth_provider factory must return a fresh provider instance '
+        'for every locale.'
+      )
+    identities.add(id(provider))
+    providers[locale] = provider
+  return providers
 
 
 def _session_middleware_options(app: FastAPI) -> dict | None:
@@ -130,7 +217,6 @@ def _create_admin_for_locale(
   collection_spec: CollectionSpec | None = None,
   collection_specs: Mapping[str, CollectionSpec] | None = None,
   authorize: Authorizer | None = None,
-  auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
   translations_dir: str | pathlib.Path | None = None,
 ) -> Admin:
@@ -157,8 +243,6 @@ def _create_admin_for_locale(
           `posts_dirname`/`frontmatter_schema` for the managed collection
       authorize: Shared `(request, resource, action) -> bool` permission
           callback; the default authorizer is used when not given
-      auth_users: Extra users (besides `admin_username`) allowed to sign in
-          to the admin panel, mapped to their password hashes
       collection_specs: All collections of the project, keyed by name; used
           to resolve `link` fields that point at another collection
       sanitize_html: Sanitize the admin Markdown preview like public pages
@@ -361,6 +445,7 @@ def add_admin_to_app(
   sanitize_html: bool = True,
   translations_dir: str | pathlib.Path | None = None,
   configure_admin: Callable[[str, Admin], None] | None = None,
+  auth_provider: AuthProvider | AuthProviderFactory | None = None,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -384,6 +469,8 @@ def add_admin_to_app(
       mounted. Use it to add supported Starlette Admin views.
     authorize: Shared `(request, resource, action) -> bool` permission callback.
     auth_users: Optional extra login accounts mapped to password and role.
+    auth_provider: A Starlette Admin provider instance (one locale only) or
+      factory called once per locale. The host application owns authentication.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
     init_database: Whether to initialize database on startup (default: True)
     locales: List of available locales (default: ['en', 'ru'])
@@ -469,13 +556,14 @@ def add_admin_to_app(
     else:
       frontmatter_schema = collection_spec.schema
 
-  admin_username, admin_password, secret_key = resolve_admin_credentials(
-    admin_username, admin_password, secret_key, insecure_dev=insecure_dev
-  )
-
   # Set default locales if not provided
   if locales is None:
     locales = ['en', 'ru']
+  else:
+    locales = list(locales)
+
+  if not locales or len(set(locales)) != len(locales):
+    raise ValueError('locales must contain at least one unique locale.')
 
   if default_locale is None:
     default_locale = 'en'  # Default to English
@@ -485,6 +573,44 @@ def add_admin_to_app(
     raise ValueError(
       f"default_locale '{default_locale}' must be in locales list {locales}"
     )
+
+  if auth_provider is not None:
+    if (
+      admin_username is not None
+      or admin_password is not None
+      or auth_users is not None
+    ):
+      from ..auth import ConfigurationError
+
+      raise ConfigurationError(
+        'auth_provider cannot be combined with admin_username, '
+        'admin_password, or auth_users; configure authentication in the '
+        'provider only.'
+      )
+    secret_key = resolve_session_secret(secret_key)
+    resolved_admin_username = 'admin'
+    resolved_admin_password = ''
+  else:
+    (
+      resolved_admin_username,
+      resolved_admin_password,
+      secret_key,
+    ) = resolve_admin_credentials(
+      admin_username,
+      admin_password,
+      secret_key,
+      insecure_dev=insecure_dev,
+    )
+
+  locale_auth_providers = _resolve_auth_providers(
+    auth_provider,
+    locales,
+    default_locale=default_locale,
+    admin_username=resolved_admin_username,
+    admin_password=resolved_admin_password,
+    auth_users=auth_users,
+    translations_dir=translations_dir,
+  )
 
   # Add session middleware if needed (must be added AFTER CORS).
   existing_session = _validate_existing_session_middleware(
@@ -564,33 +690,23 @@ def add_admin_to_app(
   admins = {}
 
   # Create main admin for default locale (no locale in URL)
-  default_auth_provider = SimpleAuthProvider(
-    username=admin_username,
-    password=admin_password,
-    redirect_after_login='/admin/user/list',
-    locale=default_locale,
-    users=auth_users,
-    translations_dir=str(translations_dir) if translations_dir else None,
-  )
-
   default_admin = _create_admin_for_locale(
     locale=default_locale,
     engine=engine,
     title=title,
     base_url='/admin',
-    auth_provider=default_auth_provider,
+    auth_provider=locale_auth_providers[default_locale],
     templates_dir=templates_dir,
     available_locales=locales,
     default_locale=default_locale,
     secret_key=secret_key,
     enable_role_management=enable_role_management,
-    admin_username=admin_username,
+    admin_username=resolved_admin_username,
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
     collection_specs=collection_specs,
     authorize=authorize,
-    auth_users=auth_users,
     sanitize_html=sanitize_html,
     translations_dir=translations_dir,
   )
@@ -606,33 +722,23 @@ def add_admin_to_app(
     if locale == default_locale:
       continue  # Skip default - already mounted
 
-    auth_provider = SimpleAuthProvider(
-      username=admin_username,
-      password=admin_password,
-      redirect_after_login=f'/{locale}/admin/user/list',
-      locale=locale,
-      users=auth_users,
-      translations_dir=str(translations_dir) if translations_dir else None,
-    )
-
     admin = _create_admin_for_locale(
       locale=locale,
       engine=engine,
       title=title,
       base_url=f'/{locale}/admin',
-      auth_provider=auth_provider,
+      auth_provider=locale_auth_providers[locale],
       templates_dir=templates_dir,
       available_locales=locales,
       default_locale=default_locale,
       secret_key=secret_key,
       enable_role_management=enable_role_management,
-      admin_username=admin_username,
+      admin_username=resolved_admin_username,
       frontmatter_schema=frontmatter_schema,
       posts_dirname=posts_dirname,
       collection_spec=collection_spec,
       collection_specs=collection_specs,
       authorize=authorize,
-      auth_users=auth_users,
       sanitize_html=sanitize_html,
       translations_dir=translations_dir,
     )

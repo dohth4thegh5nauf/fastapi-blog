@@ -18,13 +18,13 @@ Test users:
     viewer / password    - Read-only access (viewer role)
 """
 
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.contrib.sqla import Admin, ModelView
 from starlette_admin.exceptions import FormValidationError, LoginFailed
@@ -71,8 +71,7 @@ class RoleBasedAuthProvider(AuthProvider):
     password: str,
     remember_me: bool,
     request: Request,
-    response: Response,
-  ) -> Response:
+  ) -> None:
     """Authenticate user and save to session."""
     # Form validation
     if len(username) < 3:
@@ -82,34 +81,31 @@ class RoleBasedAuthProvider(AuthProvider):
 
     # Check credentials
     user = USERS.get(username)
-    if user and user['password'] == password:
+    if user and secrets.compare_digest(user['password'], password):
       # Save username in session
       request.session.update({'username': username})
-      return response
+      return None
 
     raise LoginFailed('Invalid username or password')
 
-  async def is_authenticated(self, request: Request) -> bool:
-    """Check if user is authenticated."""
+  async def authenticate(self, request: Request) -> AdminUser | None:
+    """Resolve the demo identity and expose it to view permissions."""
     username = request.session.get('username')
     if username in USERS:
-      # Save user info in request state for access in views
       request.state.user = USERS[username]
-      return True
-    return False
+      request.state.blog_user = {
+        'username': username,
+        'role': username,
+        'is_admin': 'admin' in USERS[username]['roles'],
+      }
+      user = USERS[username]
+      return AdminUser(username=user['name'], photo_url=user['avatar'])
+    return None
 
-  def get_admin_user(self, request: Request) -> AdminUser | None:
-    """Get admin user with photo."""
-    user = request.state.user
-    return AdminUser(
-      username=user['name'],
-      photo_url=user['avatar'],
-    )
-
-  async def logout(self, request: Request, response: Response) -> Response:
+  async def logout(self, request: Request) -> None:
     """Clear session on logout."""
     request.session.clear()
-    return response
+    return None
 
 
 class UserView(ModelView):
@@ -173,11 +169,14 @@ admin = Admin(
   title='Blog Admin (RBAC)',
   base_url='/admin',
   auth_provider=RoleBasedAuthProvider(),
+  secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
 )
 
 # Add views with role-based permissions
 admin.add_view(UserView(User, icon='fa fa-users'))
-admin.add_view(PostView(Post, icon='fa fa-blog', label='Blog Posts'))
+post_view = PostView(Post, icon='fa fa-blog')
+post_view.menu_label = 'Blog Posts'
+admin.add_view(post_view)
 
 admin.mount_to(app)
 

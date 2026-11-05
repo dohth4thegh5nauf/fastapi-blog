@@ -21,10 +21,15 @@ pip install fastapi-blog
 ```python
 from fastapi import FastAPI
 import fastapi_blog
+from demo_auth import create_demo_auth_provider
 
 app = FastAPI()
 fastapi_blog.add_blog_to_fastapi(app)
-fastapi_blog.add_admin_to_app(app)
+fastapi_blog.add_admin_to_app(
+  app,
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
+  secret_key='demo-only-session-secret-0123456789abcdef0123456789',
+)
 ```
 
 That's it! Your blog is ready.

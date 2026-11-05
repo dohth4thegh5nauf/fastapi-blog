@@ -42,8 +42,8 @@ def _yaml_translator(
   return _
 
 
-class SimpleAuthProvider(AuthProvider):
-  """Simple authentication provider for admin panel.
+class _LegacyAuthProvider(AuthProvider):
+  """Compatibility provider for legacy username/password configuration.
 
   Uses explicitly configured credentials and assigns a role to each session.
   """

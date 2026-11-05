@@ -48,7 +48,7 @@ fastapi-blog/
 │   ├── store.py                 # Хранилище документов (Collection, DocumentStore)
 │   ├── admin/                   # Административная панель
 │   │   ├── __init__.py          # add_admin_to_app()
-│   │   ├── auth_provider.py     # Аутентификация
+│   │   ├── _legacy_auth_provider.py # Временная совместимость логина
 │   │   ├── database.py          # SQLAlchemy + async
 │   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # ModelViews для админки
@@ -117,7 +117,7 @@ fastapi-blog/
 **Admin panel:**
 - Session-based authentication
 - SessionMiddleware + signed cookies
-- SimpleAuthProvider (hardcoded credentials для dev)
+- Внешний Starlette Admin `AuthProvider`; временный legacy-путь доступен только для совместимости
 - В production: интеграция с БД пользователей
 
 **REST API (опционально):**
@@ -220,7 +220,7 @@ fastapi-blog/
 
 **`add_admin_to_app(app, **kwargs)`**
 - Добавляет только админ-панель
-- Параметры: locales, admin_username, admin_password, enable_role_management
+- Параметры: locales, auth_provider, legacy admin_username/admin_password, enable_role_management
 
 ### Примеры использования:
 
