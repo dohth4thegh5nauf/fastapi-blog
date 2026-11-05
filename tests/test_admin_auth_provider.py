@@ -61,6 +61,19 @@ class IncompleteAuthProvider(AuthProvider):
   """Provider stub used to check construction-time interface validation."""
 
 
+class InvalidSignatureAuthProvider(AuthProvider):
+  """Provider with an incompatible login signature."""
+
+  async def login(self, request: Request) -> Response | None:
+    return None
+
+  async def authenticate(self, request: Request) -> AdminUser | None:
+    return None
+
+  async def logout(self, request: Request) -> Response | None:
+    return None
+
+
 class IdentityView(CustomView):
   def __init__(self, locale: str):
     """Create a test view that exposes the host user identity."""
@@ -215,6 +228,20 @@ def test_provider_must_implement_auth_lifecycle_at_construction():
     fastapi_blog.add_admin_to_app(
       app,
       auth_provider=IncompleteAuthProvider(),
+      secret_key='s' * 64,
+      locales=['en'],
+      default_locale='en',
+    )
+
+
+def test_provider_signature_is_validated_at_construction():
+  app = FastAPI()
+  with pytest.raises(
+    ConfigurationError, match=r'incompatible login\(\) signature'
+  ):
+    fastapi_blog.add_admin_to_app(
+      app,
+      auth_provider=InvalidSignatureAuthProvider(),
       secret_key='s' * 64,
       locales=['en'],
       default_locale='en',

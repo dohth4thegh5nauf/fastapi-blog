@@ -6,6 +6,7 @@ Provides starlette-admin based administration interface with:
 - Starlette Admin authentication provider integration
 """
 
+import inspect
 import logging
 import os
 import pathlib
@@ -102,6 +103,16 @@ def _resolve_auth_providers(
         f'The auth provider for locale {locale!r} must implement '
         f'{", ".join(missing_methods)}().'
       )
+    call_arities = {'login': 4, 'authenticate': 1, 'logout': 1}
+    for method_name, arity in call_arities.items():
+      method = getattr(provider, method_name)
+      try:
+        inspect.signature(method).bind(*([object()] * arity))
+      except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+          f'The auth provider for locale {locale!r} has an incompatible '
+          f'{method_name}() signature for Starlette Admin.'
+        ) from exc
     return provider
 
   if auth_provider is None:
