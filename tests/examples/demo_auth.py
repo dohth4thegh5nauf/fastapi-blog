@@ -24,8 +24,8 @@ class DemoAuthProvider(AuthProvider):
     request: Request,
   ) -> Response | None:
     """Validate the demo credentials and establish a signed session."""
-    valid_username = secrets.compare_digest(username, 'admin')
-    valid_password = secrets.compare_digest(password, 'Admin123!')
+    valid_username = secrets.compare_digest(username.encode(), b'admin')
+    valid_password = secrets.compare_digest(password.encode(), b'Admin123!')
     if not (valid_username and valid_password):
       raise LoginFailed('Invalid username or password')
 

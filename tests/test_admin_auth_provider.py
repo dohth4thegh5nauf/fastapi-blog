@@ -3,6 +3,8 @@
 import asyncio
 import re
 import secrets
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -217,3 +219,16 @@ def test_provider_must_implement_auth_lifecycle_at_construction():
       locales=['en'],
       default_locale='en',
     )
+
+
+def test_demo_provider_rejects_non_ascii_credentials_without_server_error(
+  monkeypatch,
+):
+  monkeypatch.syspath_prepend(str(Path(__file__).parent / 'examples'))
+  from demo_auth import DemoAuthProvider
+
+  provider = DemoAuthProvider('en')
+  request = SimpleNamespace(session={})
+
+  with pytest.raises(LoginFailed):
+    asyncio.run(provider.login('админ', 'пароль', False, request))
