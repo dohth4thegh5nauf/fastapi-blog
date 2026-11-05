@@ -476,7 +476,7 @@ class DocumentService:
       if len(entries) != 1 or self.collection_spec.slug_template is None:
         raise ValueError('A blank slug is valid for one generated entry only')
       locale_documents = entries['']
-      canonical = self.i18n_documents.config.default_locale
+      canonical = adapter.config.default_locale
       if canonical not in locale_documents:
         raise ValueError(
           f'Cannot generate a slug without the canonical {canonical!r} document'
@@ -485,7 +485,7 @@ class DocumentService:
       with self.documents._lock:
         slug = self.collection_spec.make_slug(
           frontmatter,
-          [entry.slug for entry in self.i18n_documents.list()],
+          [entry.slug for entry in adapter.list()],
           request_context=request_context,
         )
       entries = {slug: locale_documents}
