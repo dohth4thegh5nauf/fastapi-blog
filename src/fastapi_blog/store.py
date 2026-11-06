@@ -49,8 +49,8 @@ DEFAULT_SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,99}$')
 
 # One path segment (directory level or file name) of the default slug shape,
 # used to expand the `{dirname}`/`{filename}` placeholders of a template
-# `slug_pattern`. Plain `.replace()` preserves every other regex token
-# in the pattern (including `{m,n}` quantifiers) survives untouched.
+# `slug_pattern`. Plain `.replace()` leaves every other regex token in the
+# pattern untouched, including `{m,n}` quantifiers.
 _SLUG_SEGMENT = r'[a-z0-9][a-z0-9-]{0,99}'
 
 

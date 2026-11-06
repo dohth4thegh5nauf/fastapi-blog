@@ -335,10 +335,10 @@ def get_api_router(
   ) -> tuple[str, str]:
     """Write through the shared document service, mapping failures to HTTP.
 
-    The service checks configured uniqueness, writes, runs the blocking
-    validators and rolls back on a blocking outcome: a blocking
-    outcome restores the previous bytes (or removes a just-created file) and
-    raises HTTP 422 with the findings. Between the write and a rollback the
+    The service checks configured uniqueness, writes the document and runs
+    the blocking validators. If a validator blocks the write, the service
+    restores the previous bytes (or removes a just-created file) and raises
+    HTTP 422 with the findings. Between the write and a rollback the
     new content is on disk and visible to concurrent readers; checking a
     temporary copy first is out of scope.
     """
