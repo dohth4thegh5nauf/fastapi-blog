@@ -201,6 +201,12 @@ html[data-bs-theme='dark']
 html[data-bs-theme='dark'] .select2-results__option[aria-disabled='true'] {
   color: var(--tblr-secondary);
 }
+/* Keep Tabler's button foreground when dark-mode hover styles are applied;
+   brighten the button's own surface without changing its text contrast. */
+html[data-bs-theme='dark'] .btn {
+  --tblr-btn-hover-color: var(--tblr-btn-color);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--tblr-btn-bg) 90%, white);
+}
 html[data-bs-theme='dark'] .flatpickr-calendar {
   color: var(--tblr-body-color);
   background: var(--tblr-bg-surface);
