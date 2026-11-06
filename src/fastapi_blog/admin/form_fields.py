@@ -27,10 +27,11 @@ _REQUIRABLE_KINDS = (
   'link_list',
 )
 _ISO_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+_POST_ROLES = frozenset(
+  {'title', 'date', 'published', 'status', 'tags', 'description'}
+)
 _SEO_ROLES = frozenset(
   {
-    'title',
-    'description',
     'seo_title',
     'canonical',
     'robots',
@@ -175,9 +176,11 @@ def _group(
       or p.name
       for p in parents
     )
+  if spec.role in _POST_ROLES:
+    return 'Post metadata'
   if spec.role in _SEO_ROLES:
     return 'SEO'
-  return ''
+  return 'Additional metadata'
 
 
 def _choices_for(

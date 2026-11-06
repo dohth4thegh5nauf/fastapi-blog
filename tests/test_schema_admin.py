@@ -492,6 +492,7 @@ def test_form_groups_seo_fields_and_shows_configured_counters():
     fields=(
       FieldSpec('title', role='title'),
       FieldSpec('summary', role='description'),
+      FieldSpec('seo_title', role='seo_title'),
       FieldSpec(
         'metadata',
         type='object',
@@ -513,15 +514,17 @@ def test_form_groups_seo_fields_and_shows_configured_counters():
     {
       'title': 'Example',
       'summary': 'Description',
+      'seo_title': 'Search result title',
       'metadata': {'url': 'https://example.org/source'},
       'references': [{'label': 'Reference', 'url': 'https://example.org/ref'}],
     },
   )
   by_name = {field['name']: field for field in fields}
-  assert by_name['title']['group'] == 'SEO'
+  assert by_name['title']['group'] == 'Post metadata'
   assert by_name['title']['counter_max'] == 55
-  assert by_name['summary']['group'] == 'SEO'
+  assert by_name['summary']['group'] == 'Post metadata'
   assert by_name['summary']['counter_max'] == 145
+  assert by_name['seo_title']['group'] == 'SEO'
   assert by_name['metadata__source_url']['path'] == ['metadata', 'url']
   assert by_name['references']['kind'] == 'object_list'
   assert by_name['references']['children'][1]['key'] == 'url'
