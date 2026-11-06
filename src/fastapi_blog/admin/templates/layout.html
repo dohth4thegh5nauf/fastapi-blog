@@ -148,6 +148,103 @@ html[data-bs-theme='dark'] .editor-toolbar i.separator {
   border-left-color: var(--tblr-border-color);
   border-right-color: transparent;
 }
+/* Select2 appends its open dropdown to `body`, so theme the popup itself as
+   well as the select control. */
+html[data-bs-theme='dark'] .select2-container--default .select2-selection,
+html[data-bs-theme='dark'] .select2-dropdown,
+html[data-bs-theme='dark'] .select2-search--dropdown .select2-search__field,
+html[data-bs-theme='dark'] select.form-select,
+html[data-bs-theme='dark'] select.form-select option {
+  color: var(--tblr-body-color);
+  background-color: var(--tblr-bg-forms);
+  border-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark'] .select2-results__option[aria-selected='true'] {
+  color: var(--tblr-body-color);
+  background-color: var(--tblr-bg-surface-secondary);
+}
+html[data-bs-theme='dark']
+  .select2-container--default
+  .select2-results__option--highlighted[aria-selected] {
+  color: #fff;
+  background-color: var(--tblr-primary);
+}
+html[data-bs-theme='dark'] .select2-results__option[aria-disabled='true'] {
+  color: var(--tblr-secondary);
+}
+html[data-bs-theme='dark'] .flatpickr-calendar {
+  color: var(--tblr-body-color);
+  background: var(--tblr-bg-surface);
+  border-color: var(--tblr-border-color);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 40%);
+}
+html[data-bs-theme='dark'] .flatpickr-calendar.arrowTop::before {
+  border-bottom-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark'] .flatpickr-calendar.arrowTop::after {
+  border-bottom-color: var(--tblr-bg-surface);
+}
+html[data-bs-theme='dark'] .flatpickr-calendar.arrowBottom::before {
+  border-top-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark'] .flatpickr-calendar.arrowBottom::after {
+  border-top-color: var(--tblr-bg-surface);
+}
+html[data-bs-theme='dark'] .flatpickr-months .flatpickr-month,
+html[data-bs-theme='dark'] .flatpickr-months .flatpickr-prev-month,
+html[data-bs-theme='dark'] .flatpickr-months .flatpickr-next-month,
+html[data-bs-theme='dark'] .flatpickr-current-month .flatpickr-monthDropdown-months,
+html[data-bs-theme='dark'] .flatpickr-current-month input.cur-year,
+html[data-bs-theme='dark'] span.flatpickr-weekday,
+html[data-bs-theme='dark'] .flatpickr-day,
+html[data-bs-theme='dark'] .flatpickr-time input,
+html[data-bs-theme='dark'] .flatpickr-time .flatpickr-am-pm {
+  color: var(--tblr-body-color);
+  fill: var(--tblr-body-color);
+}
+html[data-bs-theme='dark'] .flatpickr-current-month .flatpickr-monthDropdown-months,
+html[data-bs-theme='dark'] .flatpickr-time input,
+html[data-bs-theme='dark'] .flatpickr-time .flatpickr-am-pm {
+  background-color: var(--tblr-bg-forms);
+}
+html[data-bs-theme='dark'] .flatpickr-time {
+  border-top-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark'] .flatpickr-time .numInputWrapper span.arrowUp::after {
+  border-bottom-color: var(--tblr-body-color);
+}
+html[data-bs-theme='dark'] .flatpickr-time .numInputWrapper span.arrowDown::after {
+  border-top-color: var(--tblr-body-color);
+}
+html[data-bs-theme='dark'] .flatpickr-day:hover,
+html[data-bs-theme='dark'] .flatpickr-day:focus {
+  color: var(--tblr-body-color);
+  background-color: var(--tblr-bg-surface-secondary);
+  border-color: var(--tblr-bg-surface-secondary);
+}
+html[data-bs-theme='dark'] .flatpickr-day.today:not(.selected) {
+  border-color: var(--tblr-primary);
+}
+html[data-bs-theme='dark'] .flatpickr-day.selected,
+html[data-bs-theme='dark'] .flatpickr-day.startRange,
+html[data-bs-theme='dark'] .flatpickr-day.endRange,
+html[data-bs-theme='dark'] .flatpickr-day.selected:hover,
+html[data-bs-theme='dark'] .flatpickr-day.startRange:hover,
+html[data-bs-theme='dark'] .flatpickr-day.endRange:hover {
+  color: #fff;
+  background-color: var(--tblr-primary);
+  border-color: var(--tblr-primary);
+}
+html[data-bs-theme='dark'] .flatpickr-day.prevMonthDay,
+html[data-bs-theme='dark'] .flatpickr-day.nextMonthDay,
+html[data-bs-theme='dark'] .flatpickr-day.inRange,
+html[data-bs-theme='dark'] .flatpickr-day.flatpickr-disabled {
+  color: var(--tblr-secondary);
+}
+html[data-bs-theme='dark'] .flatpickr-day.inRange {
+  background-color: var(--tblr-bg-surface-secondary);
+  border-color: var(--tblr-bg-surface-secondary);
+}
 @media (min-width: 992px) {
   /* Narrow the sidebar from Tabler's default 15rem to 14rem. The width and
      the sibling margin-left (which makes room for the fixed sidebar) must

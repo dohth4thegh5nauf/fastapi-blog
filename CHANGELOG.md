@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.10.0.
 
 ### Added
+- Added a locally bundled `vanilla-jsoneditor` permissions editor to the
+  Roles admin form, retaining server-side validation and the existing
+  read-only JSON viewer.
 - Added a database-backed RBAC login to the local admin demos, seeded with an
   `admin` / `Admin123!` account and isolated from host `DATABASE_URL` settings.
 - Added editable resource/action grants to roles. The default policy applies
@@ -92,6 +95,8 @@ Changes planned for version 0.10.0.
   and publication are planned in a separate destination repository.
 
 ### Fixed
+- Fixed Select2 dropdowns and Flatpickr date/time pickers using light surfaces
+  and dark text when the admin is in dark theme.
 
 - Hash passwords created through the `UserWithRoles` admin view and hide
   password hashes from user details and edit forms.

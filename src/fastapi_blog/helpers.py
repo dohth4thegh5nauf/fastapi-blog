@@ -261,8 +261,8 @@ def load_content_from_markdown_file(
   Args:
       path: Markdown file to read.
       sanitize: Sanitize the rendered HTML (as the blog does for posts).
-      schema: Frontmatter schema pages validate against; defaults
-          to `PAGES_SCHEMA`, the fields pages have always had). Unknown keys
+      schema: Frontmatter schema pages validate against. Defaults to
+          `PAGES_SCHEMA`, the fields pages have always had. Unknown keys
           are kept (`extra: 'allow'`); a page that doesn't match the schema
           is still served, with its raw frontmatter.
 

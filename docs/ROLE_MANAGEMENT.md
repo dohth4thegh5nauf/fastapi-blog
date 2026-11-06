@@ -113,7 +113,9 @@ for locale, admin in admins.items():
 
 ### Configure Role Permissions
 
-The Role admin view includes a JSON permissions editor. Each resource maps to
+The Role admin view includes `vanilla-jsoneditor` 3.13.0, locally bundled under
+its ISC license. This dependency is scoped to the role permissions field; other
+Starlette Admin JSON fields keep their standard editor. Each resource maps to
 the allowed actions; for example, a read-only editorial role can be configured
 as:
 

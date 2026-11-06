@@ -3,11 +3,13 @@
 Provides enhanced field types for markdown content and tags.
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from starlette.datastructures import FormData
 from starlette.requests import Request
-from starlette_admin.fields import BaseField, TextAreaField
+from starlette_admin.fields import BaseField, JSONField, TextAreaField
+from starlette_admin.helpers import static_url
 
 
 class MarkdownField(TextAreaField):
@@ -198,3 +200,20 @@ class SlugField(BaseField):
       )
 
     return value
+
+
+@dataclass
+class RolePermissionsJSONField(JSONField):
+  """JSON field rendered with the locally bundled vanilla JSON editor."""
+
+  form_template: str = 'fields/form/role_permissions_json.html'
+
+  def additional_css_links(self, request: Request) -> list[str]:
+    if self._needs_form_assets(request):
+      return [static_url(request, 'css/jse-theme-dark.css', v='3.13.0')]
+    return super().additional_css_links(request)
+
+  def additional_js_links(self, request: Request) -> list[str]:
+    if self._needs_form_assets(request):
+      return []
+    return super().additional_js_links(request)
