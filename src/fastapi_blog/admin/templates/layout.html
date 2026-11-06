@@ -88,6 +88,9 @@ aside.navbar-vertical.navbar-expand-lg {
   height: 1em;
   margin: 0;
 }
+.card-table .post-slug code {
+  padding: 4px;
+}
 .table .post-row-actions {
   display: inline-flex;
   flex-flow: row nowrap;
@@ -165,12 +168,44 @@ html[data-bs-theme='dark'] .select2-results__option[aria-selected='true'] {
 }
 html[data-bs-theme='dark']
   .select2-container--default
+  .select2-results__option--selected {
+  color: var(--tblr-body-color) !important;
+  background-color: rgb(255 255 255 / 12%) !important;
+}
+html[data-bs-theme='dark']
+  .select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice {
+  color: var(--tblr-body-color);
+  background-color: var(--tblr-bg-surface-secondary);
+  border-color: var(--tblr-border-color);
+}
+html[data-bs-theme='dark']
+  .select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove {
+  color: var(--tblr-secondary);
+}
+html[data-bs-theme='dark']
+  .select2-container--default
+  .select2-selection--multiple
+  .select2-selection__choice__remove:hover {
+  color: var(--tblr-body-color);
+}
+html[data-bs-theme='dark']
+  .select2-container--default
   .select2-results__option--highlighted[aria-selected] {
-  color: #fff;
-  background-color: var(--tblr-primary);
+  color: #fff !important;
+  background-color: var(--tblr-primary) !important;
 }
 html[data-bs-theme='dark'] .select2-results__option[aria-disabled='true'] {
   color: var(--tblr-secondary);
+}
+/* Keep Tabler's button foreground when dark-mode hover styles are applied;
+   brighten the button's own surface without changing its text contrast. */
+html[data-bs-theme='dark'] .btn {
+  --tblr-btn-hover-color: var(--tblr-btn-color);
+  --tblr-btn-hover-bg: color-mix(in srgb, var(--tblr-btn-bg) 90%, white);
 }
 html[data-bs-theme='dark'] .flatpickr-calendar {
   color: var(--tblr-body-color);
@@ -203,9 +238,11 @@ html[data-bs-theme='dark'] .flatpickr-time .flatpickr-am-pm {
   fill: var(--tblr-body-color);
 }
 html[data-bs-theme='dark'] .flatpickr-current-month .flatpickr-monthDropdown-months,
+html[data-bs-theme='dark'] .flatpickr-current-month .flatpickr-monthDropdown-months option,
 html[data-bs-theme='dark'] .flatpickr-time input,
 html[data-bs-theme='dark'] .flatpickr-time .flatpickr-am-pm {
   background-color: var(--tblr-bg-forms);
+  color: var(--tblr-body-color);
 }
 html[data-bs-theme='dark'] .flatpickr-time {
   border-top-color: var(--tblr-border-color);
@@ -307,8 +344,8 @@ html[data-bs-theme='dark'] .flatpickr-day.inRange {
     width: 100%;
   }
   .card-header .admin-post-search {
-    width: 100%;
-    max-width: none;
+    width: auto;
+    max-width: 100%;
   }
   .card-header .card-actions {
     width: 100%;

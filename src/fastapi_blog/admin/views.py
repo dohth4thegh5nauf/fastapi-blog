@@ -126,6 +126,7 @@ class UserModelView(_AuthorizedModelView, ModelView):
   exclude_fields_from_detail = ['hashed_password']
   exclude_fields_from_edit = ['hashed_password', 'created_at', 'updated_at']
   exclude_fields_from_create = ['created_at', 'updated_at']
+  exclude_fields_from_import = ['created_at', 'updated_at']
 
   async def before_create(
     self, request: Request, data: dict[str, Any], obj: Any
@@ -168,6 +169,7 @@ class PostModelView(_AuthorizedModelView, ModelView):
 
   exclude_fields_from_edit = ['created_at', 'updated_at']
   exclude_fields_from_create = ['created_at', 'updated_at']
+  exclude_fields_from_import = ['created_at', 'updated_at']
 
   # Make content field use textarea
   form_overrides = {

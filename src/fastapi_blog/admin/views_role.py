@@ -133,6 +133,9 @@ class RoleModelView(_RoleProtectedView):
 
   # Fields shown in list view
   fields_default_sort = [('created_at', True)]  # Sort by created_at desc
+  exclude_fields_from_create = ['created_at', 'updated_at']
+  exclude_fields_from_edit = ['created_at', 'updated_at']
+  exclude_fields_from_import = ['created_at', 'updated_at']
 
   # Search configuration
   searchable_fields = ['name', 'description']
@@ -235,6 +238,7 @@ class UserWithRolesModelView(_RoleProtectedView):
 
   # Keep the password hash available on create, but hide it from detail/edit.
   exclude_fields_from_create = ['created_at', 'updated_at']
+  exclude_fields_from_import = ['created_at', 'updated_at']
   exclude_fields_from_detail = ['hashed_password']
   exclude_fields_from_edit = [
     'hashed_password',
