@@ -230,9 +230,7 @@ def test_without_schema_the_api_is_unchanged(workdir):
 
 def test_add_editor_to_app_accepts_a_schema(workdir):
   app = FastAPI()
-  add_editor_to_app(
-    app, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA
-  )
+  add_editor_to_app(app, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA)
   response = TestClient(app).post('/api/posts/create/hello', json=VALID)
   assert response.status_code == 201
   assert (

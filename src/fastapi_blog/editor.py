@@ -884,7 +884,10 @@ def add_editor_to_app(
       )
 
       app = FastAPI()
-      add_editor_to_app(app, auth_dependency=your_auth_dependency)
+      add_editor_to_app(
+        app,
+        auth_dependency=your_auth_dependency,
+      )
       ```
 
   """

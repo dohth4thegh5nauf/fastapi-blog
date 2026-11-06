@@ -24,8 +24,6 @@ def app_with_roles():
   return app, admins
 
 
-
-
 def test_role_views_registered_when_enabled(app_with_roles):
   """Verify role views are registered when enable_role_management=True."""
   from starlette_admin import DropDown

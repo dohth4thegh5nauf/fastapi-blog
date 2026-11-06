@@ -475,19 +475,32 @@ def add_admin_to_app(
     from fastapi_blog.admin import (
       add_admin_to_app,
     )
-    from myapp.auth import create_auth_provider
+    from myapp.auth import (
+      create_auth_provider,
+    )
     import os
 
     app = FastAPI()
-    secret_key = os.environ['SECRET_KEY']
+    secret_key = (
+      os.environ[
+        'SECRET_KEY'
+      ]
+    )
 
     # The host application supplies the admin account provider.
     admins = add_admin_to_app(
       app,
       title='My Blog Admin',
-      auth_provider=lambda locale: create_auth_provider(locale),
+      auth_provider=lambda locale: (
+        create_auth_provider(
+          locale
+        )
+      ),
       secret_key=secret_key,
-      locales=['en', 'ru'],
+      locales=[
+        'en',
+        'ru',
+      ],
       default_locale='en',
     )
     ```
