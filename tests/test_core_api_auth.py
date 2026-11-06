@@ -62,6 +62,22 @@ def test_custom_dependency_replaces_the_builtin_checks():
     assert ok.status_code == 201
 
 
+def test_custom_dependency_permissions_are_enforced_by_default_policy():
+  def allow_read_only(request: Request) -> dict:
+    return {'username': 'reader', 'permissions': {'posts': ['read']}}
+
+  app = FastAPI()
+  fastapi_blog.add_blog_to_fastapi(
+    app, include_api=True, api_auth_dependency=allow_read_only
+  )
+  with TestClient(app) as client:
+    read = client.get('/api/posts/missing/raw')
+    assert read.status_code == 404
+
+    write = client.post('/api/posts/create/hello', json=PAYLOAD)
+    assert write.status_code == 403
+
+
 def test_api_without_any_auth_fails_at_startup():
   app = FastAPI()
   fastapi_blog.add_blog_to_fastapi(app, include_api=True)

@@ -427,6 +427,7 @@ def get_api_router(
         and principal is not None
         and principal.get('role') is None
         and not principal.get('is_admin')
+        and 'permissions' not in principal
       ):
         # An explicit API dependency is the host's authorization boundary.
         return principal

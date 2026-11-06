@@ -301,7 +301,7 @@ def check_token(request: Request) -> dict:
   return {'username': 'automation'}
 ```
 
-Pass it as `api_auth_dependency=check_token`. If authentication is required but no usable authentication mechanism is configured, the application reports a configuration error at startup rather than silently exposing an unusable or unprotected API.
+Pass it as `api_auth_dependency=check_token`. With no `authorize` callback, a successful identity-only result is considered authorized for API operations. Return a `role` or `permissions` mapping to have the default authorization policy evaluate those claims; an explicit `authorize` callback takes precedence. If authentication is required but no usable authentication mechanism is configured, the application reports a configuration error at startup rather than silently exposing an unusable or unprotected API.
 
 The API supports Markdown post CRUD, raw-document retrieval, and optional conditional writes. Set `require_if_match=True` on `get_api_router()` to require an `If-Match` header for update and delete requests; the ETag is obtained from the raw-document response.
 
