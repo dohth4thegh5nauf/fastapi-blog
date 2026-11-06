@@ -53,7 +53,8 @@ frontmatter_schema = FrontmatterSchema(
     FieldSpec('published', type='bool', default=False, role='published'),
     FieldSpec('tags', type='list[str]', role='tags'),
     FieldSpec('description', role='description'),
-    FieldSpec('source_slug', alias='slug', read_only=True),
+    # Preserve legacy frontmatter slugs without exposing them as an admin field.
+    FieldSpec('source_slug', alias='slug', read_only=True, hidden=True),
     FieldSpec('time_to_read', type='int'),
     FieldSpec('type'),
     FieldSpec('image', type='image'),
