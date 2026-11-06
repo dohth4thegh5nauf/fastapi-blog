@@ -22,12 +22,9 @@
             <form method="get" class="d-flex admin-post-search">
               {% if content_locale %}<input type="hidden" name="content_locale" value="{{ content_locale }}">{% endif %}
               <div class="input-group">
-                <input type="search" name="q" value="{{ search_query }}" class="form-control" placeholder="{{ t.search }}..." aria-label="{{ t.search }}" autocomplete="off">
-                <button class="btn btn-outline-secondary" type="submit" aria-label="{{ t.search }}">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="1em" height="1em" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="10.5" cy="10.5" r="7.5" />
-                    <path d="M16 16l5 5" />
-                  </svg>
+                <input type="search" name="q" value="{{ search_query }}" class="form-control" placeholder="{{ t.search }}..." aria-label="Search in list" autocomplete="off">
+                <button class="btn" type="submit" aria-label="{{ t.search }}">
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                 </button>
               </div>
             </form>
