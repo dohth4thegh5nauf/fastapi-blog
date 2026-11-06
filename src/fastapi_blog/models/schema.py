@@ -29,17 +29,17 @@ if TYPE_CHECKING:
 
 
 # Semantic roles the blog understands. Each role can be bound to one field.
-# `status` is a generalization of `published` (TODO 5.7): a field with more
+# `status` is a generalization of `published`: a field with more
 # states than just published/draft (e.g. draft/review/active/retired),
 # with `FrontmatterSchema.published_values` saying which ones count as
 # public. A schema binds one or the other, never both.
 #
-# The SEO roles (TODO 5.9.1) feed `fastapi_blog.seo`: `seo_title` (falls
+# The SEO roles feed `fastapi_blog.seo`: `seo_title` (falls
 # back to `title`), `canonical` (explicit canonical URL), `robots` (meta
 # robots directives), `image`/`image_alt` (social preview image),
 # `updated` (falls back to `date`), `author`, `lang` (falls back to the
 # request's interface locale) and `redirect_from` (previous URLs for a
-# document, TODO 5.9.5). `fastapi_blog.seo.build_head()` reads them; a
+# document). `fastapi_blog.seo.build_head()` reads them; a
 # role bound to a field changes the page only when a `SeoConfig` is in effect
 # (`redirect_from` additionally needs `seo_routes=True`).
 ROLES: tuple[str, ...] = (
@@ -63,7 +63,7 @@ ROLES: tuple[str, ...] = (
 # Keys the blog sets on every post itself, so a field can't use them as a name.
 RESERVED_NAMES: tuple[str, ...] = ('slug', 'content')
 
-# Robots directives search engines actually act on (TODO 5.9): used by the
+# Robots directives search engines actually act on: used by the
 # `robots` role's `choices`, `SeoConfig.default_robots` and the meta output.
 ROBOTS_DIRECTIVES: tuple[str, ...] = (
   'noindex',
@@ -88,7 +88,7 @@ _TYPES: dict[str, Any] = {
   # A link points to another resource: a slug of the same collection, a
   # compact IRI (`prefix:name`) or an absolute IRI. It is stored and
   # checked like `str`; `collection`/`value_field`/`filters` describe the
-  # target for the link check (TODO 6.1) and the admin autocomplete.
+  # target for the link check and the admin autocomplete.
   'link': str,
   'list[link]': list[str],
   # A file or an image is a path kept as a string (the public path).
@@ -491,7 +491,7 @@ class FieldSpec:
     _validate_nested_fields(self.fields, depth=2, parent=self.name)
 
   def _check_link_options(self) -> None:
-    """Validate `collection`/`value_field`/`filters` (TODO 5.1 link type)."""
+    """Validate `collection`/`value_field`/`filters`."""
     options = ('collection', 'value_field', 'filters')
     if not self.is_link:
       for option in options:
@@ -526,7 +526,7 @@ class FieldSpec:
     object.__setattr__(self, 'filters', tuple(cleaned))
 
   def _check_file_options(self) -> None:
-    """Validate `media_dir`/`public_path` (TODO 5.1 file/image types)."""
+    """Validate `media_dir`/`public_path`."""
     for option in ('media_dir', 'public_path'):
       value = getattr(self, option)
       if value is None:
@@ -611,30 +611,30 @@ def _validate_nested_fields(
 
 @dataclasses.dataclass(frozen=True)
 class JsonLdConfig:
-  """A schema's `jsonld` section (TODO 5.3): JSON-LD defaults for a collection.
+  """A schema's `jsonld` section: JSON-LD defaults for a collection.
 
   Attributes:
       context: The `@context` value: an inline mapping, a path to a file
           inside the project root, a URL (only with `allow_remote_contexts`),
           or a list of them. Files and URLs are loaded by
-          `fastapi_blog.jsonld.resolve_context` (TODO 5.5); nothing in a
+          `fastapi_blog.jsonld.resolve_context`; nothing in a
           context is ever executed.
       base: Base IRI substituted into `id_template`'s `{base}` placeholder.
       id_template: Used for a document's `@id` when no field has
           `alias='@id'`. A plain `str.format()` template with `{base}`,
-          `{collection}`, `{slug}` placeholders — not the full slug/template
-          language from TODO 6.4 (not built), so filters and date tags
-          aren't available here yet.
+          `{collection}`, `{slug}` placeholders. It does not use the shared
+          slug and summary template syntax, so filters and date tags are not
+          available here.
       type: Default `@type` when no field has `alias='@type'`.
       content_term: JSON-LD term the document body is emitted under (the
           raw Markdown, not rendered HTML). `None` (default) omits the body.
-      allow_remote_contexts: URLs of remote contexts that may be fetched
-          (TODO 5.5). Needs the `jsonld` extra; the default is no remote
+      allow_remote_contexts: URLs of remote contexts that may be fetched.
+          This needs the `jsonld` extra; the default is no remote
           contexts at all.
       max_context_bytes: Size limit of one context, in bytes.
       max_documents: Limit of documents in one exported `@graph`.
       strict_context: What `check` does with a schema key the context
-          doesn't cover (TODO 5.6): `'error'` (default), `'warn'` or
+          doesn't cover: `'error'` (default), `'warn'` or
           `'off'` (skip the coverage check entirely).
 
   """
@@ -698,7 +698,7 @@ def is_http_url_or_root_path(value: Any) -> bool:
   """Return whether `value` is an `http(s)` URL or a path from the site root.
 
   The same rule applies to the `canonical` and `image` roles and to
-  `seo.default_image` (TODO 5.9.4): anything else (`javascript:`, `data:`,
+  `seo.default_image`: anything else (`javascript:`, `data:`,
   a protocol-relative `//host`, a relative path) is rejected.
   """
   if not isinstance(value, str) or not value or value != value.strip():
@@ -721,7 +721,7 @@ def is_http_url_or_root_path(value: Any) -> bool:
   )
 
 
-# Names a `seo.title_template` may use (until TODO 6.4's template language).
+# Names supported by the `seo.title_template` `str.format()` expression.
 TITLE_TEMPLATE_NAMES = ('title', 'site_name')
 
 
@@ -792,12 +792,11 @@ class SeoCheckConfig:
 
 @dataclasses.dataclass(frozen=True)
 class SeoConfig:
-  """A schema's `seo` section (TODO 5.9.2): site-wide SEO settings.
+  """A schema's `seo` section: site-wide SEO settings.
 
-  With no `seo` section and no `seo=` argument the blog behaves as before
-  TODO 5.9 (П6: only the 5.9.6 fixes apply). The substitution order and the
-  `<head>`/social-tag output that consume these settings are TODO 5.9.3 and
-  5.9.4 (`fastapi_blog.seo.build_head`). Value errors carry the offending
+  With no `seo` section and no `seo=` argument, no site-wide SEO settings
+  are applied. `fastapi_blog.seo.build_head()` resolves the substitution order
+  and builds the `<head>` and social tags. Value errors carry the offending
   `seo.<key>` name.
 
   Attributes:
@@ -805,8 +804,8 @@ class SeoConfig:
           Without it, absolute addresses are built from the request URL.
       site_name: Site name, used by `title_template` and the page header.
       title_template: Applied to a non-empty title, e.g.
-          `'{title} - {site_name}'`. Until TODO 6.4 lands this is a plain
-          `str.format()` template with the same names.
+          `'{title} - {site_name}'`. This is a plain `str.format()` template
+          with the names `title` and `site_name`.
       default_image: Fallback for the `image` role (og:image and friends).
       default_author: Fallback for the `author` role.
       default_robots: Merged with a document's `robots` role value; only
@@ -960,8 +959,8 @@ class FrontmatterSchema:
       fields: Field descriptions.
       extra: What to do with keys not listed in `fields`: `forbid` (error),
           `allow` (keep them) or `ignore` (drop them).
-      published_values: Required when a field binds the `status` role
-          (TODO 5.7): the `status` values that count as published. A
+      published_values: Required when a field binds the `status` role; these
+          are the `status` values that count as published. A
           document is public when its `status` field's value is one of
           these, instead of a plain `published: bool`. Mutually exclusive
           with binding the `published` role on the same schema.
@@ -1161,7 +1160,7 @@ class FrontmatterSchema:
     is_create: bool,
     existing: Mapping[str, Any] | None = None,
   ) -> dict[str, Any]:
-    """Dump a validated instance for writing to disk, applying 4.5 rules.
+    """Dump a validated instance for writing to disk.
 
     On creation, every `on_create` field the caller left unset (not in
     `instance.model_fields_set`) is filled in now, once. On update, a
@@ -1275,7 +1274,7 @@ class FrontmatterSchema:
   def _merge_for_rewrite(
     self, dumped: dict[str, Any], existing: Mapping[str, Any]
   ) -> dict[str, Any]:
-    """Merge an update dump over the document's current frontmatter (4.5).
+    """Merge an update dump over the document's current frontmatter.
 
     Known keys take their new values in the positions they already occupy;
     a known key emptied to `None` is not written back; unknown keys survive
@@ -1322,8 +1321,8 @@ class FrontmatterSchema:
     """Build a schema from a plain dict.
 
     The dict has an optional `extra` key, a `fields` key, an optional
-    `jsonld` key (TODO 5.3) and an optional `published_values` key (TODO
-    5.7, see `FrontmatterSchema.published_values`). `fields` is either a
+    `jsonld` key and an optional `published_values` key (see
+    `FrontmatterSchema.published_values`). `fields` is either a
     mapping `{name: options}` or a list of `{name: ..., ...}`.
 
     Args:
@@ -1602,12 +1601,12 @@ def _build_model(schema: FrontmatterSchema) -> 'type[BaseModel]':
     if spec.hidden:
       extra_meta['hidden'] = True
     if spec.choices is not None:
-      # Surfaces in the generated JSON Schema as `enum` (TODO 5.7), even
+      # Surfaces in the generated JSON Schema as `enum`, even
       # though validation itself goes through `_choices_validator` below
       # (not Pydantic's own enum machinery, so a bad value's error names it).
       extra_meta['enum'] = _choice_values(spec.choices)
     if spec.pattern is not None:
-      # Surfaces as `pattern` (TODO 5.7). Validation itself goes through
+      # Surfaces as `pattern`. Validation itself goes through
       # `_pattern_validator` below (fullmatch, optional custom message),
       # not Pydantic's own `Field(pattern=...)` (match, generic message).
       regex, _message = _split_pattern(spec.pattern)

@@ -1,4 +1,4 @@
-"""Tests for `check_collection` and the exit-code rules (TODO 6.1)."""
+"""Tests for `check_collection` and the exit-code rules."""
 
 import pytest
 
@@ -240,7 +240,7 @@ def test_report_to_dict_round_trips_through_json(tmp_path):
     checks.Issue('bogus', 'x', 'y')
 
 
-# --- Validators (TODO 6.2) ----------------------------------------------------
+# --- Validators ----------------------------------------------------
 
 
 def test_check_runs_the_validators_of_the_spec(tmp_path):
@@ -293,7 +293,7 @@ def test_check_reports_duplicate_unique_fields_and_sequence(tmp_path):
   )
 
 
-# --- SEO integrity checks (TODO 5.9.7) --------------------------------------
+# --- SEO integrity checks --------------------------------------
 
 
 def test_seo_check_reports_length_missing_and_invalid_values(tmp_path):

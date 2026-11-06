@@ -567,8 +567,8 @@ def add_admin_to_app(
       'add_session_middleware=False requires an existing SessionMiddleware.'
     )
 
-  # Starlette Admin 1.0 protects its own forms with CSRF tokens (TODO 7.4:
-  # don't duplicate them). The Origin guard is installed for the REST API
+  # Starlette Admin 1.0 protects its own forms with CSRF tokens, so don't
+  # duplicate them. The Origin guard is installed for the REST API
   # only (see `add_blog_to_fastapi`/`add_editor_to_app`).
 
   # Create engine and session

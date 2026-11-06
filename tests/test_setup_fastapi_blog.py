@@ -185,7 +185,7 @@ def test_setup_fastapi_blog_is_convenience_wrapper():
 
 
 def test_setup_fastapi_blog_passes_seo_to_the_blog():
-  """TODO 5.9.2: `seo=` reaches the blog (here: `site_name` in the header)."""
+  """`seo=` reaches the blog (here: `site_name` in the header)."""
   app = FastAPI()
   fastapi_blog.setup_fastapi_blog(
     app,

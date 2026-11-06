@@ -1,4 +1,4 @@
-"""Tests for external validators (TODO 6.2) and checked writes (TODO 6.3)."""
+"""Tests for external validators and checked writes."""
 
 import pathlib
 import sys

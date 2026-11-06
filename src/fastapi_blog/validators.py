@@ -1,7 +1,7 @@
-"""External validators of documents (TODO 6.2).
+"""External validators of documents.
 
-A validator is a command listed in the configuration of a collection (the
-`validators:` key of a project file, TODO 6.1). It is run without a shell
+A validator is a command listed in a collection's project configuration under
+`validators:`. It is run without a shell
 (an argument list), with a short timeout, a small environment and a capped
 output. Its exit code is mapped to an outcome:
 
@@ -58,7 +58,7 @@ class Validator:
       timeout: Seconds before the command is stopped (a timeout result).
       unavailable: Outcome when the command can't run at all (not found,
           not executable) or times out.
-      blocking: Outcomes that block a write through the REST API (TODO 6.3):
+      blocking: Outcomes that block a write through the REST API:
           the file is rolled back and the request fails with 422.
       run: Whether this validator runs on document writes, `check`, or both.
 
@@ -131,7 +131,7 @@ class Validator:
     return cls(**options)
 
   def is_blocking(self, outcome: str) -> bool:
-    """Return whether this outcome rolls a write back (TODO 6.3)."""
+    """Return whether this outcome rolls a write back."""
     return outcome in self.blocking
 
 

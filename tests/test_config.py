@@ -1,4 +1,4 @@
-"""Tests for the project file (`fastapi_blog.yaml`, TODO phase D)."""
+"""Tests for the project file."""
 
 import datetime
 from types import SimpleNamespace

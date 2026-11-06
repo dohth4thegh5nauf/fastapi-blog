@@ -9,8 +9,8 @@ The low-level functions (`parse_document`, `serialize_document`,
 `atomic_write_text`, `read_document`, `write_document`, `safe_document_path`,
 `compute_etag`) know nothing about posts, schemas or roles. `Collection` and
 `DocumentStore` are the one layer above that does: a directory of same-shaped
-documents, with path safety, `if_match` concurrency and `create`/`delete`
-permissions built in (see `TODO.md`, phase B, 4.1/4.6/4.7). Every caller that
+documents, with path-containment safety, conditional writes using `if_match`,
+and configurable create/delete permissions. Every caller that
 turns a slug into a file (the blog, the REST API, the admin panel) goes
 through a `DocumentStore`.
 """
@@ -49,7 +49,7 @@ DEFAULT_SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,99}$')
 
 # One path segment (directory level or file name) of the default slug shape,
 # used to expand the `{dirname}`/`{filename}` placeholders of a template
-# `slug_pattern` (TODO 4.6). Plain `.replace()`, so every other regex token
+# `slug_pattern`. Plain `.replace()` preserves every other regex token
 # in the pattern (including `{m,n}` quantifiers) survives untouched.
 _SLUG_SEGMENT = r'[a-z0-9][a-z0-9-]{0,99}'
 
@@ -294,17 +294,15 @@ class ChangeEvent:
 class Collection:
   """A directory of same-shaped documents.
 
-  Bundles the storage-layer rules from TODO 4.4–4.7: slug pattern and
-  path-containment safety (`safe_document_path`), which file extensions are
-  read and which one new documents are written with, and whether creating or
-  deleting documents is allowed at all. A `DocumentStore` is built on one.
+  Bundles storage rules: slug validation and path-containment safety through
+  `safe_document_path`, readable and write extensions, and whether creating
+  or deleting documents is allowed. A `DocumentStore` is built on one.
 
-  This deliberately does *not* carry a `FrontmatterSchema` (unlike the literal
-  `Collection(name, dir, schema, ...)` signature sketched in `TODO.md` 4.6):
-  keeping the storage layer free of the Pydantic/schema layer above it avoids
-  a layering inversion. Field validation and the `on_create`/`read_only`
-  rules already live in `FrontmatterSchema.dump_for_write`; callers run that
-  first and pass `DocumentStore.write` the resulting plain dict.
+  It deliberately does not carry a `FrontmatterSchema`, which keeps storage
+  independent of the Pydantic/schema layer above it. Field validation and the
+  `on_create`/`read_only` rules live in `FrontmatterSchema.dump_for_write`;
+  callers run that first and pass `DocumentStore.write` the resulting plain
+  dict.
 
   Attributes:
       name: Collection name, used only in error messages.
@@ -314,10 +312,10 @@ class Collection:
           lowercase letters, digits, hyphens, max 100 chars, see
           `DEFAULT_SLUG_PATTERN`). May also be given as a string template
           using `{dirname}` and `{filename}` as placeholders for one slug
-          segment each (TODO 4.6); it is compiled in `__post_init__`.
+          segment each; it is compiled in `__post_init__`.
       extension: One file extension, or several to also read/list (the first
           is what new documents are written with), without the leading dot.
-      depth: Nested-collection depth (TODO 4.6). `0` (default) is flat: no
+      depth: Nested-collection depth. `0` (default) is flat: no
           subdirectories, the slug is a file name. `N > 0` allows up to `N`
           levels of subdirectories; the slug is then the relative path
           without the extension (`a/b/0001-x`), each segment is checked
@@ -665,7 +663,7 @@ def blog_collections(
 ) -> dict[str, Collection]:
   """Build the two standard collections behind the directory-name sugar.
 
-  `posts_dirname`/`pages_dirname` stay the public API surface (TODO 4.6);
+  `posts_dirname` and `pages_dirname` remain the public API;
   internally every caller builds its `Collection`s here, in one place,
   instead of hand-rolling `store.Collection('posts', ...)` at each site.
 

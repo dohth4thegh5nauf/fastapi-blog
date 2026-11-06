@@ -115,7 +115,7 @@ def _frontmatter_dump(
   if schema is None:
     return payload.frontmatter.model_dump(exclude_none=True)
   # Write the keys other services expect (aliases), not internal names;
-  # fills `on_create` fields and enforces `read_only` ones (see 4.5).
+  # fills `on_create` fields and enforces `read_only` ones.
   try:
     return schema.dump_for_write(
       payload.frontmatter, is_create=is_create, existing=existing
@@ -179,12 +179,12 @@ def get_api_router(
           `DELETE /delete/{slug}` need an `If-Match` header (its value from a
           prior `GET /{slug}/raw`'s `ETag` response header) and reject the
           write with 412 if the post changed since, or 428 if the header is
-          missing (see TODO 4.7). `False` (default) makes the header
+          missing. `False` (default) makes the header
           optional: when sent, it's still checked; when not, the write goes
           through unconditionally like before.
-      validators: External validators run on every write (TODO 6.2). A
+      validators: External validators run on every write. A
           write whose outcome is in a validator's `blocking` list is rolled
-          back and answered with HTTP 422 carrying the `issues` (TODO 6.3).
+          back and answered with HTTP 422 carrying the `issues`.
       collection_spec: Optional project collection settings. When it has a
           `slug_template`, POST /create and POST /save can generate a slug.
       authorize: Shared permission callback; defaults to the built-in RBAC
@@ -336,7 +336,7 @@ def get_api_router(
     """Write through the shared document service, mapping failures to HTTP.
 
     The service checks configured uniqueness, writes, runs the blocking
-    validators and rolls back on a blocking outcome (TODO 6.3): a blocking
+    validators and rolls back on a blocking outcome: a blocking
     outcome restores the previous bytes (or removes a just-created file) and
     raises HTTP 422 with the findings. Between the write and a rollback the
     new content is on disk and visible to concurrent readers; checking a

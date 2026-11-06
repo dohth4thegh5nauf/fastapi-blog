@@ -110,7 +110,7 @@ def add_blog_to_fastapi(
                      `GET {prefix}/index.jsonld` (default: False). Only
                      published posts are served; see `fastapi_blog.jsonld`.
       seo_routes: Add `GET /sitemap.xml`, `GET /robots.txt` and permanent
-                  redirects for the `redirect_from` role (TODO 5.9.5;
+                  redirects for the `redirect_from` role;
                   default: False). Bare-slug aliases redirect under every
                   mounted locale. Needs `seo.site_url`: without it the app
                   fails at startup with `ConfigurationError`.
@@ -122,14 +122,15 @@ def add_blog_to_fastapi(
                   the base report only discloses the
                   service version and uptime.
       validators: External validators run on every write through the REST
-                  API (TODO 6.2/6.3); blocking outcomes roll the write back
+                  API; blocking outcomes roll the write back
                   with HTTP 422.
       authorize: Shared authorization policy used by the REST API.
       collection_spec: Optional project collection settings. Enables
                   generated slugs and is shared with the admin panel by
                   `setup_fastapi_blog()`.
-      require_if_match: Require the `If-Match` header on update/delete
-                  (TODO 4.7); see `get_api_router()`. Default: `False`.
+      require_if_match: Require `If-Match` on updates and deletes. Stale
+                  values receive 412; a missing required header receives 428.
+                  Default: `False`. See `get_api_router()`.
       frontmatter_schema: Custom schema of the post frontmatter. Its roles
                           (title, date, published, tags, description) tell the
                           blog which field is which. Default: the built-in fields.
@@ -137,7 +138,7 @@ def add_blog_to_fastapi(
                           The admin panel (extra `admin`) uses it only if you
                           pass the same schema to `add_admin_to_app()`;
                           `setup_fastapi_blog()` does that for you.
-      seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
+      seo: Site-wide SEO settings; stronger than the schema's
                           own `seo` section. `None` (default) uses the
                           schema's section.
 
@@ -436,7 +437,7 @@ def _mount_seo_routes(
   default_locale: str,
   collection_spec: CollectionSpec | None = None,
 ) -> None:
-  """Add `sitemap.xml`, `robots.txt` and `redirect_from` redirects (5.9.5).
+  """Add the sitemap, robots policy and permanent redirects from aliases.
 
   Only published posts take part. The sitemap entries and the alias index
   are built once per state of the posts directory (`helpers.list_posts`

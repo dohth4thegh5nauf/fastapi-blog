@@ -12,8 +12,8 @@ HTTP semantics: ``pass``/``warn`` answer 2xx-3xx, ``fail`` answers 4xx-5xx
 (503). All responses carry ``Content-Type: application/health+json`` and a
 ``Cache-Control`` lifetime.
 
-The package has no hard external dependencies (the file system is the only
-mandatory backend, TODO П1), so the only critical readiness check is that
+The package has no hard external dependencies; the file system is its only
+mandatory backend. The only critical readiness check is that
 the content directories of the mounted collections are readable. The admin
 panel's optional SQL database is intentionally not probed here: it is not a
 critical dependency for serving content.

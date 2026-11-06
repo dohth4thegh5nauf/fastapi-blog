@@ -29,7 +29,7 @@ def test_no_duplication_when_not_added_manually():
 
   # Session and the locale redirect are installed. The Origin guard is NOT:
   # starlette-admin 1.0 protects its own forms with CSRF tokens, so the
-  # middleware is added for the REST API only (TODO 7.4).
+  # middleware is added for the REST API only.
   assert len(app.user_middleware) == 2
   middleware_classes = [m.cls.__name__ for m in app.user_middleware]
   assert 'SessionMiddleware' in middleware_classes

@@ -12,7 +12,7 @@ collections:
     extension: md                         # optional, one or several
 ```
 
-The project root is the directory of this file. Precedence (TODO phase D):
+The project root is the directory of this file. Configuration precedence:
 an explicit CLI flag beats the project file, the project file beats the
 built-in defaults (`posts/` with the built-in schema). Applications that use
 the library directly don't need the file: they keep passing
@@ -81,12 +81,12 @@ class CollectionSpec:
       schema: Frontmatter schema the documents must match, if any.
       slug_pattern: `slug_pattern` of the underlying `store.Collection`.
       extension: `extension` of the underlying `store.Collection`.
-      create: When `False`, no new documents may be written (TODO 4.6).
-      delete: When `False`, documents may not be deleted (TODO 4.6).
-      validators: External validators run by `check` (TODO 6.2).
-      slug_options: How `{title_slug}` is made (the `slug` section, TODO 6.4).
+      create: When `False`, no new documents may be written.
+      delete: When `False`, documents may not be deleted.
+      validators: External validators run by `check`.
+      slug_options: Options for generating `{title_slug}` from a title.
       slug_template: Parsed `slug_template` (`templates.Template`), if any.
-      unique: Field/tag names whose values must not repeat (TODO 6.4).
+      unique: Field/tag names whose values must not repeat.
       summary: Parsed `summary` template for document captions, if any.
       check_links: Link-integrity level (`off`, `warn`, `error`).
       check_files: File-integrity level (`off`, `warn`, `error`).

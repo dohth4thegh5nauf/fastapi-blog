@@ -1,4 +1,4 @@
-"""The template language shared by slugs, summaries and validators (TODO 6.4).
+"""The template language shared by slugs, summaries and validators.
 
 One syntax, used by `slug_template`, `summary` and the arguments of
 `validators`:
