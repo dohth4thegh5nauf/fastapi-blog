@@ -1,8 +1,12 @@
-# Release checklist: 0.9.0
+# Release checklist: 0.9.0 source baseline
 
-This checklist is the release gate for the 0.9.0 package. The project version
-is already `0.9.0`; the changelog remains `Unreleased` until every required
-verification below has passed on the release candidate.
+This document records the source and release checks performed for the 0.9.0
+candidate. It is historical evidence, not the active release gate for the
+current source version (`0.10.0` in `pyproject.toml`). This repository remains
+a private development source; release preparation and publication happen in
+the destination repository. The project owner confirmed that the latest CI for
+the current branch passed. Candidate SHAs, run IDs and test counts below refer
+to the historical 0.9.0 checks and must not be presented as current-run data.
 
 ## Phase E acceptance
 
