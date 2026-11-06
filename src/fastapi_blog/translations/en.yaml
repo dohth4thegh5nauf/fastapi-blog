@@ -71,6 +71,8 @@ role:
   section_label: Access Control
   role_label: Roles
   user_roles_label: User Roles
+  permissions_label: Permissions
+  permissions_hint: Map each resource to the actions this role may perform.
 
 # Common actions
 action:

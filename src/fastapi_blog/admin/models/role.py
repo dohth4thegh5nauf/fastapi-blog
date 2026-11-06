@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+  JSON,
   Boolean,
   Column,
   DateTime,
@@ -34,6 +35,7 @@ class Role(Base):
     id: Primary key
     name: Role name (e.g. 'admin', 'editor', 'viewer')
     description: Role description
+    permissions: Resource/action grants stored as JSON
     is_active: Whether role is active
     created_at: Creation timestamp
     updated_at: Last update timestamp
@@ -49,6 +51,9 @@ class Role(Base):
   )
   description: Mapped[str | None] = mapped_column(String(500), nullable=True)
   is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+  permissions: Mapped[dict[str, list[str]]] = mapped_column(
+    JSON, default=dict, nullable=False
+  )
   created_at: Mapped[datetime] = mapped_column(
     DateTime, default=datetime.utcnow, nullable=False
   )
@@ -164,17 +169,27 @@ async def create_default_roles(session) -> None:
     name='admin',
     description='Administrator with full access',
     is_active=True,
+    permissions=_default_permissions('admin'),
   )
   editor_role = Role(
     name='editor',
     description='Editor who can create and edit content',
     is_active=True,
+    permissions=_default_permissions('editor'),
   )
   viewer_role = Role(
     name='viewer',
     description='Viewer with read-only access',
     is_active=True,
+    permissions=_default_permissions('viewer'),
   )
 
   session.add_all([admin_role, editor_role, viewer_role])
   await session.commit()
+
+
+def _default_permissions(role_name: str) -> dict[str, list[str]]:
+  """Return built-in grants for a default role."""
+  from ...permissions import default_role_permissions
+
+  return default_role_permissions(role_name)

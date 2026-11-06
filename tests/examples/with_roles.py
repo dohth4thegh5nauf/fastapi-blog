@@ -24,7 +24,11 @@ from fastapi.staticfiles import StaticFiles
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
 from fastapi_blog.admin.models import Role, UserWithRoles
-from demo_auth import create_demo_auth_provider
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 
 # Clear any cached imports
 for mod in list(sys.modules.keys()):
@@ -61,12 +65,14 @@ def configure_admin(locale, admin):
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin with Roles',
+  database_url=DEMO_DATABASE_URL,
   secret_key='demo-only-session-secret-0123456789abcdef0123456789',
   auth_provider=lambda locale: create_demo_auth_provider(locale),
   locales=['en', 'ru'],
   default_locale='en',
   configure_admin=configure_admin,
 )
+install_demo_auth(app)
 
 # Mount static files
 app.mount('/static', StaticFiles(directory='static'), name='static')

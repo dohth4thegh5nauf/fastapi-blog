@@ -71,6 +71,8 @@ role:
   section_label: Управление доступом
   role_label: Роли
   user_roles_label: Роли пользователей
+  permissions_label: Разрешения
+  permissions_hint: Укажите действия, разрешённые роли для каждого ресурса.
 
 # Common actions
 action:

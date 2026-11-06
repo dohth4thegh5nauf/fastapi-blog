@@ -252,9 +252,21 @@ def test_demo_provider_rejects_non_ascii_credentials_without_server_error(
   monkeypatch,
 ):
   monkeypatch.syspath_prepend(str(Path(__file__).parent / 'examples'))
-  from demo_auth import DemoAuthProvider
+  from demo_auth import DemoRBACAuthProvider
 
-  provider = DemoAuthProvider('en')
+  from fastapi_blog.admin.passwords import get_password_hasher
+
+  provider = DemoRBACAuthProvider('en')
+  user = SimpleNamespace(
+    id=1,
+    is_active=True,
+    hashed_password=get_password_hasher().hash('Admin123!'),
+  )
+
+  async def get_user(request, *, email=None, user_id=None):
+    return user
+
+  provider._get_user = get_user
   request = SimpleNamespace(session={})
 
   with pytest.raises(LoginFailed):

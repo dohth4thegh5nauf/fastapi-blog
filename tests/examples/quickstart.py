@@ -25,7 +25,11 @@ Note: Admin panel is a web UI (not REST API), so it won't appear in /docs.
 
 from pathlib import Path  # noqa: E402
 
-from demo_auth import create_demo_auth_provider  # noqa: E402
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
@@ -72,6 +76,7 @@ fastapi_blog.add_blog_to_fastapi(
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
+  database_url=DEMO_DATABASE_URL,
   secret_key='demo-only-session-secret-0123456789abcdef0123456789',
   auth_provider=lambda locale: create_demo_auth_provider(locale),
   frontmatter_schema=frontmatter_schema,
@@ -79,6 +84,7 @@ admins = fastapi_blog.add_admin_to_app(
   default_locale='en',  # /admin → /admin/en
   enable_role_management=True,  # Enable role management (visible only to root admin)
 )
+install_demo_auth(app)
 
 # Mount static files
 app.mount('/static', StaticFiles(directory='static'), name='static')

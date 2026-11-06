@@ -1,4 +1,8 @@
-from demo_auth import create_demo_auth_provider
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -18,9 +22,11 @@ app = fastapi_blog.add_blog_to_fastapi(
 # Add the demo Admin login and editor with the same session secret.
 fastapi_blog.add_admin_to_app(
   app,
+  database_url=DEMO_DATABASE_URL,
   auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=session_secret,
 )
+install_demo_auth(app)
 app = fastapi_blog.add_editor_to_app(app, strict=False, require_auth=True)
 
 app.mount('/static', StaticFiles(directory='static'), name='static')

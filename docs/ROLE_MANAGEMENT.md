@@ -4,13 +4,14 @@ FastAPI Blog includes a built-in role-based access policy shared by the REST API
 
 Authentication is separate from this policy. The recommended integration
 passes a host-owned Starlette Admin `AuthProvider`; FastAPI Blog's user and role
-views only manage their own CRUD records and do not change accounts in that
-provider. See [Admin Authentication Providers](ADMIN_AUTHENTICATION.md).
+views do not change accounts in that provider unless the host provider reads
+those records. The local demo provider explicitly does so. See
+[Admin Authentication Providers](ADMIN_AUTHENTICATION.md).
 
 ## Overview
 
 The role management system provides:
-- **Role Model:** Define custom roles with descriptions
+- **Role Model:** Define custom roles, descriptions and resource/action grants
 - **UserWithRoles Model:** Extended user model with role assignments
 - **Many-to-Many Relationship:** Users can have multiple roles
 - **Admin Views:** Manage roles and users through admin panel
@@ -46,6 +47,7 @@ from fastapi_blog.admin import Role
 - id: int (primary key)
 - name: str (unique, e.g., 'admin', 'editor', 'viewer')
 - description: str | None
+- permissions: dict[str, list[str]] (resource names mapped to allowed actions)
 - is_active: bool (default: True)
 - created_at: datetime
 - updated_at: datetime | None
@@ -109,6 +111,29 @@ for locale, admin in admins.items():
   admin.add_view(user_view)
 ```
 
+### Configure Role Permissions
+
+The Role admin view includes a JSON permissions editor. Each resource maps to
+the allowed actions; for example, a read-only editorial role can be configured
+as:
+
+```json
+{
+  "posts": ["read"],
+  "users": [],
+  "settings": []
+}
+```
+
+The editor validates resource and action names in the browser and on the
+server. Unknown values are rejected. Users assigned multiple active roles
+receive the union of their grants. An explicit empty grant map denies all
+actions and does not fall back to built-in role defaults.
+
+The local demo provider loads grants from role records. Other host providers
+must put a validated `permissions` mapping on `request.state.blog_user`, or
+provide their own `authorize` callback, for edited grants to affect access.
+
 ### Initialize Default Roles
 
 ```python
@@ -131,6 +156,12 @@ The legacy compatibility provider can assign three roles through
 - **editor:** Can create, read, update, and publish posts; can read users and
   settings; cannot delete posts or manage accounts/roles.
 - **viewer:** Can read posts only.
+
+These are the initial grants for the built-in role names. The default policy
+continues to use them for principals that provide only a role name; principals
+with an explicit `permissions` mapping use that mapping instead.
+
+### Legacy Provider Compatibility
 
 ```python
 # Legacy migration example only; don't combine these parameters with auth_provider.

@@ -3,6 +3,7 @@
 import os
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import inspect, update
 from sqlalchemy.ext.asyncio import (
   AsyncSession,
   async_sessionmaker,
@@ -53,3 +54,28 @@ async def init_db(engine):
   """Initialize database - create all tables."""
   async with engine.begin() as conn:
     await conn.run_sync(Base.metadata.create_all)
+    await conn.run_sync(_migrate_role_permissions)
+
+
+def _migrate_role_permissions(connection) -> None:
+  """Add permission storage to existing role tables without losing data."""
+  inspector = inspect(connection)
+  if not inspector.has_table('roles'):
+    return
+  if 'permissions' in {
+    column['name'] for column in inspector.get_columns('roles')
+  }:
+    return
+
+  connection.exec_driver_sql(
+    "ALTER TABLE roles ADD COLUMN permissions JSON NOT NULL DEFAULT '{}'"
+  )
+  from ..permissions import default_role_permissions
+
+  role_table = Base.metadata.tables['roles']
+  for role_name in ('admin', 'editor', 'viewer'):
+    connection.execute(
+      update(role_table)
+      .where(role_table.c.name == role_name)
+      .values(permissions=default_role_permissions(role_name))
+    )

@@ -95,7 +95,9 @@ that protection. `https_only=True` enables secure session cookies for HTTPS.
   is mounted. It does not authenticate users or grant permissions.
 - FastAPI Blog's `User`, `UserWithRoles`, and `Role` views are database CRUD
   features. Editing those records does not create, update, or delete accounts
-  in the host provider.
+  in a host-supplied provider. The repository's local demo provider is an
+  explicit example that authenticates against its own `UserWithRoles` and
+  `Role` records.
 - The REST API has separate authentication configuration. An Admin provider
   does not authenticate REST API requests. Use the API credentials or
   `api_auth_dependency` accepted by `add_blog_to_fastapi()`; when using
@@ -110,6 +112,10 @@ the app is configured. The legacy path still requires a password and strong
 session secret (unless the existing local-only `insecure_dev=True` option is
 used). New integrations should provide their own provider.
 
-The repository's demo provider lives in `tests/examples/demo_auth.py`. Its
-`admin` / `Admin123!` credentials are for local demos only and are not a
-production account system.
+The repository's demo provider lives in `tests/examples/demo_auth.py`. Demo
+applications use an isolated in-memory SQLite admin database and seed a
+`UserWithRoles` account with the active `admin` role at startup. The local demo
+credentials are `admin` / `Admin123!`; the seed is restored at each startup so
+the account remains available for walkthroughs. This is demo-only behavior,
+not a production account system. A host application should supply its own
+`AuthProvider` and user lifecycle.

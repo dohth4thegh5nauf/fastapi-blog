@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Changes planned for version 0.10.0.
 
 ### Added
+- Added a database-backed RBAC login to the local admin demos, seeded with an
+  `admin` / `Admin123!` account and isolated from host `DATABASE_URL` settings.
+- Added editable resource/action grants to roles. The default policy applies
+  configured grants, combines active-role grants, and upgrades existing role
+  tables with their built-in permissions.
 - Added a request-scoped sequence allocator to `CollectionSpec`; the admin
   save flow passes the reserved sequence into slug generation, including
   localized canonical-record creation.
@@ -65,7 +70,8 @@ Changes planned for version 0.10.0.
   parameters remain available through a private compatibility adapter and
   cannot be combined with an external provider.
 - Updated runnable demos to create explicit providers and clarified that the
-  User and Role views manage CRUD records, not host authentication accounts.
+  User and Role views do not alter accounts in a host-supplied provider. The
+  local database-backed demo provider explicitly uses its demo CRUD records.
 - The core package runs without the admin or JSON-LD extras. Admin imports are
   lazy, and `setup_fastapi_blog(admin=False)` does not require the admin extra.
 - The post-list cache detects external file changes from directory signatures.
@@ -86,6 +92,8 @@ Changes planned for version 0.10.0.
 
 ### Fixed
 
+- Hash passwords created through the `UserWithRoles` admin view and hide
+  password hashes from user details and edit forms.
 - Normalize unquoted YAML dates and timestamps for string-valued `date` and
   `updated` roles while preserving native YAML values for other fields.
 - Accept absolute post directories in public post listings.

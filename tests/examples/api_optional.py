@@ -18,7 +18,11 @@ Compare with quickstart.py:
 Remember: Admin panel (/admin) is a web UI, not REST API.
 """
 
-from demo_auth import create_demo_auth_provider
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -52,10 +56,12 @@ fastapi_blog.add_blog_to_fastapi(
 fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
+  database_url=DEMO_DATABASE_URL,
   secret_key='example-only-session-secret-value-0123456789abcdef0123456789',
   auth_provider=lambda locale: create_demo_auth_provider(locale),
   add_session_middleware=False,  # Already added above
 )
+install_demo_auth(app)
 
 app.mount('/static', StaticFiles(directory='static'), name='static')
 
