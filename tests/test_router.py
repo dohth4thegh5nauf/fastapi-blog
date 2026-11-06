@@ -18,7 +18,7 @@ def test_blog_index():
   response = client.get('/blog')
   assert response.status_code == 200
   # `<title>` used to be hardcoded to the original fork author's name on
-  # every page (TODO 5.9.6): `title`/`metadata` were never actually set in
+  # every page: `title`/`metadata` were never actually set in
   # any route's template context, so `layouts/base.html`'s fallback chain
   # always landed on its last, hardcoded branch.
   assert '<title>Daniel Roy Greenfeld</title>' not in response.content.decode()
@@ -60,7 +60,7 @@ def test_html_routes_declare_response_class_without_query_parameters():
 
 
 def test_html_tag_has_a_lang_attribute():
-  """TODO 5.9.6: `<html>` had no `lang` at all."""
+  """`<html>` had no `lang` at all."""
   response = client.get('/blog')
   assert '<html lang="en">' in response.content.decode()
 
@@ -68,7 +68,7 @@ def test_html_tag_has_a_lang_attribute():
 def test_no_fork_author_branding_remains_in_the_base_template():
   """The package must not ship the original fork author's own branding.
 
-  TODO 5.9.6/П3: personal name, photo and social links aren't universal.
+  personal name, photo and social links aren't universal.
   """
   html = client.get('/blog').content.decode()
   assert 'Daniel Roy Greenfeld' not in html
@@ -135,7 +135,7 @@ def test_public_blog_resolves_collection_root_per_request(tmp_path):
   assert health.status_code == 200
 
 
-# --- JSON-LD routes (TODO 5.4), off by default ------------------------------
+# --- JSON-LD routes, off by default ------------------------------
 
 
 def test_jsonld_routes_are_off_by_default():

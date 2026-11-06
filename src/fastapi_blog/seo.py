@@ -1,18 +1,18 @@
-"""SEO frontmatter fields (TODO 5.9.1) and site-wide settings (TODO 5.9.2).
+"""SEO frontmatter fields and site-wide settings.
 
 `seo_fields()` returns a `FieldSpec` per SEO role (see `models/schema.py`'s
-`ROLES`/`_ROLE_TYPES`), with the `choices`/`label`/`hint` TODO 5.9.1
-describes. A schema author adds the whole set or a subset, and may rename
+`ROLES`/`_ROLE_TYPES`), including each role's `choices`, `label` and
+`hint`. A schema author adds the whole set or a subset, and may rename
 or re-alias any of them — the returned `FieldSpec`s use the role name as
 the field name, nothing more.
 
 `SeoConfig` (in `models/schema.py`) holds the site-wide settings: the
 `seo:` section of a schema file or the `seo=` argument of
 `add_blog_to_fastapi()`/`setup_fastapi_blog()`. `resolve_seo_config()` picks
-the effective one. `build_head()` applies the substitution order (5.9.3) and
-collects the values the `partials/_seo_head.html` fragment prints (5.9.4);
-with no `SeoConfig` it returns an empty mapping and the page keeps its
-legacy title, description and canonical output.
+the effective one. `build_head()` resolves metadata values and prepares them
+for `partials/_seo_head.html`. With no `SeoConfig`, it returns an empty
+mapping, leaving the template's default title and description and the
+request-derived canonical URL unchanged.
 """
 
 import datetime as _dt
@@ -121,7 +121,7 @@ def resolve_seo_config(
   seo: SeoConfig | None,
   schema: FrontmatterSchema | None,
 ) -> SeoConfig | None:
-  """Return the effective site-wide SEO settings (TODO 5.9.2).
+  """Return the effective site-wide SEO settings.
 
   The `seo=` argument is stronger than the schema's `seo` section: when it's
   given, it replaces the section as a whole (the two aren't merged key by
@@ -133,8 +133,7 @@ def resolve_seo_config(
       schema: The posts schema, whose `seo` section is the fallback.
 
   Returns:
-      The settings, or `None` when there's neither an argument nor a section
-      (then only the TODO 5.9.6 fixes apply, per П6).
+      The settings, or `None` when there's neither an argument nor a section.
 
   """
   if seo is not None:
@@ -202,7 +201,7 @@ def build_head(
   page_type: str = 'article',
   body: str = '',
 ) -> dict[str, Any]:
-  """Resolve frontmatter SEO roles according to TODO 5.9.3."""
+  """Resolve frontmatter SEO roles into page-head metadata."""
   if config is None:
     return {}
   doc = document or {}

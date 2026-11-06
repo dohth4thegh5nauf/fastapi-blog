@@ -1,6 +1,6 @@
-"""The finding type shared by `check` and (later) the validators.
+"""The finding type shared by collection checks and external validators.
 
-Levels (TODO 6.1): `error` and `warning` are findings; `undefined` means
+Levels: `error` and `warning` are findings; `undefined` means
 "could not be checked" and is never treated as fine (П4). A finding always
 wins over `undefined` in exit codes.
 """

@@ -86,7 +86,6 @@ exclude = [
   "tests/*",
   "^tmp/",
   "\\+/.*",  # Demo and reference code
-  "src/fastapi_blog\\.old/.*",  # Old code (not a valid Python package name)
 ]
 
 # Use strict defaults

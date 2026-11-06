@@ -1,4 +1,4 @@
-"""Tests for `SeoConfig` and the `seo:` schema section (TODO 5.9.2)."""
+"""Tests for `SeoConfig` and the `seo:` schema section."""
 
 import jinja2
 import pytest
@@ -193,7 +193,7 @@ def test_schema_without_a_section_has_no_seo():
 
 
 def test_schema_with_an_empty_section_has_default_seo():
-  """`seo: {}` turns the SEO output on with all defaults (TODO 5.9.2)."""
+  """`seo: {}` turns the SEO output on with all defaults."""
   schema = FrontmatterSchema.from_dict(_schema_dict(seo={}))
   assert schema.seo == SeoConfig()
 

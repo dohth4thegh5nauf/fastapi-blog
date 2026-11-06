@@ -148,7 +148,7 @@ def test_password_constants():
   assert MIN_PASSWORD_LENGTH < BCRYPT_MAX_BYTES < MAX_PASSWORD_LENGTH
 
 
-# --- PasswordHasher (TODO 7.5: `passlib` replaced by direct `bcrypt`) ---------
+# --- PasswordHasher ---------
 
 
 def test_password_hasher_round_trip():

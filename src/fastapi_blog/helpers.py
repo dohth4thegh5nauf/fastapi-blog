@@ -24,7 +24,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 # Pages validate against their own schema with the fields they have always
-# had (TODO 4.6), keeping unknown keys (`extra: 'allow'`); a page that
+# had, keeping unknown keys (`extra: 'allow'`); a page that
 # doesn't match is still served, with its raw frontmatter (see
 # `load_content_from_markdown_file`).
 PAGES_SCHEMA = FrontmatterSchema(
@@ -116,7 +116,7 @@ def sort_posts(
 
 
 def _is_published(post: dict[str, Any], schema: FrontmatterSchema) -> bool:
-  # `status` (TODO 5.7) generalizes `published`: public iff its value is
+  # `status` generalizes `published`: public iff its value is
   # one of `schema.published_values`. The schema forbids binding both
   # roles on the same schema (see `FrontmatterSchema.__post_init__`).
   roles = schema.role_map()
@@ -261,7 +261,7 @@ def load_content_from_markdown_file(
   Args:
       path: Markdown file to read.
       sanitize: Sanitize the rendered HTML (as the blog does for posts).
-      schema: Frontmatter schema pages validate against (TODO 4.6; defaults
+      schema: Frontmatter schema pages validate against; defaults
           to `PAGES_SCHEMA`, the fields pages have always had). Unknown keys
           are kept (`extra: 'allow'`); a page that doesn't match the schema
           is still served, with its raw frontmatter.

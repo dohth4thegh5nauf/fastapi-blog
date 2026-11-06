@@ -239,7 +239,7 @@ def test_add_editor_to_app_accepts_a_schema(workdir):
 
 
 def test_update_preserves_unknown_keys_and_file_order(workdir):
-  """A rewrite keeps unknown keys and the file's key order (TODO 4.5)."""
+  """A rewrite keeps unknown keys and the file's key order."""
   schema = FrontmatterSchema(
     fields=(
       FieldSpec('headline', alias='title', required=True, role='title'),

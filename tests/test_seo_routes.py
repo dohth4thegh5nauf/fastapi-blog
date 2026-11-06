@@ -1,4 +1,4 @@
-"""Integration coverage for the optional SEO endpoints (TODO 5.9.5)."""
+"""Integration coverage for the optional SEO endpoints."""
 
 import xml.etree.ElementTree as ET
 

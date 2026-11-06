@@ -1,4 +1,4 @@
-"""Tests for JSON-LD emission (TODO phase C, 5.2-5.4, 5.5, 5.6)."""
+"""Tests for JSON-LD emission."""
 
 import urllib.request
 
@@ -249,7 +249,7 @@ def test_collection_to_jsonld_is_deterministic_regardless_of_input_order():
   assert result1 == result2
 
 
-# --- Lost terms (TODO 5.6) ---------------------------------------------------
+# --- Lost terms ---------------------------------------------------
 
 
 def test_uncovered_keys_reports_terms_the_context_drops():
@@ -322,7 +322,7 @@ def test_uncovered_keys_without_context_covers_nothing():
   assert jsonld_uncovered_keys(schema) == ['title']
 
 
-# --- Contexts: files and remote URLs (TODO 5.5) -------------------------------
+# --- Contexts: files and remote URLs -------------------------------
 
 
 def test_resolve_context_returns_none_without_a_config_or_context():

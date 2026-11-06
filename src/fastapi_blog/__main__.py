@@ -27,7 +27,7 @@ from .config import CollectionSpec, ConfigError
 from .models import DEFAULT_SCHEMA, FrontmatterSchema
 
 
-# Exit codes, per TODO 6.1: 0 clean, 1 findings, 2 "couldn't check",
+# Exit codes: 0 clean, 1 findings, 2 "couldn't check",
 # 64 usage/configuration error.
 EXIT_OK = checks.EXIT_CLEAN
 EXIT_FINDINGS = checks.EXIT_FINDINGS
@@ -93,7 +93,7 @@ def _build_parser() -> argparse.ArgumentParser:
   schema_parser.add_argument(
     '--json-schema',
     action='store_true',
-    help='Print the JSON Schema of the frontmatter (TODO 5.7)',
+    help='Print the JSON Schema of the frontmatter',
   )
   schema_parser.add_argument('--out', help='Output file (default: stdout)')
 
@@ -200,7 +200,7 @@ def _render(graph: dict[str, Any], fmt: str) -> str | None:
     return json.dumps(expanded, indent=2, ensure_ascii=False) + '\n'
 
   # 'nquads': RDF statements have no inherent order, so lines are sorted
-  # for deterministic, `git diff`-friendly output (TODO 5.4).
+  # for deterministic, `git diff`-friendly output.
   quads = pyld_jsonld.to_rdf(graph, {'format': 'application/n-quads'})
   lines = sorted(line for line in quads.splitlines() if line)
   return '\n'.join(lines) + '\n'

@@ -1,4 +1,4 @@
-"""JSON-LD emission for frontmatter documents (TODO phase C, 5.2-5.4).
+"""JSON-LD emission for frontmatter documents.
 
 An optional projection of validated documents into JSON-LD, built on the same
 `FrontmatterSchema`/`alias` mechanism already used for frontmatter keys: a
@@ -8,7 +8,7 @@ every other field is emitted under its own alias, in schema order.
 This module works without the `jsonld` extra (`pyld`); that extra is only
 needed for `--format expanded`/`nquads` CLI output and for fetching remote
 contexts. `resolve_context` loads contexts from inline mappings, files
-inside the project root and allow-listed URLs (TODO 5.5). The HTTP routes
+inside the project root and allow-listed URLs. The HTTP routes
 (`GET {prefix}/{slug}.jsonld`) and the `export` CLI command live in
 `router.py` and `__main__.py`; they call the pure projection functions
 here, passing a resolved `context=` when they need one.
@@ -40,7 +40,7 @@ class ContextUnavailableError(JsonLdError):
   """A context can't be loaded; the outcome is `undefined`, never "ok"."""
 
 
-# --- Contexts (TODO 5.5) ------------------------------------------------------
+# --- Contexts ------------------------------------------------------
 
 
 class _NoCrossHostRedirect(urllib.request.HTTPRedirectHandler):
@@ -161,7 +161,7 @@ def document_to_jsonld(
   content: str | None = None,
   context: Any = None,
 ) -> dict[str, Any]:
-  """Project one document into a JSON-LD object (TODO 5.4).
+  """Project one document into a JSON-LD object.
 
   Args:
       frontmatter: The document's frontmatter, by external key (alias) —
@@ -174,8 +174,8 @@ def document_to_jsonld(
       collection: The collection's name, used by the default `@id` template.
       content: The document body. Included under `schema.jsonld.content_term`
           when that's set; otherwise ignored.
-      context: `@context` to emit, already resolved (see `resolve_context`,
-          TODO 5.5); overrides `schema.jsonld.context` when given.
+      context: `@context` to emit, already resolved by `resolve_context`;
+          overrides `schema.jsonld.context` when given.
 
   Returns:
       A plain dict ready for `json.dumps`: `@context` (when configured),
@@ -267,7 +267,7 @@ def collection_to_jsonld(
   collection: str = '',
   context: Any = None,
 ) -> dict[str, Any]:
-  """Project a whole collection into one JSON-LD graph (TODO 5.4).
+  """Project a whole collection into one JSON-LD graph.
 
   Args:
       documents: `(slug, frontmatter, content)` triples, e.g. built from
@@ -345,15 +345,14 @@ def _schema_keys(schema: FrontmatterSchema) -> list[str]:
 def uncovered_keys(
   schema: FrontmatterSchema, *, project_root: pathlib.Path | None = None
 ) -> list[str]:
-  """Return the schema keys the JSON-LD `@context` doesn't cover (TODO 5.6).
+  """Return the schema keys the JSON-LD `@context` doesn't cover.
 
   A key is covered by a context term of the same name, by a prefix
   (`prefix:name`) or by `@vocab`. The `content_term` counts as a key too.
   By default only the inline context (`jsonld.context`, a mapping or a list
   of mappings) is inspected; pass `project_root` to resolve file paths and
-  allowed URLs first (TODO 5.5). URL context items without `project_root`
-  are skipped, not loaded — "can't check" is its own outcome, never "ok"
-  (see `TODO.md`, principle П4).
+  allowed URLs first. URL context items without `project_root`
+  are skipped, not loaded — "can't check" is its own outcome, never "ok".
 
   Args:
       schema: The schema whose `jsonld` section holds the context and whose
@@ -387,7 +386,7 @@ def uncovered_keys(
 def probe_lost_keys(
   schema: FrontmatterSchema, *, project_root: pathlib.Path | None = None
 ) -> list[str]:
-  """Expand a probe document per schema key through `pyld` (TODO 5.6).
+  """Expand a probe document per schema key through `pyld`.
 
   The dynamic counterpart of `uncovered_keys`: rather than reading the
   context statically, every key is expanded on its own in a minimal probe
@@ -447,7 +446,7 @@ def _covered_terms(context: Any) -> tuple[set[str], bool]:
   items = context if isinstance(context, list) else [context]
   for item in items:
     if not isinstance(item, Mapping):
-      continue  # A string item is a context URL (TODO 5.5): not loaded here.
+      continue  # A string item is a context URL: not loaded here.
     for key, value in item.items():
       if key == '@vocab' and value:
         has_vocab = True

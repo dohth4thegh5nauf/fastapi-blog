@@ -1,4 +1,4 @@
-"""Tests for `seo_fields()` (TODO 5.9.1) and `build_head()` (5.9.3-5.9.4)."""
+"""Tests for `seo_fields()` and `build_head()`."""
 
 import pytest
 
@@ -80,7 +80,7 @@ def test_seo_fields_robots_rejects_an_unknown_directive():
 
 
 def test_seo_fields_author_accepts_a_list_too():
-  """The `author` role allows `str` or `list[str]` (TODO 5.9.1's table)."""
+  """The `author` role allows `str` or `list[str]`."""
   schema = FrontmatterSchema(
     fields=(FieldSpec('authors', type='list[str]', role='author'),)
   )

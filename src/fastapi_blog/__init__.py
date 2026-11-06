@@ -111,10 +111,10 @@ def setup_fastapi_blog(
       api_auth_dependency: Optional independent auth dependency for the REST API.
       enable_role_management: Add the role management views to the admin panel.
       frontmatter_schema: Custom schema of the post frontmatter.
-      seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
+      seo: Site-wide SEO settings; stronger than the schema's
           own `seo` section.
       seo_routes: Add `sitemap.xml`, `robots.txt` and `redirect_from`
-          redirects (TODO 5.9.5); bare-slug aliases redirect under every
+          redirects; bare-slug aliases redirect under every
           mounted locale. Requires `seo.site_url`. Default: `False`.
       health_routes: Add the `/api/v1/health{,/live,/ready}` probes in the
           draft-inadarei-api-health-check-06 format. Default: `True`; pass

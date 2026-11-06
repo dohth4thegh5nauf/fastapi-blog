@@ -1,4 +1,4 @@
-"""Integrity checks for links and media paths (TODO 6.1)."""
+"""Integrity checks for links and media paths."""
 
 import pytest
 

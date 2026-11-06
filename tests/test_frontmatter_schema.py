@@ -373,7 +373,7 @@ def test_role_map():
   assert FrontmatterSchema(fields=(FieldSpec('x'),)).role_map() == {}
 
 
-# --- `status` role / `published_values` (TODO 5.7) --------------------------
+# --- `status` role / `published_values` --------------------------
 
 
 def test_status_role_needs_published_values():
@@ -477,7 +477,7 @@ def test_payload_model_function():
   assert payload_model(True, schema) is schema.payload_model()
 
 
-# --- on_create / read_only (TODO 4.5) ---------------------------------------
+# --- on_create / read_only ---------------------------------------
 
 
 def test_field_spec_rejects_unknown_on_create():
@@ -585,7 +585,7 @@ def test_read_only_allows_an_update_that_leaves_it_untouched():
   instance = schema.model()(title='New')
   result = schema.dump_for_write(instance, is_create=False, existing=existing)
   assert result['title'] == 'New'
-  # An omitted read-only field is preserved, not reset (TODO 5.1).
+  # An omitted read-only field is preserved, not reset.
   assert result['@id'] == 'note-0001'
 
 
@@ -598,7 +598,7 @@ def test_read_only_is_not_checked_on_create():
   assert result['@id'] == 'anything'
 
 
-# --- choices / pattern / min / max / min_items / max_items (TODO 5.1) ------
+# --- choices / pattern / min / max / min_items / max_items ------
 
 
 def test_field_spec_rejects_empty_choices():
@@ -765,7 +765,7 @@ def test_label_hint_hidden_round_trip_through_to_dict():
   }
 
 
-# --- Merge on rewrite (TODO 4.5) ---------------------------------------------
+# --- Merge on rewrite ---------------------------------------------
 
 
 def _loose_title_schema(extra='allow'):
@@ -828,7 +828,7 @@ def test_create_does_not_merge():
   assert result == {'title': 'New'}
 
 
-# --- link / file / image field types (TODO 5.1) -------------------------------
+# --- link / file / image field types -------------------------------
 
 
 def test_link_type_validates_as_a_string():
@@ -905,7 +905,7 @@ def test_schema_round_trip_with_link_and_file_fields():
   assert restored.fields[0].filters == ({'field': 'kind', 'values': ['a']},)
 
 
-# --- Nested object fields (TODO 5.1.2) ---------------------------------------
+# --- Nested object fields ---------------------------------------
 
 
 def test_nested_object_and_list_object_validate_and_dump_aliases():

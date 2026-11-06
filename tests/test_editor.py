@@ -449,7 +449,7 @@ def test_create_post_with_auth(app_dir):
   pass
 
 
-# --- etag / If-Match concurrency via the REST API (TODO 4.7) ----------------
+# --- etag / If-Match concurrency via the REST API ----------------
 
 
 def test_get_raw_returns_an_etag_header(client, app_dir):
@@ -607,7 +607,7 @@ def test_require_if_match_accepts_update_with_the_header(
   assert response.status_code == 200
 
 
-# --- on_create / read_only via the REST API (TODO 4.5) ----------------------
+# --- on_create / read_only via the REST API ----------------------
 
 ID_SCHEMA = FrontmatterSchema(
   fields=(

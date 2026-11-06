@@ -1,7 +1,7 @@
 """Password hashing for the admin users (bcrypt, used directly).
 
 `passlib` (unmaintained since 2020) is replaced by calling `bcrypt`
-directly, which lifts the `bcrypt<4.1` pin (TODO 7.5). Hashes made earlier
+directly, which lifts the `bcrypt<4.1` pin. Hashes made earlier
 with `passlib` (`$2b$...`) stay valid: they are plain bcrypt hashes.
 """
 

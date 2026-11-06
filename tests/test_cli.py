@@ -1,4 +1,4 @@
-"""Tests for `python -m fastapi_blog` (TODO 5.4/5.7 CLI: export, schema)."""
+"""Tests for `python -m fastapi_blog`."""
 
 import json
 
@@ -108,7 +108,7 @@ def test_export_expanded_format_needs_pyld(posts_dir, capsys, monkeypatch):
   assert 'jsonld` extra' in capsys.readouterr().err
 
 
-# --- `schema --json-schema` (TODO 5.7) ---------------------------------------
+# --- `schema --json-schema` ---------------------------------------
 
 
 def test_schema_json_schema_prints_the_built_in_fields(capsys):
@@ -227,7 +227,7 @@ jsonld:
   assert len(lines) >= 2
 
 
-# --- Project file and the `check` command (TODO 6.1, phase D) ----------------
+# --- Project file and the `check` command ----------------
 
 
 @pytest.fixture

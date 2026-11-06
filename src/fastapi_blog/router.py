@@ -127,7 +127,7 @@ def get_blog_router(
   def _add_i18n_context(request: Request, context: dict) -> dict:
     """Add i18n translator and site-wide SEO context to the template context."""
     # The `seo=` argument is stronger than the schema's `seo` section
-    # (TODO 5.9.2); without either there is no `site_name` (5.9.6 behavior).
+    # Without either source, there is no `site_name` in the page context.
     effective_seo = resolve_seo_config(seo, frontmatter_schema)
     if effective_seo is not None and effective_seo.site_name:
       context['site_name'] = effective_seo.site_name
@@ -194,7 +194,7 @@ def get_blog_router(
       if head.get('canonical_url'):
         context['canonical_url'] = head['canonical_url']
         # A page whose own `canonical` points elsewhere is a duplicate, and
-        # duplicates get no hreflang alternates (TODO 5.9.4).
+        # duplicates get no hreflang alternates.
         if head['canonical_url'].rstrip('/') != request_url.rstrip('/'):
           context['is_canonical'] = False
 
@@ -390,7 +390,7 @@ def get_blog_router(
 
     @router.get('/{slug}.jsonld', name=f'blog_post_jsonld{name_suffix}')
     async def blog_post_jsonld(slug: str, request: Request):
-      # Only published posts are public (TODO 5.4): `_list_posts()` already
+      # Only published posts are public: `_list_posts()` already
       # filters to published (its `published` default is `True`).
       published_slugs = {post['slug'] for post in _list_posts(request)}
       if slug not in published_slugs:
@@ -422,7 +422,7 @@ def get_blog_router(
         context=context,
       )
 
-    # The same path safety as for posts (TODO 4.1): the slug is validated
+    # The same path safety as for posts: the slug is validated
     # before it ever becomes a path, a bad one is a 404 like a missing page.
     try:
       path = store.safe_document_path(

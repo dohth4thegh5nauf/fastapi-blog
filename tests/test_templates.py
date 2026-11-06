@@ -1,4 +1,4 @@
-"""Shared template language and slug generation (TODO 6.4)."""
+"""Shared template language and slug generation."""
 
 import datetime
 

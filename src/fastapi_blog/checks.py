@@ -1,4 +1,4 @@
-"""Integrity checks of a collection (TODO 6.1, first slice).
+"""Integrity checks of a collection.
 
 `check_collection` reads every document of a collection and reports what is
 wrong as a list of `Issue` objects:
@@ -8,7 +8,7 @@ wrong as a list of `Issue` objects:
   frontmatter doesn't match the schema;
 - `context.lost_term` (level from `jsonld.strict_context`, `error` by
   default): a schema key the JSON-LD context doesn't cover, so expansion
-  would silently drop it (TODO 5.6);
+  would silently drop it;
 - `collection.directory_missing` / `context.unavailable` (undefined):
   something could not be checked — never reported as fine (П4).
 
@@ -35,7 +35,7 @@ from .models import ROBOTS_DIRECTIVES, SeoCheckConfig, is_http_url_or_root_path
 from .validators import run_validator
 
 
-# Exit codes of `python -m fastapi_blog check` (TODO 6.1).
+# Exit codes of `python -m fastapi_blog check`.
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 1
 EXIT_UNDEFINED = 2
@@ -794,10 +794,10 @@ def _canonical_path(value: Any) -> str | None:
 def _check_seo(
   spec: CollectionSpec, documents: store.DocumentStore, issues: list[Issue]
 ) -> None:
-  """Check SEO metadata and redirects across the collection (TODO 5.9.7)."""
+  """Check SEO metadata and redirects across the collection."""
   schema = spec.schema
   if schema is None or schema.seo is None:
-    # Without an `seo` section the behavior is unchanged (TODO 5.9.0, П6):
+    # Without an `seo` section the behavior is unchanged:
     # SEO findings are produced only for schemas that opted into them.
     return
   config = schema.seo.check if schema.seo.check else SeoCheckConfig()

@@ -237,7 +237,7 @@ class MarkdownPost:
 class MarkdownFileManager:
   """Manager for reading/writing markdown files, backed by a `DocumentStore`.
 
-  The one place the admin panel turns a slug into a file (see TODO 4.1):
+  The one place the admin panel turns a slug into a file:
   everything here goes through `self.store` rather than building paths by
   hand, so slug/path safety is enforced in exactly one place.
   """

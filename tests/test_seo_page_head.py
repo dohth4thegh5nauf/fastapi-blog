@@ -1,4 +1,4 @@
-"""Page-level SEO head output through the blog routes (TODO 5.9.3-5.9.4)."""
+"""Page-level SEO head output through the blog routes."""
 
 import pytest
 from fastapi import FastAPI

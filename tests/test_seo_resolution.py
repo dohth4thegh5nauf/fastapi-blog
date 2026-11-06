@@ -1,4 +1,4 @@
-"""One test group per row of the TODO 5.9.3 substitution table."""
+"""Exercise the supported SEO metadata fallback rules."""
 
 import pytest
 
