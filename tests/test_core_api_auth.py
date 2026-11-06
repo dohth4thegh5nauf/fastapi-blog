@@ -74,7 +74,7 @@ def test_api_without_any_auth_fails_at_startup():
 
 def test_editor_without_any_auth_fails_at_startup():
   app = FastAPI()
-  fastapi_blog.add_editor_to_app(app, ui=False)
+  fastapi_blog.add_editor_to_app(app)
   with pytest.raises(ConfigurationError), TestClient(app):
     pass
 
@@ -113,9 +113,7 @@ def test_configured_api_starts(options):
     pass
 
 
-def test_setup_without_admin_makes_up_no_credentials(monkeypatch):
-  monkeypatch.delenv('FASTAPI_BLOG_ADMIN_LOGIN', raising=False)
-  monkeypatch.delenv('FASTAPI_BLOG_ADMIN_PASSWORD', raising=False)
+def test_setup_without_admin_does_not_require_admin_authentication():
   app = FastAPI()
   assert (
     fastapi_blog.setup_fastapi_blog(app, admin=False, include_api=True) == {}

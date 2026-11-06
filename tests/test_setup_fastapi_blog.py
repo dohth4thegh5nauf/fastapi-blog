@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 import fastapi_blog
 from fastapi_blog.models import SeoConfig
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def _all_paths(app: FastAPI) -> list[str]:
   """Flatten `app.routes`, descending into `include_router()`'d routers.
@@ -45,6 +47,7 @@ def test_setup_fastapi_blog_basic():
     admin_password='test123',
     secret_key='a' * 64,  # Strong secret
     enable_role_management=False,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # Verify admin is configured
@@ -74,6 +77,7 @@ def test_setup_fastapi_blog_with_api():
     admin_username='admin',
     admin_password='test123',
     secret_key='a' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   assert admins is not None
@@ -94,6 +98,7 @@ def test_setup_fastapi_blog_multiple_locales():
     admin_username='admin',
     admin_password='test123',
     secret_key='a' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # Both locales should be configured
@@ -121,6 +126,7 @@ def test_setup_fastapi_blog_with_role_management():
     admin_password='test123',
     secret_key='a' * 64,
     enable_role_management=True,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   assert admins is not None
@@ -144,6 +150,7 @@ def test_setup_fastapi_blog_is_convenience_wrapper():
     admin_password='test123',
     secret_key='a' * 64,
     enable_role_management=False,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # Method 2: Separate calls
@@ -156,10 +163,9 @@ def test_setup_fastapi_blog_is_convenience_wrapper():
     app2,
     locales=['en'],
     default_locale='en',
-    admin_username='admin',
-    admin_password='test123',
     secret_key='a' * 64,
     enable_role_management=False,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # Both should result in same number of routes

@@ -52,7 +52,6 @@ def add_blog_to_fastapi(
     'jinja2.ext.debug',
   },
   favorite_post_ids: set[str] = set(),
-  mount_statics: bool = True,
   strict_frontmatter: bool = True,
   sanitize_html: bool = True,
   posts_dirname: str = 'posts',
@@ -84,7 +83,6 @@ def add_blog_to_fastapi(
       jinja2_loader: Jinja2 template loader
       jinja2_extensions: Set of Jinja2 extensions to enable
       favorite_post_ids: Set of post slugs to feature on homepage
-      mount_statics: Whether to mount static files (deprecated)
       strict_frontmatter: Use strict frontmatter validation. Ignored when
                           `frontmatter_schema` is given (set `extra` on the schema).
       sanitize_html: Sanitize HTML in markdown content

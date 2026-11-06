@@ -1,3 +1,4 @@
+
 from contextlib import asynccontextmanager
 
 import pytest
@@ -6,6 +7,8 @@ from sqlalchemy import inspect
 from starlette.testclient import TestClient
 
 from fastapi_blog.admin import add_admin_to_app
+
+from tests.auth_helpers import DemoTestAuthProvider
 
 
 @pytest.mark.anyio
@@ -30,8 +33,8 @@ async def test_admin_lifespan_composition():
     app,
     database_url='sqlite+aiosqlite:///:memory:',
     init_database=True,
-    admin_password='test-password',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # The TestClient context manager will trigger startup and shutdown events.

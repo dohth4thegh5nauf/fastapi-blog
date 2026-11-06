@@ -214,7 +214,7 @@ fastapi_blog.add_blog_to_fastapi(
   app, include_api=True, frontmatter_schema=schema
 )
 # or, with the editor helper:
-add_editor_to_app(app, ui=False, frontmatter_schema=schema)
+add_editor_to_app(app, frontmatter_schema=schema)
 # or, with the router itself:
 get_api_router(frontmatter_schema=schema)
 ```
@@ -233,13 +233,16 @@ get_api_router(frontmatter_schema=schema)
   back to `PUT /update/{slug}` unchanged.
 - `/docs` shows the schema keys (for example `pubDate`) in the request body.
 - `strict_frontmatter` is ignored when a schema is given.
-- `add_editor_to_app(ui=True)` (deprecated UI) doesn't support a schema: it emits a
-  `UserWarning` and keeps the built-in fields.
 
 ## Using a schema in the admin panel
 
 ```python
-add_admin_to_app(app, frontmatter_schema=schema)
+add_admin_to_app(
+  app,
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
+  frontmatter_schema=schema,
+)
 ```
 
 The markdown posts section of the admin is built from the schema:
@@ -417,8 +420,8 @@ schema is passed. Without `frontmatter_schema` the blog behaves exactly as befor
 
 - Markdown admin writes use `DocumentService` directly and do not require the
   REST API. Custom admin routes include Starlette Admin CSRF tokens.
-- The admin reads the posts directory from the `POSTS_DIR` environment variable
-  (default `posts` in the working directory), not from `posts_dirname`.
+- Pass `posts_dirname` explicitly to keep admin, blog and REST API storage
+  pointed at the same directory. `POSTS_DIR` is not read.
 - `published` is a plain flag: a `draft: true` flag (the opposite meaning) needs
   its own role, which is not available yet.
 - `PostModelView` (the SQL `Post` model) and the user/role views don't use the

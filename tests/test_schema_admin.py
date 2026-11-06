@@ -35,6 +35,8 @@ from fastapi_blog.templates import (
   parse_template,
 )
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 ADMIN_TEMPLATES = (
   pathlib.Path(fastapi_blog.__file__).parent / 'admin' / 'templates'
@@ -185,13 +187,12 @@ def test_localized_admin_pages_render_content_and_locale_tabs(tmp_path, locale):
   app = FastAPI()
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='x' * 64,
     database_url=f'sqlite+aiosqlite:///{tmp_path / "admin.db"}',
     locales=['en', 'ru'],
     default_locale='en',
     collection_spec=spec,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   with TestClient(app) as client:
     prefix = '/admin' if locale == 'en' else '/ru/admin'
@@ -711,12 +712,11 @@ def test_add_admin_to_app_accepts_a_schema(workdir):
   app = FastAPI()
   admins = fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Admin123!',
     secret_key='a' * 64,
     locales=['en'],
     default_locale='en',
     frontmatter_schema=EXTERNAL_SCHEMA,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   assert 'en' in admins
 
@@ -730,6 +730,7 @@ def test_setup_fastapi_blog_applies_the_schema_everywhere(workdir):
     admin_password='Admin123!',
     secret_key='a' * 64,
     frontmatter_schema=EXTERNAL_SCHEMA,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   assert 'en' in admins
 
@@ -751,9 +752,8 @@ def test_setup_fastapi_blog_applies_the_schema_everywhere(workdir):
 def test_setup_fastapi_blog_threads_posts_dirname_to_add_admin(monkeypatch):
   """`setup_fastapi_blog(posts_dirname=...)` must pass it on to `add_admin_to_app`.
 
-  It used to be dropped: the admin panel read posts via
-  `get_posts_directory()` alone (a `POSTS_DIR` env var or a cwd-based
-  guess), so it could silently point at a different directory than
+  The admin must use the same explicit directory as the blog/REST API, so it
+  cannot silently point at a different directory than
   `setup_fastapi_blog(posts_dirname=...)` configured for the blog/REST API.
   """
   captured = {}
@@ -772,6 +772,7 @@ def test_setup_fastapi_blog_threads_posts_dirname_to_add_admin(monkeypatch):
     admin_username='admin',
     admin_password='Admin123!',
     secret_key='a' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   assert captured['posts_dirname'] == 'content'
 
@@ -792,12 +793,11 @@ def test_admin_panel_reads_posts_from_posts_dirname(tmp_path, monkeypatch):
   fastapi_blog_admin.add_admin_to_app(
     app,
     database_url='sqlite+aiosqlite:///:memory:',
-    admin_username='admin',
-    admin_password='Admin123!',
     secret_key='a' * 64,
     locales=['en'],
     default_locale='en',
     posts_dirname='content',
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   fastapi_blog.add_blog_to_fastapi(
     app,
@@ -840,17 +840,13 @@ def test_admin_panel_reads_posts_from_posts_dirname(tmp_path, monkeypatch):
   helpers.list_posts.cache_clear()
 
 
-def test_posts_dir_env_var_is_deprecated(tmp_path, monkeypatch):
+def test_posts_dir_environment_variable_is_ignored(tmp_path, monkeypatch):
   monkeypatch.chdir(tmp_path)
   monkeypatch.setenv('POSTS_DIR', str(tmp_path / 'env-posts'))
-  with pytest.warns(DeprecationWarning, match='POSTS_DIR'):
-    result = get_posts_directory()
-  assert result == str(tmp_path / 'env-posts')
+  assert get_posts_directory() == str(tmp_path / 'posts')
 
 
-def test_posts_dirname_argument_skips_the_deprecation_warning(
-  tmp_path, monkeypatch
-):
+def test_posts_dirname_argument_is_used_explicitly(tmp_path, monkeypatch):
   monkeypatch.setenv('POSTS_DIR', str(tmp_path / 'env-posts'))
   with warnings.catch_warnings():
     warnings.simplefilter('error')

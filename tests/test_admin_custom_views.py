@@ -16,6 +16,8 @@ from fastapi_blog.config import CollectionSpec
 from fastapi_blog.models import FieldSpec, FrontmatterSchema
 from fastapi_blog.store import write_document
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 class DecisionsView(CustomView):
   def __init__(self, locale: str):
@@ -42,13 +44,12 @@ def test_configure_admin_adds_view_to_every_locale_before_mount():
 
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='s' * 64,
     database_url='sqlite+aiosqlite:///:memory:',
     locales=['en', 'ru'],
     default_locale='en',
     configure_admin=configure_admin,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   assert configured == ['en', 'ru']
@@ -108,13 +109,12 @@ def test_admin_uses_request_resolved_collection_root(tmp_path):
   app = FastAPI()
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='s' * 64,
     database_url='sqlite+aiosqlite:///:memory:',
     locales=['en'],
     default_locale='en',
     collection_spec=spec,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   async def assert_roots_are_isolated():

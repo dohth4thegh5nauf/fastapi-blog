@@ -1,8 +1,6 @@
-"""Admin credential validation and cookie-authenticated write protection."""
+"""Session-secret validation and cookie-authenticated write protection."""
 
-import logging
 import os
-import warnings
 from collections.abc import Sequence
 from typing import Any
 from urllib.parse import urlsplit
@@ -13,11 +11,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from .auth import ConfigurationError
 
 
-logger = logging.getLogger('fastapi_blog.security')
 MIN_SECRET_LENGTH = 32
-DEV_USERNAME = 'admin'
-DEV_PASSWORD = 'Admin123!'  # nosec B105
-DEV_SECRET = 'change-me-in-production-please-use-strong-secret'  # nosec B105
 WEAK_SECRETS = frozenset(
   {
     '',
@@ -36,57 +30,6 @@ _GENERATE_HINT = "python -c 'import secrets; print(secrets.token_hex(32))'"
 def is_weak_secret(secret: str) -> bool:
   """Return whether a session secret is a known placeholder or too short."""
   return secret in WEAK_SECRETS or len(secret) < MIN_SECRET_LENGTH
-
-
-def resolve_admin_credentials(
-  username: str | None,
-  password: str | None,
-  secret_key: str | None,
-  *,
-  insecure_dev: bool = False,
-) -> tuple[str, str, str]:
-  """Resolve credentials without production defaults, or fail closed."""
-  username = username or os.getenv('FASTAPI_BLOG_ADMIN_LOGIN') or DEV_USERNAME
-  password = password or os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
-  secret_key = secret_key or os.getenv('SECRET_KEY')
-
-  if insecure_dev:
-    password = password or DEV_PASSWORD
-    secret_key = secret_key or DEV_SECRET
-    warnings.warn(
-      'insecure_dev=True enables development credentials and/or a weak '
-      'session secret. Never use this setting in production.',
-      UserWarning,
-      stacklevel=2,
-    )
-    logger.warning('INSECURE DEVELOPMENT MODE: do not expose this app')
-    return username, password, secret_key
-
-  problems: list[str] = []
-  if not password:
-    problems.append(
-      'no admin password (pass admin_password or set '
-      'FASTAPI_BLOG_ADMIN_PASSWORD)'
-    )
-  if not secret_key:
-    problems.append(
-      'no session secret (pass secret_key or set SECRET_KEY; generate one '
-      f'with {_GENERATE_HINT})'
-    )
-  elif is_weak_secret(secret_key):
-    problems.append(
-      f'the session secret is weak (minimum {MIN_SECRET_LENGTH} characters; '
-      f'generate one with {_GENERATE_HINT})'
-    )
-  if problems:
-    raise ConfigurationError(
-      'Unsafe admin configuration: '
-      + '; '.join(problems)
-      + '. For local development only, pass insecure_dev=True.'
-    )
-  # The checks above guarantee both values exist here.
-  assert password is not None and secret_key is not None  # nosec B101
-  return username, password, secret_key
 
 
 def resolve_session_secret(secret_key: str | None) -> str:

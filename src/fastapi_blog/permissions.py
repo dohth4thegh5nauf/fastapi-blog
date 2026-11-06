@@ -96,15 +96,15 @@ def current_user(request: Request) -> dict[str, Any] | None:
 
 
 def user_from_session(request: Request) -> dict[str, Any] | None:
-  """Normalize a session user; legacy admin sessions retain admin access."""
+  """Return a recognized role-bearing session principal, if present."""
   if 'session' not in request.scope:
     return None
   username = request.session.get('user')
   if not username:
     return None
   role = request.session.get('role')
-  if role is None and request.session.get('is_admin'):
-    role = ADMIN
+  if role not in ROLE_PERMISSIONS:
+    return None
   return {'username': username, 'role': role, 'is_admin': role == ADMIN}
 
 

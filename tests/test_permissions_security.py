@@ -224,8 +224,7 @@ def test_legacy_editor_api_also_checks_cookie_origin_and_roles(tmp_path):
     app,
     prefix='/legacy-api',
     posts_dirname=str(tmp_path),
-    ui=False,
-  )
+      )
   payload = {
     'frontmatter': {
       'title': 'Legacy API role protected',

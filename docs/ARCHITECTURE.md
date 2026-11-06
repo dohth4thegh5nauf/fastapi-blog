@@ -140,7 +140,6 @@ fastapi_blog
 │       └── templates/ (Jinja2)
 │
 ├── admin/__init__.py (add_admin_to_app)
-│   ├── _legacy_auth_provider.py (temporary legacy credentials adapter)
 │   ├── database.py (SQLAlchemy setup)
 │   ├── models/ (User, Post, Role, UserWithRoles)
 │   ├── views.py, views_role.py (ModelViews)
@@ -156,13 +155,10 @@ fastapi_blog
 ### Authentication and authorization
 
 Admin login uses the host application's Starlette Admin `AuthProvider`; the
-host owns account storage and credential validation. The transitional legacy
-path accepts `admin_password`/`FASTAPI_BLOG_ADMIN_PASSWORD` when no provider is
-passed. Both paths require a session secret (`secret_key` or `SECRET_KEY`) of
-at least 32 characters that is not a known placeholder. Legacy missing
-credentials or a weak secret raise `ConfigurationError`; the package does not
-create a production password. `insecure_dev=True` is the explicit
-local-development escape hatch for the legacy path and emits a warning.
+host owns account storage and credential validation. Admin setup requires a
+provider and a session secret (`secret_key` or `SECRET_KEY`) of at least 32
+characters that is not a known placeholder. There is no package-managed admin
+credential store or development login.
 `https_only=True` sets the session cookie's `Secure` attribute;
 `SameSite=Lax` is the default. If the application already has a
 `SessionMiddleware`, it must use the exact same secret and `SameSite=Lax` or

@@ -1,7 +1,5 @@
 """CRUD operations for markdown files using starlette-admin CustomView."""
 
-import os
-import warnings
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
@@ -24,7 +22,6 @@ from ..permissions import (
   Authorizer,
   default_authorize,
   ensure_allowed,
-  user_from_session,
 )
 from ..service import BlockingValidationError, DocumentService
 from ..validators import Validator
@@ -42,7 +39,7 @@ def _(message: str) -> str:
 
 
 def get_posts_directory(posts_dirname: str | None = None) -> str:
-  """Get the posts directory: `posts_dirname`, else `POSTS_DIR`, else a guess.
+  """Get the posts directory or use the standard working-directory path.
 
   Args:
     posts_dirname: The directory to use, normally the same `posts_dirname`
@@ -55,19 +52,7 @@ def get_posts_directory(posts_dirname: str | None = None) -> str:
   """
   if posts_dirname is not None:
     return posts_dirname
-  posts_dir_env = os.getenv('POSTS_DIR')
-  if posts_dir_env:
-    warnings.warn(
-      'The POSTS_DIR environment variable is deprecated (TODO.md, 4.6): '
-      "pass posts_dirname='...' to setup_fastapi_blog()/add_admin_to_app() "
-      'instead, so the admin panel and the blog/REST API always agree on '
-      'where posts live.',
-      DeprecationWarning,
-      stacklevel=2,
-    )
-    return posts_dir_env
 
-  # Try to find posts directory relative to the app
   backend_dir = (
     Path.cwd() / 'backend' if (Path.cwd() / 'backend').exists() else Path.cwd()
   )
@@ -589,12 +574,7 @@ class _AuthorizedMarkdownView:
 
   authorize: Authorizer
 
-  def _set_principal(self, request: Request) -> None:
-    if getattr(request.state, 'blog_user', None) is None:
-      request.state.blog_user = user_from_session(request)
-
   async def _require(self, request: Request, action: str) -> None:
-    self._set_principal(request)
     await ensure_allowed(self.authorize, request, 'posts', action)
 
 
@@ -636,7 +616,6 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('', methods=['POST'])
   async def save(self, request: Request) -> JSONResponse:
     """Validate and persist a form submission without calling the REST API."""
-    self._set_principal(request)
     manager = self.manager.for_request(request)
     try:
       data = await request.json()
@@ -874,7 +853,6 @@ class MarkdownSaveView(_AuthorizedMarkdownView, CustomView):
   @route('/{slug}', methods=['DELETE'])
   async def delete(self, request: Request) -> JSONResponse:
     """Delete a document through the same service used for form saves."""
-    self._set_principal(request)
     manager = self.manager.for_request(request)
     await self._require(request, 'delete')
     slug = str(request.path_params.get('slug', ''))

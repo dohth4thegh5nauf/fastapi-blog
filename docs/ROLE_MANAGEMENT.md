@@ -148,9 +148,8 @@ async with session_factory() as session:
   await create_default_roles(session)
 ```
 
-The legacy compatibility provider can assign three roles through
-`auth_users`. With an external provider, the host should populate
-`request.state.blog_user` and supply its own role or permission mapping:
+The host-supplied provider should populate `request.state.blog_user` with a
+role or explicit permission mapping:
 
 - **admin:** Full access to posts, users, settings, and role management.
 - **editor:** Can create, read, update, and publish posts; can read users and
@@ -161,32 +160,10 @@ These are the initial grants for the built-in role names. The default policy
 continues to use them for principals that provide only a role name; principals
 with an explicit `permissions` mapping use that mapping instead.
 
-### Legacy Provider Compatibility
-
-```python
-# Legacy migration example only; don't combine these parameters with auth_provider.
-admins = fastapi_blog.add_admin_to_app(
-  app,
-  admin_username='root',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
-  secret_key=os.environ['SECRET_KEY'],
-  auth_users={
-    'writer': {'password': os.environ['EDITOR_PASSWORD'], 'role': 'editor'},
-    'reader': {'password': os.environ['VIEWER_PASSWORD'], 'role': 'viewer'},
-  },
-)
-```
-
-In the legacy path only, the primary `admin_username`/`admin_password` account
-receives the `admin` role. Additional `auth_users` are legacy panel login
-identities; the role is
-stored in the signed session and is preserved when that cookie authenticates
-REST API calls. Unknown or unrecognized roles are denied. An
-authenticated principal without any role (a custom `auth_dependency`,
-a legacy session) keeps the pre-role-management write access; pass a
-custom `authorize=` callback to enforce a stricter policy. The
-`insecure_dev=True` flag enables legacy development credentials only
-as an explicit local opt-in.
+Unknown or unrecognized roles are denied. Principals without a recognized
+role or explicit permission mapping are denied by the default policy. The REST
+API has its own authentication configuration and does not inherit the admin
+provider's identity automatically.
 
 ## Usage
 
@@ -316,9 +293,11 @@ class CustomUserView(UserWithRolesModelView):
 See `tests/examples/with_roles.py` for a full working example.
 
 ```python
+import os
 from fastapi import FastAPI
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
@@ -329,6 +308,8 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin with Roles',
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
 )
 
 # Add role management

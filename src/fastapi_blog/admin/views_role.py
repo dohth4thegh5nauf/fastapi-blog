@@ -13,7 +13,6 @@ from ..permissions import (
   KNOWN_PERMISSIONS,
   default_authorize,
   normalize_role_permissions,
-  user_from_session,
 )
 from .passwords import get_password_hasher
 
@@ -24,10 +23,6 @@ class _RoleProtectedView(ModelView):
   resource = 'role'
 
   def _allowed(self, request: Request, action_name: str = 'read') -> bool:
-    principal = getattr(request.state, 'blog_user', None)
-    if principal is None:
-      principal = user_from_session(request)
-      request.state.blog_user = principal
     callback = getattr(self, 'authorize', None) or default_authorize
     result = callback(request, self.resource, action_name)
     return bool(result) if not inspect.isawaitable(result) else False
@@ -55,10 +50,6 @@ class _RoleProtectedView(ModelView):
 
   async def is_action_allowed(self, request: Request, name: str) -> bool:
     # Starlette Admin awaits this hook (unlike the sync `can_*` ones).
-    principal = getattr(request.state, 'blog_user', None)
-    if principal is None:
-      principal = user_from_session(request)
-      request.state.blog_user = principal
     callback = getattr(self, 'authorize', None) or default_authorize
     result = callback(request, self.resource, 'update')
     if inspect.isawaitable(result):
@@ -89,7 +80,6 @@ class RoleModelView(_RoleProtectedView):
     self,
     model,
     locale: str = 'en',
-    admin_username: str = 'admin',
     authorize=None,
     *args,
     translations_dir: str | None = None,
@@ -99,7 +89,6 @@ class RoleModelView(_RoleProtectedView):
     self.fields = copy.deepcopy(type(self).fields)
     super().__init__(model, *args, **kwargs)
     self.locale = locale
-    self.admin_username = admin_username  # Store for access checks
     self.authorize = authorize
     self.translator = Translator(locale, translations_dir)
     self.menu_label = self.translator.role.role_label
@@ -215,7 +204,6 @@ class UserWithRolesModelView(_RoleProtectedView):
     self,
     model,
     locale: str = 'en',
-    admin_username: str = 'admin',
     authorize=None,
     *args,
     translations_dir: str | None = None,
@@ -224,7 +212,6 @@ class UserWithRolesModelView(_RoleProtectedView):
     """Initialize with translations and admin username."""
     super().__init__(model, *args, **kwargs)
     self.locale = locale
-    self.admin_username = admin_username  # Store for access checks
     self.authorize = authorize
     self.translator = Translator(locale, translations_dir)
     self.menu_label = self.translator.role.user_roles_label

@@ -128,7 +128,7 @@ add_admin_to_app(
 )
 ```
 
-The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). The host application owns login and account storage; see [Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md) for the provider contract, legacy migration path, and session requirements.
+The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). The host application owns login and account storage; see [Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md) for the provider contract and session requirements.
 
 To add a custom Starlette Admin view to every localized panel, pass
 `configure_admin`. It receives the locale and fully configured `Admin` instance
@@ -238,7 +238,7 @@ setup_fastapi_blog(
   collection_spec=posts,
   include_api=True,
   admin=True,
-  # Supply deployment credentials and a strong secret in production.
+  # Pass an AuthProvider and a strong secret for production deployments.
 )
 ```
 
@@ -285,7 +285,7 @@ add_blog_to_fastapi(
   api_prefix='/api/posts',
   api_require_auth=True,
   admin_username='writer',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  admin_password=os.environ['FASTAPI_BLOG_API_PASSWORD'],
 )
 ```
 
@@ -448,7 +448,9 @@ python -m fastapi_blog schema --schema frontmatter.yaml --json-schema --out fron
 
 ### Environment variables
 
-The package recognizes `FASTAPI_BLOG_INCLUDE_API`, `FASTAPI_BLOG_ADMIN_LOGIN` and `FASTAPI_BLOG_ADMIN_PASSWORD`. Admin/database deployment settings are described in [Environment Variables](docs/ENVIRONMENT_VARIABLES.md).
+The package recognizes `FASTAPI_BLOG_INCLUDE_API`. Admin deployment settings
+are described in [Environment Variables](docs/ENVIRONMENT_VARIABLES.md); the
+host application configures admin authentication through an `AuthProvider`.
 
 Generate a session secret rather than reusing a password:
 

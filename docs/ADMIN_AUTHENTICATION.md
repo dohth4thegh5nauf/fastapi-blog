@@ -103,14 +103,10 @@ that protection. `https_only=True` enables secure session cookies for HTTPS.
   `api_auth_dependency` accepted by `add_blog_to_fastapi()`; when using
   `setup_fastapi_blog()`, pass `api_auth_dependency` separately.
 
-## Legacy migration
-
-For migration, calls without `auth_provider` continue to use the legacy
-`admin_username`, `admin_password`, and `auth_users` path. Those parameters are
-mutually exclusive with `auth_provider`; ambiguous combinations fail while
-the app is configured. The legacy path still requires a password and strong
-session secret (unless the existing local-only `insecure_dev=True` option is
-used). New integrations should provide their own provider.
+Admin setup requires `auth_provider`. There is no package-managed admin
+credential store or default login. For unified setup, pass the provider to
+`setup_fastapi_blog()`; its `admin_username` and `admin_password` arguments
+configure REST API Basic Auth only.
 
 The repository's demo provider lives in `tests/examples/demo_auth.py`. Demo
 applications use an isolated in-memory SQLite admin database and seed a

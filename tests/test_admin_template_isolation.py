@@ -8,6 +8,8 @@ from jinja2.loaders import ChoiceLoader, FileSystemLoader, PrefixLoader
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 @pytest.fixture
 def app_with_admin():
@@ -15,11 +17,10 @@ def app_with_admin():
   admins = fastapi_blog.add_admin_to_app(
     app,
     title='Test Admin',
-    admin_username='admin',
-    admin_password='Admin123!',
     secret_key='t' * 64,
     locales=['en'],  # instead of i18n_enabled=False
     default_locale='en',
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   return app, admins
 

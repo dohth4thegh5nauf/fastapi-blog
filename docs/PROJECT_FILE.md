@@ -290,7 +290,6 @@ async def authenticate():
 
 add_editor_to_app(
   app,
-  ui=False,
   collection_spec=posts,
   auth_dependency=authenticate,
 )

@@ -184,19 +184,6 @@ def test_setup_facade_accepts_external_provider_without_legacy_credentials(
   asyncio.run(engine.dispose())
 
 
-def test_provider_conflicts_with_legacy_credentials_at_construction():
-  app = FastAPI()
-  with pytest.raises(ConfigurationError, match='cannot be combined'):
-    fastapi_blog.add_admin_to_app(
-      app,
-      auth_provider=FakeHostAuthProvider('en'),
-      admin_password='legacy-password',
-      secret_key='s' * 64,
-      locales=['en'],
-      default_locale='en',
-    )
-
-
 def test_single_provider_instance_is_rejected_for_multiple_locales():
   app = FastAPI()
   with pytest.raises(ConfigurationError, match='only be used with one locale'):

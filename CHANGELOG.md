@@ -65,10 +65,11 @@ Changes planned for version 0.10.0.
 - Added a Compose demo and container health checks.
 
 ### Changed
+- Kept REST API Basic Auth credentials separate from admin-panel
+  authentication; they do not configure admin logins.
 
-- Moved the fixed-credential provider to the demo application. Legacy login
-  parameters remain available through a private compatibility adapter and
-  cannot be combined with an external provider.
+- Moved the fixed-credential provider to the demo application. Admin login is
+  owned by the host application and configured through `AuthProvider`.
 - Updated runnable demos to create explicit providers and clarified that the
   User and Role views do not alter accounts in a host-supplied provider. The
   local database-backed demo provider explicitly uses its demo CRUD records.
@@ -106,11 +107,16 @@ Changes planned for version 0.10.0.
 - Corrected tests and health response type annotations after the date and
   OpenAPI changes. Temporary project files are excluded from mypy collection.
 
-### Deprecated
-
-- `add_editor_to_app(ui=True)` and the `POSTS_DIR` environment variable.
-
 ### Removed
+- Removed the package-managed legacy admin credential provider, its
+  `FASTAPI_BLOG_ADMIN_LOGIN`/`FASTAPI_BLOG_ADMIN_PASSWORD` environment path,
+  and `insecure_dev` development credentials.
+- Removed the deprecated standalone editor HTML interface and its `ui` and
+  `ui_prefix` options. `add_editor_to_app()` now exposes the REST API only.
+- Removed the `POSTS_DIR` environment fallback. Configure storage with
+  `posts_dirname` so blog, API and admin share an explicit directory.
+- Removed compatibility aliases `fastapi_blog.admin.i18n` and the legacy
+  authentication provider module.
 
 - Removed the public `SimpleAuthProvider` export and the unused
   database-backed `RBACAuthProvider` implementation.
@@ -118,9 +124,9 @@ Changes planned for version 0.10.0.
 
 ### Security
 
-- Require configured admin credentials and a strong session secret by default;
-  development credentials require explicit `insecure_dev=True`. Cookie-based
-  API writes validate the request origin, and admin forms use CSRF protection.
+- Require a host-supplied admin `AuthProvider` and a strong session secret.
+  Cookie-based API writes validate the request origin, and admin forms use
+  CSRF protection.
 
 <details>
 <summary>Detailed 0.9.0 development history</summary>
