@@ -421,6 +421,15 @@ def get_api_router(
       request.state.blog_user = principal
       if not require_auth and authorize is None:
         return principal
+      if (
+        authorize is None
+        and auth_dependency is not None
+        and principal is not None
+        and principal.get('role') is None
+        and not principal.get('is_admin')
+      ):
+        # An explicit API dependency is the host's authorization boundary.
+        return principal
       await ensure_allowed(permission_check, request, 'posts', action)
       return principal
 
