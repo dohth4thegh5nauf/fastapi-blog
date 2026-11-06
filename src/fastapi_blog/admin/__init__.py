@@ -260,6 +260,7 @@ def _create_admin_for_locale(
     auth_provider=auth_provider,
     secret_key=secret_key,  # Signs starlette-admin's own CSRF/flash cookies
     templates_dir=templates_dir,
+    static_dir=str(pathlib.Path(__file__).parent / 'static'),
     i18n_config=i18n_config,
     debug=os.getenv('DEBUG', 'false').lower() == 'true',
     index_view=HomeView(

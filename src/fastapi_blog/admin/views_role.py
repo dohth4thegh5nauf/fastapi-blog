@@ -6,7 +6,6 @@ import inspect
 from starlette.requests import Request
 from starlette_admin import action
 from starlette_admin.contrib.sqla import ModelView
-from starlette_admin.fields import JSONField
 
 from ..i18n import Translator
 from ..permissions import (
@@ -14,6 +13,7 @@ from ..permissions import (
   default_authorize,
   normalize_role_permissions,
 )
+from .fields import RolePermissionsJSONField
 from .passwords import get_password_hasher
 
 
@@ -104,7 +104,7 @@ class RoleModelView(_RoleProtectedView):
     'id',
     'name',
     'description',
-    JSONField(
+    RolePermissionsJSONField(
       'permissions',
       label='Permissions',
       default={},

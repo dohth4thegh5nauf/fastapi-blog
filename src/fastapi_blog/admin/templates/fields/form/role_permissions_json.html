@@ -1,0 +1,14 @@
+<div id="{{ field.id }}"
+     class="field-role-permissions-json {% if error %}{{ cls(field.error_class) }}{% endif %}"
+     style="height: {{ field.height }}"
+     aria-label="{{ field.label }}"
+     data-validation-schema="{{ field.validation_schema|tojson|forceescape }}"></div>
+<input type="hidden"
+       name="{{ field.id }}"
+       value="{{ (data|tojson|forceescape) if data is not none else '{}' }}" />
+{% if field.help_text %}
+    <small class="form-hint" id="{{ field.id }}-help">{{ field.help_text }}</small>
+{% endif %}
+{% include "fields/form/_error.html" %}
+<script type="module"
+        src="{{ static_url(request, 'js/role-permissions-editor.js', v=1) }}"></script>
