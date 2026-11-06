@@ -3,9 +3,10 @@
 Provides starlette-admin based administration interface with:
 - User management
 - Post management with WYSIWYG editor
-- Simple authentication provider
+- Starlette Admin authentication provider integration
 """
 
+import inspect
 import logging
 import os
 import pathlib
@@ -14,14 +15,14 @@ from collections.abc import Callable, Mapping
 
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
+from starlette_admin.auth import AuthProvider
 from starlette_admin.contrib.sqla import Admin
 from starlette_admin.i18n import I18nConfig
 
 from ..config import CollectionSpec
 from ..models import FrontmatterSchema
 from ..permissions import Authorizer
-from ..security import resolve_admin_credentials
-from .auth_provider import SimpleAuthProvider
+from ..security import resolve_session_secret
 from .database import create_engine_and_session, init_db
 from .fields import MarkdownField, SlugField, TagsField
 from .models import Post, Role, User, UserWithRoles
@@ -52,11 +53,11 @@ logger = logging.getLogger('fastapi_blog.admin')
 
 __all__ = [
   'add_admin_to_app',
+  'AuthProviderFactory',
   'User',
   'Post',
   'Role',
   'UserWithRoles',
-  'SimpleAuthProvider',
   'UserModelView',
   'PostModelView',
   'HomeView',
@@ -66,6 +67,79 @@ __all__ = [
   'TagsField',
   'SlugField',
 ]
+
+AuthProviderFactory = Callable[[str], AuthProvider]
+
+
+def _resolve_auth_providers(
+  auth_provider: AuthProvider | AuthProviderFactory,
+  locales: list[str],
+) -> dict[str, AuthProvider]:
+  """Build and validate one independent provider for each admin locale."""
+
+  def validate_provider(provider: object, locale: str) -> AuthProvider:
+    from ..auth import ConfigurationError
+
+    if not isinstance(provider, AuthProvider):
+      raise ConfigurationError(
+        f'The auth_provider factory returned an invalid provider for '
+        f'locale {locale!r}; expected starlette_admin.auth.AuthProvider.'
+      )
+    missing_methods = [
+      method_name
+      for method_name in ('login', 'authenticate', 'logout')
+      if getattr(type(provider), method_name)
+      is getattr(AuthProvider, method_name)
+    ]
+    if missing_methods:
+      raise ConfigurationError(
+        f'The auth provider for locale {locale!r} must implement '
+        f'{", ".join(missing_methods)}().'
+      )
+    call_arities = {'login': 4, 'authenticate': 1, 'logout': 1}
+    for method_name, arity in call_arities.items():
+      method = getattr(provider, method_name)
+      try:
+        inspect.signature(method).bind(*([object()] * arity))
+      except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+          f'The auth provider for locale {locale!r} has an incompatible '
+          f'{method_name}() signature for Starlette Admin.'
+        ) from exc
+    return provider
+
+  if isinstance(auth_provider, AuthProvider):
+    if len(locales) != 1:
+      from ..auth import ConfigurationError
+
+      raise ConfigurationError(
+        'A single auth_provider instance can only be used with one locale. '
+        'Pass a locale-to-provider factory for localized admin panels.'
+      )
+    return {locales[0]: validate_provider(auth_provider, locales[0])}
+
+  if not callable(auth_provider):
+    from ..auth import ConfigurationError
+
+    raise ConfigurationError(
+      'auth_provider must be a Starlette Admin AuthProvider instance or a '
+      'factory accepting a locale.'
+    )
+
+  providers: dict[str, AuthProvider] = {}
+  identities: set[int] = set()
+  for locale in locales:
+    provider = validate_provider(auth_provider(locale), locale)
+    if id(provider) in identities:
+      from ..auth import ConfigurationError
+
+      raise ConfigurationError(
+        'The auth_provider factory must return a fresh provider instance '
+        'for every locale.'
+      )
+    identities.add(id(provider))
+    providers[locale] = provider
+  return providers
 
 
 def _session_middleware_options(app: FastAPI) -> dict | None:
@@ -124,13 +198,11 @@ def _create_admin_for_locale(
   default_locale: str,
   secret_key: str,
   enable_role_management: bool = False,
-  admin_username: str = 'admin',
   frontmatter_schema: FrontmatterSchema | None = None,
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
   collection_specs: Mapping[str, CollectionSpec] | None = None,
   authorize: Authorizer | None = None,
-  auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
   translations_dir: str | pathlib.Path | None = None,
 ) -> Admin:
@@ -147,18 +219,13 @@ def _create_admin_for_locale(
       default_locale: Default locale for the application
       secret_key: Signs starlette-admin's own CSRF/flash cookies
       enable_role_management: Whether to automatically add role management views
-      admin_username: Root admin username for role management access control
       frontmatter_schema: Custom frontmatter schema for the markdown posts
       posts_dirname: Directory with the markdown posts (same one passed to
-          `setup_fastapi_blog`/`add_blog_to_fastapi`); falls back to
-          `POSTS_DIR`/a cwd-based guess when not given (see
-          `markdown_crud.get_posts_directory`)
+          `setup_fastapi_blog`/`add_blog_to_fastapi`)
       collection_spec: Project-file collection spec; takes precedence over
           `posts_dirname`/`frontmatter_schema` for the managed collection
       authorize: Shared `(request, resource, action) -> bool` permission
           callback; the default authorizer is used when not given
-      auth_users: Extra users (besides `admin_username`) allowed to sign in
-          to the admin panel, mapped to their password hashes
       collection_specs: All collections of the project, keyed by name; used
           to resolve `link` fields that point at another collection
       sanitize_html: Sanitize the admin Markdown preview like public pages
@@ -233,11 +300,10 @@ def _create_admin_for_locale(
     # Get category label from translations
     role_category = translations['role']['section_label']
 
-    # Create role management views with admin_username for access control
+    # Create role management views with the shared authorization policy.
     role_view = RoleModelView(
       Role,
       locale=locale,
-      admin_username=admin_username,
       icon='fa fa-shield',
       authorize=authorize,
       translations_dir=str(translations_dir) if translations_dir else None,
@@ -245,7 +311,6 @@ def _create_admin_for_locale(
     user_roles_view = UserWithRolesModelView(
       UserWithRoles,
       locale=locale,
-      admin_username=admin_username,
       icon='fa fa-users-cog',
       authorize=authorize,
       translations_dir=str(translations_dir) if translations_dir else None,
@@ -342,8 +407,6 @@ def add_admin_to_app(
   *,
   title: str = 'Admin Panel',
   database_url: str | None = None,
-  admin_username: str | None = None,
-  admin_password: str | None = None,
   secret_key: str | None = None,
   add_session_middleware: bool = True,
   init_database: bool = True,
@@ -354,13 +417,12 @@ def add_admin_to_app(
   posts_dirname: str | None = None,
   collection_spec: CollectionSpec | None = None,
   collection_specs: Mapping[str, CollectionSpec] | None = None,
-  insecure_dev: bool = False,
   https_only: bool = False,
   authorize: Authorizer | None = None,
-  auth_users: Mapping[str, Mapping[str, str]] | None = None,
   sanitize_html: bool = True,
   translations_dir: str | pathlib.Path | None = None,
   configure_admin: Callable[[str, Admin], None] | None = None,
+  auth_provider: AuthProvider | AuthProviderFactory,
 ) -> dict[str, Admin]:
   """Add starlette-admin panel to FastAPI application.
 
@@ -371,10 +433,7 @@ def add_admin_to_app(
     app: FastAPI application instance
     title: Admin panel title
     database_url: Database URL (default: from DATABASE_URL env or SQLite)
-    admin_username: Admin username (default: from FASTAPI_BLOG_ADMIN_LOGIN env or 'admin')
-    admin_password: Required admin password, or FASTAPI_BLOG_ADMIN_PASSWORD.
     secret_key: Required session secret, or SECRET_KEY (32+ chars).
-    insecure_dev: Enable old development credentials explicitly (unsafe).
     https_only: Set the session cookie Secure flag.
     sanitize_html: Sanitize the admin Markdown preview like public pages.
                   Set False only for trusted content that intentionally uses raw HTML.
@@ -383,7 +442,8 @@ def add_admin_to_app(
       built-in views are registered and immediately before each admin is
       mounted. Use it to add supported Starlette Admin views.
     authorize: Shared `(request, resource, action) -> bool` permission callback.
-    auth_users: Optional extra login accounts mapped to password and role.
+    auth_provider: A Starlette Admin provider instance (one locale only) or
+      factory called once per locale. The host application owns authentication.
     add_session_middleware: Whether to add SessionMiddleware (default: True)
     init_database: Whether to initialize database on startup (default: True)
     locales: List of available locales (default: ['en', 'ru'])
@@ -395,7 +455,7 @@ def add_admin_to_app(
     posts_dirname: Directory with the markdown posts. Pass the same value
       given to `setup_fastapi_blog`/`add_blog_to_fastapi` so the admin panel
       and the blog/REST API always agree on where posts live (default:
-      `POSTS_DIR`, deprecated, or a cwd-based guess).
+      the current working directory's `posts` directory when not specified.
     collection_spec: Project-file collection spec for the managed collection
       (takes precedence over `posts_dirname`/`frontmatter_schema`).
     collection_specs: All collections of the project, keyed by name; used to
@@ -415,43 +475,33 @@ def add_admin_to_app(
     from fastapi_blog.admin import (
       add_admin_to_app,
     )
-
+    from myapp.auth import (
+      create_auth_provider,
+    )
     import os
 
     app = FastAPI()
+    secret_key = (
+      os.environ[
+        'SECRET_KEY'
+      ]
+    )
 
-    # English and Russian with EN as default
+    # The host application supplies the admin account provider.
     admins = add_admin_to_app(
       app,
       title='My Blog Admin',
-      admin_password=os.environ[
-        'FASTAPI_BLOG_ADMIN_PASSWORD'
-      ],
-      secret_key=os.environ[
-        'SECRET_KEY'
-      ],
+      auth_provider=lambda locale: (
+        create_auth_provider(
+          locale
+        )
+      ),
+      secret_key=secret_key,
       locales=[
         'en',
         'ru',
       ],
-      default_locale='en',  # /admin → /admin/en
-    )
-
-    # Russian by default
-    admins = add_admin_to_app(
-      app,
-      title='Админ-панель блога',
-      admin_password=os.environ[
-        'FASTAPI_BLOG_ADMIN_PASSWORD'
-      ],
-      secret_key=os.environ[
-        'SECRET_KEY'
-      ],
-      locales=[
-        'en',
-        'ru',
-      ],
-      default_locale='ru',  # /admin → /admin/ru
+      default_locale='en',
     )
     ```
 
@@ -469,13 +519,14 @@ def add_admin_to_app(
     else:
       frontmatter_schema = collection_spec.schema
 
-  admin_username, admin_password, secret_key = resolve_admin_credentials(
-    admin_username, admin_password, secret_key, insecure_dev=insecure_dev
-  )
-
   # Set default locales if not provided
   if locales is None:
     locales = ['en', 'ru']
+  else:
+    locales = list(locales)
+
+  if not locales or len(set(locales)) != len(locales):
+    raise ValueError('locales must contain at least one unique locale.')
 
   if default_locale is None:
     default_locale = 'en'  # Default to English
@@ -485,6 +536,9 @@ def add_admin_to_app(
     raise ValueError(
       f"default_locale '{default_locale}' must be in locales list {locales}"
     )
+
+  secret_key = resolve_session_secret(secret_key)
+  locale_auth_providers = _resolve_auth_providers(auth_provider, locales)
 
   # Add session middleware if needed (must be added AFTER CORS).
   existing_session = _validate_existing_session_middleware(
@@ -547,9 +601,6 @@ def add_admin_to_app(
 
   app.router.lifespan_context = admin_lifespan
 
-  # Note: admin_username is passed directly to role management views
-  # to avoid app.state identity issues with uvicorn --reload
-
   # Get templates directory for custom templates
   from pathlib import Path
 
@@ -564,33 +615,22 @@ def add_admin_to_app(
   admins = {}
 
   # Create main admin for default locale (no locale in URL)
-  default_auth_provider = SimpleAuthProvider(
-    username=admin_username,
-    password=admin_password,
-    redirect_after_login='/admin/user/list',
-    locale=default_locale,
-    users=auth_users,
-    translations_dir=str(translations_dir) if translations_dir else None,
-  )
-
   default_admin = _create_admin_for_locale(
     locale=default_locale,
     engine=engine,
     title=title,
     base_url='/admin',
-    auth_provider=default_auth_provider,
+    auth_provider=locale_auth_providers[default_locale],
     templates_dir=templates_dir,
     available_locales=locales,
     default_locale=default_locale,
     secret_key=secret_key,
     enable_role_management=enable_role_management,
-    admin_username=admin_username,
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
     collection_specs=collection_specs,
     authorize=authorize,
-    auth_users=auth_users,
     sanitize_html=sanitize_html,
     translations_dir=translations_dir,
   )
@@ -606,33 +646,22 @@ def add_admin_to_app(
     if locale == default_locale:
       continue  # Skip default - already mounted
 
-    auth_provider = SimpleAuthProvider(
-      username=admin_username,
-      password=admin_password,
-      redirect_after_login=f'/{locale}/admin/user/list',
-      locale=locale,
-      users=auth_users,
-      translations_dir=str(translations_dir) if translations_dir else None,
-    )
-
     admin = _create_admin_for_locale(
       locale=locale,
       engine=engine,
       title=title,
       base_url=f'/{locale}/admin',
-      auth_provider=auth_provider,
+      auth_provider=locale_auth_providers[locale],
       templates_dir=templates_dir,
       available_locales=locales,
       default_locale=default_locale,
       secret_key=secret_key,
       enable_role_management=enable_role_management,
-      admin_username=admin_username,
       frontmatter_schema=frontmatter_schema,
       posts_dirname=posts_dirname,
       collection_spec=collection_spec,
       collection_specs=collection_specs,
       authorize=authorize,
-      auth_users=auth_users,
       sanitize_html=sanitize_html,
       translations_dir=translations_dir,
     )
@@ -676,7 +705,6 @@ def add_admin_to_app(
       'Database initialization disabled. Call init_db(engine) manually.'
     )
 
-  logger.debug('Admin credentials: username=%s', admin_username)
   logger.info('Available locales: %s', ', '.join(locales))
   logger.info('Access at: http://localhost:8000/admin')
 

@@ -9,6 +9,8 @@ from httpx2 import ASGITransport, AsyncClient
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 @pytest.mark.parametrize(
   'query, expected_title',
@@ -33,13 +35,12 @@ def test_posts_search_filters_visible_fields(tmp_path, query, expected_title):
   app = FastAPI()
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='s' * 64,
     database_url='sqlite+aiosqlite:///:memory:',
     posts_dirname=str(posts_dir),
     locales=['en', 'ru'],
     default_locale='en',
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   async def request_posts_list():

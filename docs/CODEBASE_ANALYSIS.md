@@ -62,13 +62,12 @@ fastapi-blog/
 │   ├── auth.py                   # Унифицированная аутентификация
 │   ├── store.py                 # Хранилище документов (Collection, DocumentStore)
 │   ├── jsonld.py                # JSON-LD экспорт
-│   ├── editor.py                # Редактор постов (deprecated UI + REST API)
+│   ├── editor.py                # REST API редактора постов
 │   ├── admin/                    # Админ-панель
 │   │   ├── __init__.py          # Настройка админки
 │   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # Представления админки
 │   │   ├── views_role.py        # Представления для ролей
-│   │   ├── auth_provider.py     # Провайдер аутентификации
 │   │   ├── database.py          # Настройка БД
 │   │   ├── fields.py            # Кастомные поля (Markdown, Tags, Slug)
 │   │   ├── i18n.py              # Интернационализация
@@ -197,8 +196,11 @@ make all          # lint + mypy + test
 ### 1. Унифицированная настройка (рекомендуется)
 
 ```python
+import os
+
 import fastapi_blog
 from fastapi import FastAPI
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
@@ -208,9 +210,8 @@ fastapi_blog.setup_fastapi_blog(
   include_api=False,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_username='admin',
-  admin_password='secure_password',
-  secret_key='your-secret-key',
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
   enable_role_management=False,
 )
 ```
@@ -229,9 +230,8 @@ fastapi_blog.add_blog_to_fastapi(
 # Добавить админ-панель
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password='secure_password',
-  secret_key='your-secret-key',
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
   enable_role_management=True,  # RBAC
 )
 ```
@@ -241,8 +241,6 @@ fastapi_blog.add_admin_to_app(
 ```bash
 # .env
 FASTAPI_BLOG_INCLUDE_API=true
-FASTAPI_BLOG_ADMIN_LOGIN=admin
-FASTAPI_BLOG_ADMIN_PASSWORD=secure_password
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost/blog
 SECRET_KEY=your-generated-secret-key
 ```
@@ -781,4 +779,4 @@ git push origin feature/my-feature
 **Статус CI:** ✅ Passing
 
 
-> Historical note: snippets in this document describe the repository before the current credential hardening. Do not copy old inline passwords or session secrets; use `FASTAPI_BLOG_ADMIN_PASSWORD` and `SECRET_KEY` as described in [Environment Variables](ENVIRONMENT_VARIABLES.md).
+> Historical note: snippets in this document describe the repository before the current credential hardening. Do not copy old inline passwords or session secrets; use a host-supplied `AuthProvider` and `SECRET_KEY` as described in [Admin Authentication](ADMIN_AUTHENTICATION.md).

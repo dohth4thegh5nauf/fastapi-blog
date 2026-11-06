@@ -263,6 +263,7 @@ class DocumentService:
     if_match: str | None = None,
     expected_exists: bool | None = None,
     user: Any = None,
+    request_context: Any = None,
   ) -> SaveResult:
     """Create or update a document after schema and blocking validation.
 
@@ -287,6 +288,7 @@ class DocumentService:
       if_match=if_match,
       expected_exists=expected_exists,
       user=user,
+      request_context=request_context,
     )
 
   def commit(
@@ -300,6 +302,7 @@ class DocumentService:
     if_match: str | None = None,
     expected_exists: bool | None = None,
     user: Any = None,
+    request_context: Any = None,
   ) -> SaveResult:
     """Write a document, run the blocking validators, roll back on failure.
 
@@ -350,6 +353,7 @@ class DocumentService:
           validated,
           self.documents.list(),
           created_at=created_at,
+          request_context=request_context,
         )
         if self.documents.exists(slug):
           raise store.ConflictError(
@@ -434,9 +438,10 @@ class DocumentService:
     expected_entry_etag: str | None = None,
     expected_exists: bool | None = None,
     user: Any = None,
+    request_context: Any = None,
   ) -> LocalizedSaveResult:
     """Validate and atomically save one or more locales of an entry."""
-    return self.save_many_localized(
+    results = self.save_many_localized(
       {slug: documents},
       if_match={slug: if_match} if if_match is not None else None,
       expected_entry_etags=(
@@ -446,7 +451,9 @@ class DocumentService:
         {slug: expected_exists} if expected_exists is not None else None
       ),
       user=user,
-    )[slug]
+      request_context=request_context,
+    )
+    return results[slug] if slug else next(iter(results.values()))
 
   def save_many_localized(
     self,
@@ -456,6 +463,7 @@ class DocumentService:
     expected_entry_etags: Mapping[str, str | None] | None = None,
     expected_exists: Mapping[str, bool] | None = None,
     user: Any = None,
+    request_context: Any = None,
   ) -> dict[str, LocalizedSaveResult]:
     """Validate and commit multiple localized entries as one transaction."""
     adapter = self.i18n_documents
@@ -463,6 +471,24 @@ class DocumentService:
       raise ValueError('This collection does not enable i18n')
     if not entries:
       raise ValueError('At least one localized entry is required')
+
+    if '' in entries:
+      if len(entries) != 1 or self.collection_spec.slug_template is None:
+        raise ValueError('A blank slug is valid for one generated entry only')
+      locale_documents = entries['']
+      canonical = adapter.config.default_locale
+      if canonical not in locale_documents:
+        raise ValueError(
+          f'Cannot generate a slug without the canonical {canonical!r} document'
+        )
+      frontmatter, _body = locale_documents[canonical]
+      with self.documents._lock:
+        slug = self.collection_spec.make_slug(
+          frontmatter,
+          [entry.slug for entry in adapter.list()],
+          request_context=request_context,
+        )
+      entries = {slug: locale_documents}
 
     config = adapter.config
     canonical_locale = config.default_locale

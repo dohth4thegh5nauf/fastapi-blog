@@ -48,12 +48,10 @@ fastapi-blog/
 │   ├── store.py                 # Хранилище документов (Collection, DocumentStore)
 │   ├── admin/                   # Административная панель
 │   │   ├── __init__.py          # add_admin_to_app()
-│   │   ├── auth_provider.py     # Аутентификация
 │   │   ├── database.py          # SQLAlchemy + async
 │   │   ├── models/              # base.py: User, Post; role.py: Role, UserWithRoles
 │   │   ├── views.py             # ModelViews для админки
 │   │   ├── views_role.py        # RoleModelView, UserWithRolesModelView
-│   │   ├── i18n.py              # Поддержка локализации
 │   │   ├── fields.py            # MarkdownField, TagsField, SlugField
 │   │   ├── markdown_crud.py     # CRUD для markdown файлов
 │   │   ├── templates/           # Кастомные шаблоны starlette-admin
@@ -117,11 +115,12 @@ fastapi-blog/
 **Admin panel:**
 - Session-based authentication
 - SessionMiddleware + signed cookies
-- SimpleAuthProvider (hardcoded credentials для dev)
-- В production: интеграция с БД пользователей
+- Обязательный внешний Starlette Admin `AuthProvider`; учётные записи и
+  проверка credentials принадлежат приложению-хосту
 
 **REST API (опционально):**
-- Требует тех же credentials что и admin
+- Использует отдельные credentials или dependency; provider админки не
+  аутентифицирует REST API
 - Используется для программного доступа
 
 ### 4. RBAC (Role-Based Access Control)
@@ -220,7 +219,7 @@ fastapi-blog/
 
 **`add_admin_to_app(app, **kwargs)`**
 - Добавляет только админ-панель
-- Параметры: locales, admin_username, admin_password, enable_role_management
+- Параметры: locales, auth_provider, enable_role_management, secret_key
 
 ### Примеры использования:
 

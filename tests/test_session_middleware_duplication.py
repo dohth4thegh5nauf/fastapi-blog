@@ -8,6 +8,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from fastapi_blog.admin import add_admin_to_app
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def test_no_duplication_when_not_added_manually():
   """Test that SessionMiddleware is added when not present."""
@@ -20,10 +22,9 @@ def test_no_duplication_when_not_added_manually():
   # Use strong secret to avoid weak key warning
   add_admin_to_app(
     app,
-    admin_username='test',
-    admin_password='test123',
     secret_key='m' * 64,
     init_database=False,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   # Session and the locale redirect are installed. The Origin guard is NOT:
@@ -49,11 +50,10 @@ def test_warning_when_middleware_already_added():
     warnings.simplefilter('always')
     add_admin_to_app(
       app,
-      admin_username='test',
-      admin_password='test123',
       secret_key='m' * 64,  # Must match the externally installed middleware
       init_database=False,
       # add_session_middleware=True by default
+      auth_provider=lambda locale: DemoTestAuthProvider(),
     )
 
     # Should have issued a warning about SessionMiddleware duplication
@@ -87,11 +87,10 @@ def test_explicit_false_no_warning():
     warnings.simplefilter('always')
     add_admin_to_app(
       app,
-      admin_username='test',
-      admin_password='test123',
       secret_key='m' * 64,  # Must match the externally installed middleware
       init_database=False,
       add_session_middleware=False,  # Explicit False
+      auth_provider=lambda locale: DemoTestAuthProvider(),
     )
 
     # Should NOT have issued any warnings about SessionMiddleware
@@ -114,10 +113,9 @@ def test_multiple_calls_with_false():
   # First call (adds middleware)
   add_admin_to_app(
     app,
-    admin_username='admin1',
-    admin_password='test123',
     secret_key='m' * 64,  # Must match the externally installed middleware
     init_database=False,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   initial_count = len(app.user_middleware)
@@ -128,11 +126,10 @@ def test_multiple_calls_with_false():
     warnings.simplefilter('always')
     add_admin_to_app(
       app,
-      admin_username='admin2',
-      admin_password='test456',
       secret_key='m' * 64,  # Same secret as the existing middleware
       init_database=False,
       add_session_middleware=False,
+      auth_provider=lambda locale: DemoTestAuthProvider(),
     )
 
     # Should not have SessionMiddleware warnings
@@ -154,11 +151,10 @@ def test_existing_session_middleware_must_use_the_same_secret():
   with pytest.raises(ConfigurationError, match='same secret_key'):
     add_admin_to_app(
       app,
-      admin_username='test',
-      admin_password='test123',
       secret_key='n' * 64,
       init_database=False,
       add_session_middleware=False,
+      auth_provider=lambda locale: DemoTestAuthProvider(),
     )
 
 
@@ -170,10 +166,9 @@ def test_https_only_requires_secure_existing_session_cookie():
   with pytest.raises(ConfigurationError, match='https_only=True'):
     add_admin_to_app(
       app,
-      admin_username='test',
-      admin_password='test123',
       secret_key='m' * 64,
       https_only=True,
       init_database=False,
       add_session_middleware=False,
+      auth_provider=lambda locale: DemoTestAuthProvider(),
     )

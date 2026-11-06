@@ -1,5 +1,4 @@
 import importlib
-import os
 import pathlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -16,10 +15,10 @@ from .router import get_blog_router
 
 
 if TYPE_CHECKING:
-  from .admin import Admin, add_admin_to_app
+  from .admin import Admin, AuthProvider, AuthProviderFactory, add_admin_to_app
 
 
-__version__ = '0.9.0'
+__version__ = '0.10.0'
 
 _ADMIN_EXTRA_HINT = (
   'The admin panel needs the `admin` extra: pip install "fastapi-blog[admin]"'
@@ -27,7 +26,7 @@ _ADMIN_EXTRA_HINT = (
 
 # Names loaded on first access, so that `import fastapi_blog` doesn't import
 # anything from the admin panel (see `__getattr__`)
-_LAZY_ADMIN_NAMES = ('Admin', 'add_admin_to_app')
+_LAZY_ADMIN_NAMES = ('Admin', 'AuthProviderFactory', 'add_admin_to_app')
 
 
 def _import_admin() -> Any:
@@ -80,21 +79,21 @@ def setup_fastapi_blog(
   admin: bool = True,
   collection_spec: CollectionSpec | None = None,
   authorize: Authorizer | None = None,
-  insecure_dev: bool = False,
   https_only: bool = False,
-  auth_users: dict[str, dict[str, str]] | None = None,
   translations_dir: str | pathlib.Path | None = None,
   configure_admin: Callable[[str, 'Admin'], None] | None = None,
+  auth_provider: 'AuthProvider | AuthProviderFactory | None' = None,
+  api_auth_dependency: Callable[..., Any] | None = None,
 ) -> dict[str, 'Admin']:
   """Configure the blog and (optionally) the admin panel for a FastAPI app.
 
   `frontmatter_schema` (optional) sets the post fields for the blog, the REST API
   and the admin panel at once. Without it the built-in fields are used.
 
-  With `admin=False` only the blog (and the REST API, if `include_api=True`) is
-  added. The `admin` extra isn't needed then, and no default credentials are
-  made up: the REST API needs `admin_username` and `admin_password` (or the
-  matching environment variables), or a `SessionMiddleware`.
+  The admin panel requires a host-supplied `auth_provider`. With `admin=False`
+  only the blog (and the REST API, if `include_api=True`) is added. The REST API
+  can use explicit `admin_username` and `admin_password` credentials,
+  `api_auth_dependency`, or an existing `SessionMiddleware`.
 
   Args:
       app: FastAPI application instance.
@@ -102,13 +101,14 @@ def setup_fastapi_blog(
       include_api: Include the REST API for post management.
       locales: Supported UI locales.
       default_locale: Default UI locale.
-      admin_username: Admin username (default: `FASTAPI_BLOG_ADMIN_LOGIN`).
-      admin_password: Admin password (default: `FASTAPI_BLOG_ADMIN_PASSWORD`).
+      admin_username: REST API Basic Auth username (optional).
+      admin_password: REST API Basic Auth password (optional).
       secret_key: Session secret key of the admin panel.
       authorize: Shared callback `(request, resource, action) -> bool`.
-      insecure_dev: Explicitly allow the old development credentials (unsafe).
       https_only: Mark the session cookie Secure (HTTPS only).
-      auth_users: Optional additional admin-panel accounts with password/role.
+      auth_provider: Starlette Admin provider instance or locale-to-provider
+          factory for the admin UI. The host application owns authentication.
+      api_auth_dependency: Optional independent auth dependency for the REST API.
       enable_role_management: Add the role management views to the admin panel.
       frontmatter_schema: Custom schema of the post frontmatter.
       seo: Site-wide SEO settings (TODO 5.9.2); stronger than the schema's
@@ -153,24 +153,38 @@ def setup_fastapi_blog(
   # Fail early (before any route is added) if the admin panel is unavailable
   add_admin = _import_admin().add_admin_to_app if admin else None
 
-  # Resolve environment values once; the admin setup validates that a
-  # password and strong session secret exist unless insecure_dev is explicit.
-  if admin_username is None:
-    admin_username = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN')
-  if admin_password is None:
-    admin_password = os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
-
-  if add_admin is not None and not insecure_dev:
-    from .security import resolve_admin_credentials
-
-    admin_username, admin_password, secret_key = resolve_admin_credentials(
-      admin_username, admin_password, secret_key
+  if admin and auth_provider is None:
+    raise ConfigurationError(
+      'setup_fastapi_blog(admin=True) requires a host-supplied auth_provider.'
     )
+  if auth_provider is not None and not admin:
+    raise ConfigurationError('auth_provider requires admin=True.')
+
+  if auth_provider is not None and add_admin is not None:
+    provider_locales = list(locales)
+    if not provider_locales or len(set(provider_locales)) != len(
+      provider_locales
+    ):
+      raise ValueError('locales must contain at least one unique locale.')
+    if default_locale not in provider_locales:
+      raise ValueError(
+        f"default_locale '{default_locale}' must be in locales list "
+        f'{provider_locales}'
+      )
+    providers = _import_admin()._resolve_auth_providers(
+      auth_provider, provider_locales
+    )
+
+    def resolved_auth_provider(locale: str) -> Any:
+      return providers[locale]
+
+    auth_provider = resolved_auth_provider
 
   add_blog_to_fastapi(
     app,
     posts_dirname=posts_dirname,
     include_api=include_api,
+    api_auth_dependency=api_auth_dependency,
     locales=locales,
     default_locale=default_locale,
     admin_username=admin_username,
@@ -190,18 +204,15 @@ def setup_fastapi_blog(
     app,
     locales=locales,
     default_locale=default_locale,
-    admin_username=admin_username,
-    admin_password=admin_password,
     secret_key=secret_key,
     enable_role_management=enable_role_management,
     frontmatter_schema=frontmatter_schema,
     posts_dirname=posts_dirname,
     collection_spec=collection_spec,
     authorize=authorize,
-    insecure_dev=insecure_dev,
     https_only=https_only,
-    auth_users=auth_users,
     sanitize_html=sanitize_html,
     translations_dir=translations_dir,
     configure_admin=configure_admin,
+    auth_provider=auth_provider,
   )

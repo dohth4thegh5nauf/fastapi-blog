@@ -90,9 +90,7 @@ def test_generated_slug_api_create(app_dir):
   )
   app = FastAPI()
   app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
 
   response = client.post(
@@ -134,9 +132,7 @@ def test_manual_slug_cannot_reuse_a_unique_sequence(app_dir):
   )
   app = FastAPI()
   app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   response = TestClient(app).post(
     '/api/posts/create/0001-another', json=VALID_PAYLOAD
   )
@@ -175,7 +171,6 @@ def test_generated_slug_uses_utc_first_save_when_date_is_empty(
   app = add_blog_to_fastapi(app, prefix='blog', frontmatter_schema=schema)
   app = add_editor_to_app(
     app,
-    ui=False,
     require_auth=False,
     frontmatter_schema=schema,
     collection_spec=spec,
@@ -213,9 +208,7 @@ def test_generated_slug_runs_blocking_validators_and_rolls_back(app_dir):
     ),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
 
   response = client.post(
@@ -249,9 +242,7 @@ def test_generated_slug_save_endpoint(app_dir):
   )
   app = FastAPI()
   app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
 
   response = client.post(
@@ -372,52 +363,6 @@ def test_blog_index_after_create(client):
   assert 'Hello World' in response.text
 
 
-def test_ui_list_empty(client):
-  response = client.get('/admin/editor/')
-  assert response.status_code == 200
-  assert 'No posts yet' in response.text
-
-
-def test_ui_list_shows_posts(client):
-  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
-  response = client.get('/admin/editor/')
-  assert response.status_code == 200
-  assert 'Hello World' in response.text
-  assert 'hello-world' in response.text
-
-
-def test_ui_new_page(client):
-  response = client.get('/admin/editor/new')
-  assert response.status_code == 200
-  assert 'easymde' in response.text.lower()
-  assert 'id="slug"' in response.text
-
-
-def test_ui_edit_page_prefills(client):
-  client.post('/api/posts/create/hello-world', json=VALID_PAYLOAD)
-  response = client.get('/admin/editor/hello-world')
-  assert response.status_code == 200
-  assert 'Hello World' in response.text
-  assert 'greeting' in response.text
-  assert 'readonly' in response.text
-
-
-def test_ui_edit_404_for_missing(client):
-  response = client.get('/admin/editor/does-not-exist')
-  assert response.status_code == 404
-
-
-def test_ui_disabled(app_dir):
-  from fastapi import FastAPI
-
-  app = FastAPI()
-  app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(app, ui=False)
-  ui_client = TestClient(app)
-  response = ui_client.get('/admin/editor/')
-  assert response.status_code == 404
-
-
 # ============================================================================
 # Authentication Tests
 # ============================================================================
@@ -502,25 +447,6 @@ def test_create_post_with_auth(app_dir):
   3. Subsequent requests use that session
   """
   pass
-
-
-def test_ui_routes_require_auth(auth_client, app_dir):
-  """Test that all UI editor routes require authentication."""
-  # Create a test post for edit route
-  (app_dir / 'posts' / 'test-post.md').write_text(
-    "---\ntitle: Test\ndate: '2026-01-01'\npublished: true\n---\nbody\n"
-  )
-
-  # Test all UI routes without authentication
-  ui_routes = [
-    '/admin/editor/',
-    '/admin/editor/new',
-    '/admin/editor/test-post',
-  ]
-
-  for route in ui_routes:
-    response = auth_client.get(route)
-    assert response.status_code == 401, f'Route {route} should require auth'
 
 
 # --- etag / If-Match concurrency via the REST API (TODO 4.7) ----------------
@@ -637,9 +563,7 @@ def test_delete_with_matching_if_match_succeeds(client, app_dir):
 def require_if_match_client(app_dir):
   app = FastAPI()
   app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, require_if_match=True
-  )
+  app = add_editor_to_app(app, require_auth=False, require_if_match=True)
   return TestClient(app)
 
 
@@ -700,9 +624,7 @@ ID_SCHEMA = FrontmatterSchema(
 def id_client(app_dir):
   app = FastAPI()
   app = add_blog_to_fastapi(app, prefix='blog')
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, frontmatter_schema=ID_SCHEMA
-  )
+  app = add_editor_to_app(app, require_auth=False, frontmatter_schema=ID_SCHEMA)
   return TestClient(app)
 
 
@@ -769,7 +691,6 @@ def test_api_on_change_receives_successful_events_and_authenticated_actor(
   app = FastAPI()
   app = add_editor_to_app(
     app,
-    ui=False,
     require_auth=True,
     auth_dependency=authenticate,
     collection_spec=spec,
@@ -820,9 +741,7 @@ def test_rollback_removes_created_file_when_deletes_are_disabled(app_dir):
     ),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
 
   response = client.post(
@@ -849,9 +768,7 @@ def test_create_and_delete_respect_collection_flags(app_dir):
     name='posts', dir=app_dir / 'posts', create=False
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=create_spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=create_spec)
   client = TestClient(app)
 
   response = client.post(
@@ -876,7 +793,7 @@ def test_create_and_delete_respect_collection_flags(app_dir):
   )
   app2 = FastAPI()
   app2 = add_editor_to_app(
-    app2, ui=False, require_auth=False, collection_spec=delete_spec
+    app2, require_auth=False, collection_spec=delete_spec
   )
   client2 = TestClient(app2)
   response = client2.post(
@@ -910,9 +827,7 @@ def test_localized_rest_get_put_and_fallback(app_dir):
     i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
 
   created = client.put(
@@ -953,7 +868,6 @@ def test_localized_create_requires_create_permission(app_dir):
   )
   app = add_editor_to_app(
     FastAPI(),
-    ui=False,
     require_auth=False,
     collection_spec=spec,
     authorize=lambda request, resource, action: action == 'update',
@@ -977,9 +891,7 @@ def test_localized_rest_multi_locale_put_uses_entry_etag(app_dir):
     i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
   created = client.put(
     '/api/posts/hello',
@@ -1030,9 +942,7 @@ def test_localized_rest_duplicate_and_nontranslated_fields(app_dir):
     i18n=I18nConfig(('en', 'ru'), 'en', translate_body=True),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
   saved = client.put(
     '/api/posts/entry',
@@ -1086,9 +996,7 @@ def test_localized_rest_can_write_duplicate_mirrors(app_dir):
     i18n=I18nConfig(('en', 'ru'), 'en', write_duplicates=True),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
   saved = client.put(
     '/api/posts/entry',
@@ -1142,9 +1050,7 @@ def test_translation_cannot_bypass_canonical_status_transition(app_dir):
     i18n=I18nConfig(('en', 'ru'), 'en'),
     document_authorize=policy,
   )
-  app = add_editor_to_app(
-    FastAPI(), ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(FastAPI(), require_auth=False, collection_spec=spec)
   client = TestClient(app)
   created = client.put(
     '/api/posts/entry',
@@ -1192,9 +1098,7 @@ def test_localized_rest_blocking_validator_rolls_back_every_locale(app_dir):
     ),
   )
   app = FastAPI()
-  app = add_editor_to_app(
-    app, ui=False, require_auth=False, collection_spec=spec
-  )
+  app = add_editor_to_app(app, require_auth=False, collection_spec=spec)
   client = TestClient(app)
   rejected = client.put(
     '/api/posts/hello',

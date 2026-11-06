@@ -90,6 +90,8 @@ class CollectionSpec:
       summary: Parsed `summary` template for document captions, if any.
       check_links: Link-integrity level (`off`, `warn`, `error`).
       check_files: File-integrity level (`off`, `warn`, `error`).
+      sequence_allocator: Optional callable that receives request context
+          and returns the sequence value used by a generated slug.
 
   """
 
@@ -114,6 +116,7 @@ class CollectionSpec:
   label: str | Mapping[str, str] | None = None
   translations_dir: pathlib.Path | None = None
   document_authorize: Callable[..., bool | str] | None = None
+  sequence_allocator: Callable[[Any], int] | None = None
 
   def resolve_dir(self, request: Any = None) -> pathlib.Path:
     """Resolve this collection's directory, once per request when callable."""
@@ -191,10 +194,18 @@ class CollectionSpec:
     *,
     created_at: Any = None,
     dirname: str = '',
+    request_context: Any = None,
   ) -> str:
     """Build a new slug once, using the configured role bindings/template."""
     if self.slug_template is None:
       raise ConfigError(f'Collection {self.name!r} has no `slug_template`')
+    if (
+      self.sequence_allocator is not None
+      and 'seq' not in self.slug_template.tags
+    ):
+      raise ConfigError(
+        f'Collection {self.name!r} has a sequence allocator but no `seq` tag'
+      )
     schema = self.schema or DEFAULT_SCHEMA
     fields = {field.name: frontmatter.get(field.key) for field in schema.fields}
     title_spec = schema.field_for_role('title')
@@ -211,6 +222,11 @@ class CollectionSpec:
       created_at=created_at,
       dirname=dirname,
       options=self.slug_options,
+      sequence=(
+        self.sequence_allocator(request_context)
+        if self.sequence_allocator is not None
+        else None
+      ),
     )
 
   def create_document(
@@ -223,6 +239,7 @@ class CollectionSpec:
     dirname: str = '',
     user: Any = None,
     notify: bool = True,
+    request_context: Any = None,
   ) -> tuple[str, str]:
     """Create a document with the configured slug template and sequence lock."""
     if self.slug_template is None:
@@ -244,6 +261,11 @@ class CollectionSpec:
       created_at=created_at,
       dirname=dirname,
       options=self.slug_options,
+      sequence=(
+        self.sequence_allocator(request_context)
+        if self.sequence_allocator is not None
+        else None
+      ),
       user=user,
       notify=notify,
     )

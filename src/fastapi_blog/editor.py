@@ -1,12 +1,10 @@
 import dataclasses
 import pathlib
 import re
-import warnings
 from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
 
-import jinja2
 from fastapi import (
   APIRouter,
   Body,
@@ -20,11 +18,10 @@ from fastapi import (
   Response,
   status,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from . import helpers, store
+from . import store
 from .auth import add_startup_check, check_api_auth_config
 from .config import CollectionSpec, ConfigError
 from .models import (
@@ -426,14 +423,12 @@ def get_api_router(
         return principal
       if (
         authorize is None
+        and auth_dependency is not None
         and principal is not None
         and principal.get('role') is None
         and not principal.get('is_admin')
       ):
-        # Authenticated without a role (custom dependency, legacy session):
-        # keep the pre-role-management contract that any authenticated
-        # caller may write. Pass `authorize=` to enforce a stricter policy;
-        # role-bearing principals are always checked against their role.
+        # An explicit API dependency is the host's authorization boundary.
         return principal
       await ensure_allowed(permission_check, request, 'posts', action)
       return principal
@@ -852,8 +847,6 @@ def add_editor_to_app(
   prefix: str = '/api/posts',
   posts_dirname: str = 'posts',
   strict: bool = True,
-  ui: bool = True,
-  ui_prefix: str = '/admin/editor',
   require_auth: bool = True,
   frontmatter_schema: FrontmatterSchema | None = None,
   admin_username: str | None = None,
@@ -863,23 +856,15 @@ def add_editor_to_app(
   collection_spec: CollectionSpec | None = None,
   authorize: Authorizer | None = None,
 ) -> FastAPI:
-  """Add editor REST API and optional UI to FastAPI app.
-
-  .. deprecated:: 0.8.0
-      The UI parameter (ui=True) is deprecated. Use add_admin_to_app() for
-      admin interface instead. The REST API will remain available but should
-      be enabled explicitly via include_api parameter in future versions.
+  """Add the post editor REST API to a FastAPI app.
 
   Args:
       app: FastAPI application instance
       prefix: URL prefix for REST API (default: '/api/posts')
       posts_dirname: Directory containing markdown posts (default: 'posts')
       strict: Use strict frontmatter validation (default: True)
-      ui: (DEPRECATED) Include UI routes (default: True)
-      ui_prefix: (DEPRECATED) URL prefix for UI (default: '/admin/editor')
       require_auth: Require authentication for all endpoints (default: True)
       frontmatter_schema: Custom frontmatter schema for the REST API (optional).
-          The deprecated UI doesn’t support it and keeps the built-in fields.
       admin_username: Username for Basic auth (optional)
       admin_password: Password for Basic auth (optional)
       auth_dependency: Custom authentication dependency (optional), see
@@ -889,14 +874,14 @@ def add_editor_to_app(
       collection_spec: Optional project collection settings. A configured
           `slug_template` enables `POST /create` and blank-slug `/save`.
       authorize: Shared `(request, resource, action) -> bool` permission
-          callback; when not given, authenticated users may write (optional)
+          callback; when omitted, the built-in role policy is used.
 
   Returns:
       FastAPI application with editor routes added
 
   Raises:
       ConfigurationError: At app startup, if `require_auth=True` and there is
-          no credentials, no dependency and no `SessionMiddleware`.
+          no credentials, dependency or `SessionMiddleware`.
 
   Example:
       ```python
@@ -908,41 +893,13 @@ def add_editor_to_app(
       )
 
       app = FastAPI()
-      # REST API only (recommended)
       add_editor_to_app(
-        app, ui=False
-      )
-
-      # Or use new admin panel instead (extra `admin`)
-      from fastapi_blog import (
-        add_admin_to_app,
-      )
-
-      add_admin_to_app(
-        app
+        app,
+        auth_dependency=your_auth_dependency,
       )
       ```
 
   """
-  # Emit deprecation warning if UI is enabled
-  if ui:
-    warnings.warn(
-      "The 'ui' parameter in add_editor_to_app() is deprecated and will be "
-      'removed in version 1.0.0. Please use add_admin_to_app() from '
-      'fastapi_blog.admin for a modern admin interface with better features. '
-      'The REST API (/api/posts) will remain available.',
-      DeprecationWarning,
-      stacklevel=2,
-    )
-
-  if ui and frontmatter_schema is not None:
-    warnings.warn(
-      'The deprecated editor UI doesn’t support `frontmatter_schema` and '
-      'keeps the built-in fields. Use `ui=False` and the admin panel.',
-      UserWarning,
-      stacklevel=2,
-    )
-
   # Use get_api_router() to get REST API endpoints
   api_router = get_api_router(
     posts_dirname=posts_dirname,
@@ -969,124 +926,4 @@ def add_editor_to_app(
     ),
   )
 
-  # Add deprecated UI routes if requested
-  if ui:
-    _add_ui_routes(
-      app,
-      ui_prefix=ui_prefix,
-      posts_dirname=posts_dirname,
-      strict=strict,
-      require_auth=require_auth,
-      authorize=authorize,
-    )
-
   return app
-
-
-def _add_ui_routes(
-  app: FastAPI,
-  ui_prefix: str,
-  posts_dirname: str,
-  strict: bool,
-  require_auth: bool,
-  authorize: Authorizer | None = None,
-) -> None:
-  """Add deprecated UI routes for editor."""
-  ui_router = APIRouter(prefix=ui_prefix, tags=['editor-ui'])
-  slug_path = Path(pattern=SLUG_PATTERN, max_length=100)
-  auth_func = (
-    require_authentication if require_auth else optional_authentication
-  )
-  permission_check = authorize or default_authorize
-
-  async def _require_ui_permission(
-    request: Request, user: dict[str, Any] | None, action: str
-  ) -> None:
-    principal = dict(user) if isinstance(user, dict) else None
-    request.state.blog_user = principal
-    if not require_auth and authorize is None:
-      return
-    if (
-      authorize is None
-      and principal is not None
-      and principal.get('role') is None
-      and not principal.get('is_admin')
-    ):
-      # Authenticated without a role: legacy callers keep write access
-      # (see the REST guard in `get_api_router`).
-      return
-    await ensure_allowed(permission_check, request, 'posts', action)
-
-  # Prep templates
-  env = jinja2.Environment(
-    loader=jinja2.PackageLoader('fastapi_blog', 'templates'),
-    autoescape=jinja2.select_autoescape(['html', 'xml']),
-  )
-  templates = Jinja2Templates(env=env)
-
-  def _context(request: Request, **kwargs: Any) -> dict[str, Any]:
-    return {'request': request, **kwargs}
-
-  @ui_router.get('/', response_class=HTMLResponse)
-  async def editor_index(
-    request: Request,
-    user: dict | None = Depends(auth_func),
-  ) -> Any:
-    await _require_ui_permission(request, user, 'read')
-    posts = helpers.list_posts(
-      posts_dirname=posts_dirname, strict=strict, published=True
-    )
-    drafts = helpers.list_posts(
-      posts_dirname=posts_dirname, strict=strict, published=False
-    )
-    return templates.TemplateResponse(
-      request=request,
-      name='admin/list.html',
-      context=_context(request, posts=list(posts) + list(drafts)),
-    )
-
-  @ui_router.get('/new', response_class=HTMLResponse)
-  async def editor_new(
-    request: Request,
-    user: dict | None = Depends(auth_func),
-  ) -> Any:
-    await _require_ui_permission(request, user, 'create')
-    return templates.TemplateResponse(
-      request=request,
-      name='admin/edit.html',
-      context=_context(
-        request,
-        is_new=True,
-        slug='',
-        frontmatter={'title': '', 'date': '', 'tags': [], 'published': False},
-        content='',
-      ),
-    )
-
-  @ui_router.get('/{slug}', response_class=HTMLResponse)
-  async def editor_edit(
-    request: Request,
-    slug: str = slug_path,
-    user: dict | None = Depends(auth_func),
-  ) -> Any:
-    await _require_ui_permission(request, user, 'update')
-    path = _post_path(slug, posts_dirname)
-    if not path.is_file():
-      raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Post '{slug}' not found",
-      )
-    data = _parse_file(path)
-    return templates.TemplateResponse(
-      request=request,
-      name='admin/edit.html',
-      context=_context(
-        request,
-        is_new=False,
-        slug=slug,
-        frontmatter=data['frontmatter'],
-        content=data['content'],
-      ),
-    )
-
-  app.include_router(ui_router)

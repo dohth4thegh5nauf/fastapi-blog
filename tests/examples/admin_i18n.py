@@ -3,6 +3,11 @@
 Demonstrates how to use the i18n feature with English and Russian locales.
 """
 
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -25,15 +30,13 @@ fastapi_blog.add_blog_to_fastapi(
 admin = fastapi_blog.add_admin_to_app(
   app,
   title='Админ-панель блога',  # Russian title
-  base_url='/admin',
-  admin_username='admin',
-  admin_password='Admin123!',
-  secret_key='change-me-in-production',
-  insecure_dev=True,
-  i18n_enabled=True,
-  i18n_default_locale='en',  # English by default
-  i18n_locales=['en', 'ru'],  # Language switcher with EN/RU
+  database_url=DEMO_DATABASE_URL,
+  secret_key='demo-only-session-secret-0123456789abcdef0123456789',
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
+  locales=['en', 'ru'],
+  default_locale='en',
 )
+install_demo_auth(app)
 
 app.mount('/static', StaticFiles(directory='static'), name='static')
 
@@ -44,7 +47,7 @@ async def index() -> dict:
     'message': 'Multilingual admin panel example',
     'blog': 'http://localhost:8000/blog',
     'admin_en': 'http://localhost:8000/admin (switch to English in UI)',
-    'admin_ru': 'http://localhost:8000/admin (по умолчанию русский)',
-    'credentials': {'username': 'admin', 'password': 'Admin123!'},
-    'note': 'Language can be switched in the admin interface',
+    'admin_ru': 'http://localhost:8000/ru/admin',
+    'demo_credentials': {'username': 'admin', 'password': 'Admin123!'},
+    'note': 'Open /ru/admin for the Russian interface.',
   }

@@ -2,7 +2,7 @@
 
 > A file-based Markdown blog and content-management toolkit for FastAPI.
 
-**Package version:** `0.9.0` (development release; see [CHANGELOG.md](CHANGELOG.md))  
+**Package version:** `0.10.0` (development release; see [CHANGELOG.md](CHANGELOG.md))
 **Python:** 3.12+  
 **Platforms:** Ubuntu (latest LTS), as specified by the project guidelines.
 
@@ -116,19 +116,19 @@ Install the `admin` extra, then configure both components:
 import os
 from fastapi import FastAPI
 from fastapi_blog import add_admin_to_app, add_blog_to_fastapi
+from myapp.auth import create_admin_auth_provider
 
 app = FastAPI()
 
 add_blog_to_fastapi(app, prefix='blog')
 add_admin_to_app(
   app,
-  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 ```
 
-The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). Configure credentials and a strong session secret for your deployment; do not use example or default credentials in production.
+The admin interface is available under `/admin` (with locale-specific paths when multiple locales are configured). The host application owns login and account storage; see [Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md) for the provider contract and session requirements.
 
 To add a custom Starlette Admin view to every localized panel, pass
 `configure_admin`. It receives the locale and fully configured `Admin` instance
@@ -136,7 +136,10 @@ after FastAPI Blog has registered its built-in views and immediately before
 that instance is mounted:
 
 ```python
+import os
+
 from fastapi_blog import add_admin_to_app
+from myapp.auth import create_admin_auth_provider
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette_admin import CustomView
@@ -165,7 +168,7 @@ admins = add_admin_to_app(
   app,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   configure_admin=configure_admin,
 )
@@ -194,8 +197,7 @@ setup_fastapi_blog(
   include_api=True,
   locales=['en', 'ru'],
   default_locale='en',
-  admin_username=os.environ.get('FASTAPI_BLOG_ADMIN_LOGIN', 'admin'),
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_admin_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   enable_role_management=False,
 )
@@ -236,7 +238,7 @@ setup_fastapi_blog(
   collection_spec=posts,
   include_api=True,
   admin=True,
-  # Supply deployment credentials and a strong secret in production.
+  # Pass an AuthProvider and a strong secret for production deployments.
 )
 ```
 
@@ -283,7 +285,7 @@ add_blog_to_fastapi(
   api_prefix='/api/posts',
   api_require_auth=True,
   admin_username='writer',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  admin_password=os.environ['FASTAPI_BLOG_API_PASSWORD'],
 )
 ```
 
@@ -446,7 +448,9 @@ python -m fastapi_blog schema --schema frontmatter.yaml --json-schema --out fron
 
 ### Environment variables
 
-The package recognizes `FASTAPI_BLOG_INCLUDE_API`, `FASTAPI_BLOG_ADMIN_LOGIN` and `FASTAPI_BLOG_ADMIN_PASSWORD`. Admin/database deployment settings are described in [Environment Variables](docs/ENVIRONMENT_VARIABLES.md).
+The package recognizes `FASTAPI_BLOG_INCLUDE_API`. Admin deployment settings
+are described in [Environment Variables](docs/ENVIRONMENT_VARIABLES.md); the
+host application configures admin authentication through an `AuthProvider`.
 
 Generate a session secret rather than reusing a password:
 
@@ -524,7 +528,7 @@ The repository contains 37 test modules covering the core blog, storage, schema 
 - [Database](docs/DATABASE.md) — database models and setup.
 - [Environment Variables](docs/ENVIRONMENT_VARIABLES.md) — environment-based configuration.
 - [Role Management](docs/ROLE_MANAGEMENT.md) — optional RBAC functionality.
-- [Changelog](CHANGELOG.md) — changes in version `0.9.0` and earlier.
+- [Changelog](CHANGELOG.md) — changes in version `0.10.0` and earlier.
 
 ## License
 

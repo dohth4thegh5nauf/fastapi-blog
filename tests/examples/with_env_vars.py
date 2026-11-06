@@ -3,8 +3,8 @@
 Run this example:
     # Set environment variables
     export FASTAPI_BLOG_INCLUDE_API=true
-    export FASTAPI_BLOG_ADMIN_LOGIN=myuser
-    export FASTAPI_BLOG_ADMIN_PASSWORD=mypass123
+    export FASTAPI_BLOG_API_USERNAME=myuser
+    export FASTAPI_BLOG_API_PASSWORD=mypass123
 
     # Run the app
     cd tests/examples
@@ -15,15 +15,19 @@ Then open:
     Admin UI: http://localhost:8000/admin
     API Docs: http://localhost:8000/docs (REST API included because of env var)
 
-Login credentials (from environment variables):
-    Username: myuser (or default 'admin')
-    Password: set FASTAPI_BLOG_ADMIN_PASSWORD before running
+The admin login uses the demo-only provider. REST API credentials are read
+from FASTAPI_BLOG_API_USERNAME and FASTAPI_BLOG_API_PASSWORD.
 """
 
 import os
 import sys  # noqa: I001
 from pathlib import Path
 
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -51,20 +55,22 @@ fastapi_blog.add_blog_to_fastapi(
   prefix='blog',
   strict_frontmatter=False,
   sanitize_html=False,
+  admin_username=os.getenv('FASTAPI_BLOG_API_USERNAME', 'api-demo'),
+  admin_password=os.getenv('FASTAPI_BLOG_API_PASSWORD', 'ApiDemo123!'),
   # include_api not specified - will use FASTAPI_BLOG_INCLUDE_API env var
 )
 
-# Add admin panel - reads credentials from environment
-# Uses FASTAPI_BLOG_ADMIN_LOGIN and FASTAPI_BLOG_ADMIN_PASSWORD if set
+# Admin UI uses a separate demo provider; API credentials do not log into it.
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
-  # admin_username not specified - uses FASTAPI_BLOG_ADMIN_LOGIN or 'admin' as a username
-  # Credentials and the session secret must be supplied through the environment.
+  database_url=DEMO_DATABASE_URL,
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ.get('SECRET_KEY'),
   locales=['en', 'ru'],
   default_locale='en',
 )
+install_demo_auth(app)
 
 # Mount static files
 app.mount('/static', StaticFiles(directory='static'), name='static')
@@ -76,15 +82,16 @@ async def root():
   import os
 
   include_api = os.getenv('FASTAPI_BLOG_INCLUDE_API', 'false')
-  admin_login = os.getenv('FASTAPI_BLOG_ADMIN_LOGIN', 'admin')
 
   return {
     'message': 'Welcome to FastAPI Blog with Environment Variables!',
     'environment_variables': {
       'FASTAPI_BLOG_INCLUDE_API': include_api,
-      'FASTAPI_BLOG_ADMIN_LOGIN': admin_login,
-      'FASTAPI_BLOG_ADMIN_PASSWORD': '***'
-      if os.getenv('FASTAPI_BLOG_ADMIN_PASSWORD')
+      'FASTAPI_BLOG_API_USERNAME': os.getenv(
+        'FASTAPI_BLOG_API_USERNAME', 'api-demo'
+      ),
+      'FASTAPI_BLOG_API_PASSWORD': '***'
+      if os.getenv('FASTAPI_BLOG_API_PASSWORD')
       else 'unset',
     },
     'links': {
@@ -96,6 +103,6 @@ async def root():
       'rest_api': 'Enabled'
       if include_api.lower() in ('true', '1', 'yes')
       else 'Disabled',
-      'admin_username': admin_login,
+      'admin_demo_username': 'admin',
     },
   }

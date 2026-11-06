@@ -7,6 +7,11 @@ Demonstrates all advanced features:
 - Markdown post management
 """
 
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -21,6 +26,8 @@ fastapi_blog.add_blog_to_fastapi(
   prefix='blog',
   include_api=True,  # Enable REST API
   api_require_auth=True,
+  admin_username='api-demo',
+  admin_password='ApiDemo123!',
   strict_frontmatter=False,
   sanitize_html=False,
 )
@@ -29,16 +36,13 @@ fastapi_blog.add_blog_to_fastapi(
 admin = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin Panel',
-  base_url='/admin',
-  admin_username='admin',
-  admin_password='Admin123!',
-  secret_key='change-me-in-production',
-  insecure_dev=True,
-  # i18n configuration
-  i18n_enabled=True,
-  i18n_default_locale='en',
-  i18n_locales=['en', 'ru'],  # Language switcher
+  database_url=DEMO_DATABASE_URL,
+  secret_key='demo-only-session-secret-0123456789abcdef0123456789',
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
+  locales=['en', 'ru'],
+  default_locale='en',
 )
+install_demo_auth(app)
 
 app.mount('/static', StaticFiles(directory='static'), name='static')
 
@@ -59,10 +63,10 @@ async def index() -> dict:
       'admin': 'http://localhost:8000/admin',
       'api_docs': 'http://localhost:8000/docs',
     },
-    'credentials': {'username': 'admin', 'password': 'Admin123!'},
+    'demo_credentials': {'username': 'admin', 'password': 'Admin123!'},
     'notes': [
-      'Switch language in admin panel (top right corner)',
-      'REST API requires authentication',
+      'Use /admin for English and /ru/admin for Russian',
+      'REST API uses separate demo Basic auth credentials: api-demo / ApiDemo123!',
       'Markdown posts stored in ./posts directory',
     ],
   }

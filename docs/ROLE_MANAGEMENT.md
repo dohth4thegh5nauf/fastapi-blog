@@ -2,10 +2,16 @@
 
 FastAPI Blog includes a built-in role-based access policy shared by the REST API and admin panel. The same `authorize(request, resource, action)` callback can be supplied to replace the policy.
 
+Authentication is separate from this policy. The recommended integration
+passes a host-owned Starlette Admin `AuthProvider`; FastAPI Blog's user and role
+views do not change accounts in that provider unless the host provider reads
+those records. The local demo provider explicitly does so. See
+[Admin Authentication Providers](ADMIN_AUTHENTICATION.md).
+
 ## Overview
 
 The role management system provides:
-- **Role Model:** Define custom roles with descriptions
+- **Role Model:** Define custom roles, descriptions and resource/action grants
 - **UserWithRoles Model:** Extended user model with role assignments
 - **Many-to-Many Relationship:** Users can have multiple roles
 - **Admin Views:** Manage roles and users through admin panel
@@ -41,6 +47,7 @@ from fastapi_blog.admin import Role
 - id: int (primary key)
 - name: str (unique, e.g., 'admin', 'editor', 'viewer')
 - description: str | None
+- permissions: dict[str, list[str]] (resource names mapped to allowed actions)
 - is_active: bool (default: True)
 - created_at: datetime
 - updated_at: datetime | None
@@ -77,6 +84,7 @@ import os
 from fastapi import FastAPI
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
@@ -86,8 +94,7 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 # Add admin panel
 admins = fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 
@@ -104,6 +111,29 @@ for locale, admin in admins.items():
   admin.add_view(user_view)
 ```
 
+### Configure Role Permissions
+
+The Role admin view includes a JSON permissions editor. Each resource maps to
+the allowed actions; for example, a read-only editorial role can be configured
+as:
+
+```json
+{
+  "posts": ["read"],
+  "users": [],
+  "settings": []
+}
+```
+
+The editor validates resource and action names in the browser and on the
+server. Unknown values are rejected. Users assigned multiple active roles
+receive the union of their grants. An explicit empty grant map denies all
+actions and does not fall back to built-in role defaults.
+
+The local demo provider loads grants from role records. Other host providers
+must put a validated `permissions` mapping on `request.state.blog_user`, or
+provide their own `authorize` callback, for edited grants to affect access.
+
 ### Initialize Default Roles
 
 ```python
@@ -118,36 +148,22 @@ async with session_factory() as session:
   await create_default_roles(session)
 ```
 
-The built-in policy has three roles (assigned to login accounts through
-`auth_users`):
+The host-supplied provider should populate `request.state.blog_user` with a
+role or explicit permission mapping:
 
 - **admin:** Full access to posts, users, settings, and role management.
 - **editor:** Can create, read, update, and publish posts; can read users and
   settings; cannot delete posts or manage accounts/roles.
 - **viewer:** Can read posts only.
 
-```python
-admins = fastapi_blog.add_admin_to_app(
-  app,
-  admin_username='root',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
-  secret_key=os.environ['SECRET_KEY'],
-  auth_users={
-    'writer': {'password': os.environ['EDITOR_PASSWORD'], 'role': 'editor'},
-    'reader': {'password': os.environ['VIEWER_PASSWORD'], 'role': 'viewer'},
-  },
-)
-```
+These are the initial grants for the built-in role names. The default policy
+continues to use them for principals that provide only a role name; principals
+with an explicit `permissions` mapping use that mapping instead.
 
-The primary `admin_username`/`admin_password` account always receives the
-`admin` role. Additional `auth_users` are panel login identities; the role is
-stored in the signed session and is preserved when that cookie authenticates
-REST API calls. Unknown or unrecognized roles are denied. An
-authenticated principal without any role (a custom `auth_dependency`,
-a legacy session) keeps the pre-role-management write access; pass a
-custom `authorize=` callback to enforce a stricter policy. The
-`insecure_dev=True` flag enables legacy development credentials only
-as an explicit local opt-in.
+Unknown or unrecognized roles are denied. Principals without a recognized
+role or explicit permission mapping are denied by the default policy. The REST
+API has its own authentication configuration and does not inherit the admin
+provider's identity automatically.
 
 ## Usage
 
@@ -277,9 +293,11 @@ class CustomUserView(UserWithRolesModelView):
 See `tests/examples/with_roles.py` for a full working example.
 
 ```python
+import os
 from fastapi import FastAPI
 import fastapi_blog
 from fastapi_blog.admin import RoleModelView, UserWithRolesModelView
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
@@ -290,6 +308,8 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin with Roles',
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
 )
 
 # Add role management

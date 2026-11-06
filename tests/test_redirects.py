@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def test_root_redirects_to_blog():
   """Test that GET / redirects to /blog/."""
@@ -81,6 +83,7 @@ def test_default_locale_admin_redirects_to_clean_url():
     default_locale='en',
     admin_password='test123',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   client = TestClient(app, follow_redirects=False)
 
@@ -98,6 +101,7 @@ def test_default_locale_admin_with_paths_redirects():
     default_locale='en',
     admin_password='test123',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   client = TestClient(app, follow_redirects=False)
 

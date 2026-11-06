@@ -17,17 +17,18 @@ from fastapi.testclient import TestClient
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def test_admin_engine_is_disposed_on_lifespan_shutdown(monkeypatch):
   app = FastAPI()
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='x' * 64,
     database_url='sqlite+aiosqlite:///:memory:',
     locales=['en'],
     default_locale='en',
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   engine = app.state.admin_engine
   dispose = type(engine).dispose
@@ -49,12 +50,11 @@ def client():
   app = FastAPI()
   fastapi_blog.add_admin_to_app(
     app,
-    admin_username='admin',
-    admin_password='Secret123!',
     secret_key='x' * 64,
     database_url='sqlite+aiosqlite:///:memory:',
     locales=['en'],
     default_locale='en',
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   with TestClient(app) as c:
     login_page = c.get('/admin/login')
@@ -115,7 +115,8 @@ def test_create_then_list_then_detail_then_edit(client):
 def test_already_authenticated_user_visiting_login_is_redirected(client):
   """A custom `render_login` must still redirect an authenticated visitor.
 
-  Regression test: the ported `render_login` (see `admin/auth_provider.py`)
+  Regression test: the legacy `render_login`
+  (see `tests/examples/demo_auth.py`)
   initially dropped this check, so a logged-in user hitting `/admin/login`
   saw the login form rendered underneath the framework's own authenticated
   navbar — two independent UIs overlapping on screen. Found via a manual

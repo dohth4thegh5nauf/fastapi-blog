@@ -9,7 +9,7 @@ Then open:
     Admin UI: http://localhost:8000/admin (web interface)
     API Docs: http://localhost:8000/docs (REST API docs)
 
-Development-only login credentials (`insecure_dev=True`):
+Demo-only login credentials:
     Username: admin
     Password: Admin123!
 
@@ -25,6 +25,11 @@ Note: Admin panel is a web UI (not REST API), so it won't appear in /docs.
 
 from pathlib import Path  # noqa: E402
 
+from demo_auth import (
+  DEMO_DATABASE_URL,
+  create_demo_auth_provider,
+  install_demo_auth,
+)  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
@@ -71,15 +76,15 @@ fastapi_blog.add_blog_to_fastapi(
 admins = fastapi_blog.add_admin_to_app(
   app,
   title='Blog Admin',
-  admin_username='admin',
-  admin_password='Admin123!',
-  secret_key='change-me-in-production',
+  database_url=DEMO_DATABASE_URL,
+  secret_key='demo-only-session-secret-0123456789abcdef0123456789',
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   frontmatter_schema=frontmatter_schema,
-  insecure_dev=True,
   locales=['en', 'ru'],
   default_locale='en',  # /admin → /admin/en
   enable_role_management=True,  # Enable role management (visible only to root admin)
 )
+install_demo_auth(app)
 
 # Mount static files
 app.mount('/static', StaticFiles(directory='static'), name='static')
@@ -95,10 +100,10 @@ async def root():
       'admin': 'http://localhost:8000/admin',
       'api_docs': 'http://localhost:8000/docs',
     },
-    'admin_login': {
+    'demo_admin_login': {
       'username': 'admin',
       'password': 'Admin123!',
-      'note': '⚠️ Change these credentials in production!',
+      'note': 'Demo credentials only; configure your own provider in production.',
     },
     'first_steps': [
       '1. Go to /admin and login',

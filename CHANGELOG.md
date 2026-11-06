@@ -6,9 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Changes planned for version 0.9.0.
+Changes planned for version 0.10.0.
 
 ### Added
+- Added a database-backed RBAC login to the local admin demos, seeded with an
+  `admin` / `Admin123!` account and isolated from host `DATABASE_URL` settings.
+- Added editable resource/action grants to roles. The default policy applies
+  configured grants, combines active-role grants, and upgrades existing role
+  tables with their built-in permissions.
+- Added a request-scoped sequence allocator to `CollectionSpec`; the admin
+  save flow passes the reserved sequence into slug generation, including
+  localized canonical-record creation.
 - Added request-scoped collection roots by accepting a path resolver in
   `CollectionSpec.dir`. The public blog, REST API, admin, health probes and SEO
   routes use the same resolved root for each request; static paths keep their
@@ -18,6 +26,9 @@ Changes planned for version 0.9.0.
 - Added a `configure_admin(locale, admin)` hook to register custom Starlette
   Admin views before each localized panel is mounted. The hook is also exposed
   through `setup_fastapi_blog()`.
+- Added host-supplied Starlette Admin authentication providers to
+  `add_admin_to_app()` and `setup_fastapi_blog()`, with per-locale factories,
+  construction-time validation and explicit separation from REST API auth.
 - Added multi-locale content collections: project and collection i18n
   configuration, localized storage with rollback and `DocumentService`
   integration, validation modes, ETags, events, REST routes and translation
@@ -54,7 +65,14 @@ Changes planned for version 0.9.0.
 - Added a Compose demo and container health checks.
 
 ### Changed
+- Kept REST API Basic Auth credentials separate from admin-panel
+  authentication; they do not configure admin logins.
 
+- Moved the fixed-credential provider to the demo application. Admin login is
+  owned by the host application and configured through `AuthProvider`.
+- Updated runnable demos to create explicit providers and clarified that the
+  User and Role views do not alter accounts in a host-supplied provider. The
+  local database-backed demo provider explicitly uses its demo CRUD records.
 - The core package runs without the admin or JSON-LD extras. Admin imports are
   lazy, and `setup_fastapi_blog(admin=False)` does not require the admin extra.
 - The post-list cache detects external file changes from directory signatures.
@@ -75,6 +93,8 @@ Changes planned for version 0.9.0.
 
 ### Fixed
 
+- Hash passwords created through the `UserWithRoles` admin view and hide
+  password hashes from user details and edit forms.
 - Normalize unquoted YAML dates and timestamps for string-valued `date` and
   `updated` roles while preserving native YAML values for other fields.
 - Accept absolute post directories in public post listings.
@@ -87,19 +107,26 @@ Changes planned for version 0.9.0.
 - Corrected tests and health response type annotations after the date and
   OpenAPI changes. Temporary project files are excluded from mypy collection.
 
-### Deprecated
-
-- `add_editor_to_app(ui=True)` and the `POSTS_DIR` environment variable.
-
 ### Removed
+- Removed the package-managed legacy admin credential provider, its
+  `FASTAPI_BLOG_ADMIN_LOGIN`/`FASTAPI_BLOG_ADMIN_PASSWORD` environment path,
+  and `insecure_dev` development credentials.
+- Removed the deprecated standalone editor HTML interface and its `ui` and
+  `ui_prefix` options. `add_editor_to_app()` now exposes the REST API only.
+- Removed the `POSTS_DIR` environment fallback. Configure storage with
+  `posts_dirname` so blog, API and admin share an explicit directory.
+- Removed compatibility aliases `fastapi_blog.admin.i18n` and the legacy
+  authentication provider module.
 
+- Removed the public `SimpleAuthProvider` export and the unused
+  database-backed `RBACAuthProvider` implementation.
 - Removed unused Redis and PyJWT dependencies and superseded CI workflows.
 
 ### Security
 
-- Require configured admin credentials and a strong session secret by default;
-  development credentials require explicit `insecure_dev=True`. Cookie-based
-  API writes validate the request origin, and admin forms use CSRF protection.
+- Require a host-supplied admin `AuthProvider` and a strong session secret.
+  Cookie-based API writes validate the request origin, and admin forms use
+  CSRF protection.
 
 <details>
 <summary>Detailed 0.9.0 development history</summary>

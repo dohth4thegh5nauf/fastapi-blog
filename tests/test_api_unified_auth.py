@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def test_api_with_unified_auth_via_basic():
   """Test that REST API works with Basic auth when credentials provided."""
@@ -17,6 +19,7 @@ def test_api_with_unified_auth_via_basic():
     admin_username='testadmin',
     admin_password='testpass',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   client = TestClient(app)
@@ -58,6 +61,7 @@ def test_api_with_invalid_basic_auth():
     admin_username='testadmin',
     admin_password='testpass',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
 
   client = TestClient(app)

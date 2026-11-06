@@ -21,13 +21,13 @@ By default, the database is stored at `./data/app.db` (SQLite with async support
 import os
 from fastapi import FastAPI
 import fastapi_blog
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   # database_url not specified = uses default SQLite
 )
@@ -470,7 +470,12 @@ engine = create_async_engine(
 **Solution**:
 ```python
 # Disable auto-init
-fastapi_blog.add_admin_to_app(app, init_database=False)
+fastapi_blog.add_admin_to_app(
+  app,
+  auth_provider=lambda locale: create_auth_provider(locale),
+  secret_key=os.environ['SECRET_KEY'],
+  init_database=False,
+)
 
 # Use Alembic for migrations
 alembic upgrade head
@@ -600,13 +605,13 @@ logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 import os
 from fastapi import FastAPI
 import fastapi_blog
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 ```
@@ -617,14 +622,14 @@ fastapi_blog.add_admin_to_app(
 import os
 from fastapi import FastAPI
 import fastapi_blog
+from myapp.auth import create_auth_provider
 
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
   app,
   database_url=os.getenv('DATABASE_URL'),
-  admin_username=os.getenv('ADMIN_USERNAME'),
-  admin_password=os.getenv('ADMIN_PASSWORD'),
+  auth_provider=lambda locale: create_auth_provider(locale),
   secret_key=os.getenv('SECRET_KEY'),
   init_database=False,  # Use Alembic
 )

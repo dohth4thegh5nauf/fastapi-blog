@@ -186,7 +186,9 @@ DATABASE_URL=sqlite+aiosqlite:///./data/app.db
 pip install "fastapi-blog[admin]"
 ```
 
-Set `FASTAPI_BLOG_ADMIN_PASSWORD` and `SECRET_KEY` in the environment before running the examples. The secret must be strong and at least 32 characters long.
+Set `SECRET_KEY` in the environment before running the examples. The secret
+must be strong and at least 32 characters long. The demo Admin account is
+documented below; REST API credentials are configured separately.
 
 ### Minimal Example
 
@@ -195,6 +197,7 @@ import os
 
 from fastapi import FastAPI
 import fastapi_blog
+from demo_auth import create_demo_auth_provider
 
 app = FastAPI()
 
@@ -204,11 +207,13 @@ fastapi_blog.add_blog_to_fastapi(app, prefix='blog')
 # Add admin panel
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 ```
+
+This example uses the demo-only provider. For a real application, implement
+your own `AuthProvider`; see [Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md).
 
 That's it! Now you have:
 - 📝 Blog at `/blog` (public, visible in `/docs`)
@@ -233,16 +238,21 @@ fastapi_blog.add_blog_to_fastapi(
   prefix='blog',
   include_api=True,  # ← Enable REST API
   api_prefix='/api/posts',
+  admin_username='api-demo',
+  admin_password=os.environ['FASTAPI_BLOG_API_PASSWORD'],
 )
 
-# Add admin for authentication
+# Add admin UI with its own demo provider; this does not authenticate the API.
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
 )
 ```
+
+The API's Basic credentials and the Admin UI's provider are separate. See
+[Admin Authentication Providers](docs/ADMIN_AUTHENTICATION.md) for production
+authentication.
 
 Now `/docs` will show:
 - ✅ `GET /blog/*` - Public blog endpoints
@@ -322,11 +332,12 @@ Restart the server and visit:
 
 ### Default Credentials
 
-The quickstart demo explicitly enables development credentials:
+The quickstart demo uses the provider in `tests/examples/demo_auth.py`:
 - **Username**: `admin`
 - **Password**: `Admin123!`
 
-⚠️ **IMPORTANT**: Change these in production!
+These credentials are for local demos only. Do not use this provider in
+production.
 
 ### Custom Authentication
 
@@ -335,17 +346,20 @@ import os
 
 from fastapi import FastAPI
 import fastapi_blog
+from demo_auth import create_demo_auth_provider
 
 app = FastAPI()
 
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   database_url='sqlite+aiosqlite:///./blog.db',
 )
 ```
+
+For a production application, pass a provider implemented by the host
+application instead of the demo provider.
 
 ---
 
@@ -354,10 +368,13 @@ fastapi_blog.add_admin_to_app(
 Enable role-based access control (RBAC):
 
 ```python
+import os
+
+from demo_auth import create_demo_auth_provider
+
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   enable_role_management=True,  # ← Enable RBAC
 )
@@ -376,10 +393,13 @@ This adds:
 Enable multi-language support:
 
 ```python
+import os
+
+from demo_auth import create_demo_auth_provider
+
 fastapi_blog.add_admin_to_app(
   app,
-  admin_username='admin',
-  admin_password=os.environ['FASTAPI_BLOG_ADMIN_PASSWORD'],
+  auth_provider=lambda locale: create_demo_auth_provider(locale),
   secret_key=os.environ['SECRET_KEY'],
   default_locale='ru',
   locales=['en', 'ru'],

@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 import fastapi_blog
 
+from tests.auth_helpers import DemoTestAuthProvider
+
 
 def test_canonical_on_default_locale_page():
   """Test canonical tag on default locale page points to itself."""
@@ -127,6 +129,7 @@ def test_no_canonical_header_on_admin():
     default_locale='en',
     admin_password='test123',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   client = TestClient(app, follow_redirects=False)
 
@@ -144,6 +147,7 @@ def test_no_canonical_header_on_locale_admin():
     default_locale='en',
     admin_password='test123',
     secret_key='s' * 64,
+    auth_provider=lambda locale: DemoTestAuthProvider(),
   )
   client = TestClient(app, follow_redirects=False)
 

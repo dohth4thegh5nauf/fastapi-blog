@@ -230,22 +230,12 @@ def test_without_schema_the_api_is_unchanged(workdir):
 
 def test_add_editor_to_app_accepts_a_schema(workdir):
   app = FastAPI()
-  add_editor_to_app(
-    app, ui=False, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA
-  )
+  add_editor_to_app(app, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA)
   response = TestClient(app).post('/api/posts/create/hello', json=VALID)
   assert response.status_code == 201
   assert (
     _read_frontmatter(workdir / 'posts' / 'hello.md')['pubDate'] == '2024-05-01'
   )
-
-
-def test_deprecated_ui_with_a_schema_warns(workdir):
-  app = FastAPI()
-  with pytest.warns(UserWarning, match='doesn’t support `frontmatter_schema`'):
-    add_editor_to_app(
-      app, ui=True, require_auth=False, frontmatter_schema=EXTERNAL_SCHEMA
-    )
 
 
 def test_update_preserves_unknown_keys_and_file_order(workdir):

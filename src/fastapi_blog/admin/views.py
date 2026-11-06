@@ -12,7 +12,7 @@ from starlette_admin.contrib.sqla import ModelView
 from starlette_admin.routing import route
 
 from ..models import DEFAULT_SCHEMA, FrontmatterSchema
-from ..permissions import Authorizer, default_authorize, user_from_session
+from ..permissions import Authorizer, default_authorize
 from .passwords import get_password_hasher
 
 
@@ -71,8 +71,6 @@ class _AuthorizedModelView:
   resource = 'posts'
 
   def _allowed(self, request: Request, action: str) -> bool:
-    if getattr(request.state, 'blog_user', None) is None:
-      request.state.blog_user = user_from_session(request)
     callback = self.authorize or default_authorize
     result = callback(request, self.resource, action)
     # Starlette Admin's view hooks are synchronous. The REST/custom views
@@ -103,8 +101,6 @@ class _AuthorizedModelView:
   async def is_action_allowed(self, request: Request, name: str) -> bool:
     # Starlette Admin awaits this hook (unlike the sync `can_*` ones), so an
     # asynchronous authorizer can be supported here.
-    if getattr(request.state, 'blog_user', None) is None:
-      request.state.blog_user = user_from_session(request)
     callback = self.authorize or default_authorize
     result = callback(request, self.resource, 'update')
     if inspect.isawaitable(result):
@@ -273,8 +269,6 @@ class HomeView(CustomView):
     self.collection_spec = collection_spec
 
   def is_accessible(self, request: Request) -> bool:
-    if getattr(request.state, 'blog_user', None) is None:
-      request.state.blog_user = user_from_session(request)
     result = self.authorize(request, 'posts', 'read')
     return bool(result) if not inspect.isawaitable(result) else False
 
